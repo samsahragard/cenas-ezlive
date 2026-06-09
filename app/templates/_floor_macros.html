@@ -1,0 +1,187 @@
+{# Cenas Floor OS - reusable Jinja macros.
+   Translates the prototype's React components to server-rendered partials.
+   All macros are pure presentation. Business calculations live in
+   app.services.employee_floor_metrics (Agent 3 lane). #}
+
+{# Welcome row above the Today hero. #}
+{% macro welcome_row(initials, name, role, location) %}
+<div class="cf-welcome">
+  <div class="cf-avatar" aria-hidden="true">{{ initials|default('--') }}</div>
+  <div class="cf-welcome-body">
+    <strong>{{ name|default('Team member') }}</strong>
+    <span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      {{ role or 'Server' }}{% if location %} &middot; {{ location }}{% endif %}
+    </span>
+  </div>
+</div>
+{% endmacro %}
+
+{# Segmented control. options is a list of (value, label) tuples or dicts. #}
+{% macro segmented(name, options, value, label='Section') %}
+<div class="cf-seg" role="tablist" aria-label="{{ label }}">
+  {% for opt in options %}
+    {% set opt_value = opt[0] if opt is sequence and opt is not string and opt is not mapping else opt.value %}
+    {% set opt_label = opt[1] if opt is sequence and opt is not string and opt is not mapping else opt.label %}
+    <button class="cf-seg-btn{% if value == opt_value %} is-on{% endif %}"
+            role="tab"
+            type="button"
+            aria-selected="{{ 'true' if value == opt_value else 'false' }}"
+            data-seg="{{ name }}"
+            data-value="{{ opt_value }}">{{ opt_label }}</button>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{# Hero command card: huge take-home number + opportunity pill + 3 cells. #}
+{% macro hero_command(range_label, stats, opportunity_amount=None) %}
+<section class="cf-hero" aria-label="{{ range_label }} take-home">
+  <div class="cf-hero-top">
+    <span class="cf-hero-label">{{ range_label }} projected take-home</span>
+    {% if opportunity_amount is not none and opportunity_amount > 0 %}
+      <span class="cf-opportunity">+${{ '%.2f'|format(opportunity_amount) }} opportunity</span>
+    {% endif %}
+  </div>
+  {% set total = stats.base_plus_tips if stats.base_plus_tips is not none else 0 %}
+  {% set whole = total|int %}
+  {% set cents = ((total - whole) * 100)|round(0, 'common')|int %}
+  <div class="cf-money"><span class="cf-heat">${{ '{:,}'.format(whole) }}</span>.<span>{{ '%02d'|format(cents) }}</span></div>
+  <div class="cf-sub">
+    <b>${{ '%.2f'|format(stats.recorded_tips or 0) }}</b> settled tips +
+    <b>${{ '%.2f'|format(stats.pending_estimated_tips or 0) }}</b> estimated on
+    {{ stats.open_checks or 0 }} open check{{ '' if (stats.open_checks or 0) == 1 else 's' }}.
+  </div>
+  <div class="cf-opps">
+    <div>
+      <strong>{% if stats.tips_per_hour is not none %}${{ '%.2f'|format(stats.tips_per_hour) }}{% else %}--{% endif %}</strong>
+      <span>tips / hr</span>
+    </div>
+    <div>
+      <strong>{% if stats.recorded_tips and stats.sales %}{{ ((stats.recorded_tips / stats.sales) * 100)|round(0)|int }}%{% else %}--{% endif %}</strong>
+      <span>avg tip</span>
+    </div>
+    <div>
+      <strong>{% if stats.seat_to_first_drink_avg_min is not none %}{{ stats.seat_to_first_drink_avg_min|round(0)|int }}m{% else %}--{% endif %}</strong>
+      <span>drink pace</span>
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+{# Coaching card (next-best action). #}
+{% macro coaching_card(title, body) %}
+<div class="cf-coach" role="note">
+  <div class="cf-coach-icon" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg>
+  </div>
+  <div>
+    <div class="cf-coach-title">{{ title }}</div>
+    <p>{{ body }}</p>
+  </div>
+</div>
+{% endmacro %}
+
+{# Metric card (rich variant with icon + trend). #}
+{% macro metric_card(value, label, trend=None, bad=False, icon=None) %}
+<div class="cf-mcard">
+  <div class="cf-mcard-top">
+    <span class="cf-mcard-icon" aria-hidden="true">
+      {% if icon %}{{ icon|safe }}{% else %}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+      {% endif %}
+    </span>
+    {% if trend %}<span class="cf-trend{% if bad %} bad{% endif %}">{{ '↘' if bad else '↗' }} {{ trend }}</span>{% endif %}
+  </div>
+  <div class="cf-num">{{ value }}</div>
+  <div class="cf-cap">{{ label }}</div>
+</div>
+{% endmacro %}
+
+{# Station map chip. table is an EmployeeFloorTable; summary + attention come from floor_demo helpers. #}
+{% macro station_chip(table, attention, summary) %}
+<div class="cf-table-chip is-{{ attention }}">
+  <span class="cf-table-dot" aria-hidden="true"></span>
+  <strong>{{ table.name }}</strong>
+  <small>{{ summary }}</small>
+</div>
+{% endmacro %}
+
+{# Tip pill on the ticket chit. #}
+{% macro tip_pill(check) %}
+  {% if check.status == 'open' %}
+    <span class="cf-tip-pill heat">open</span>
+  {% elif check.tip is none and check.payment_method == 'cash' %}
+    <span class="cf-tip-pill neutral">cash tip unknown</span>
+  {% elif check.tip is none %}
+    <span class="cf-tip-pill neutral">tip unknown</span>
+  {% else %}
+    {% set pct = ((check.tip / check.total) * 100)|round(0)|int if check.total else 0 %}
+    {% set bucket = 'good' if pct >= 20 else 'mid' if pct >= 15 else 'low' %}
+    <span class="cf-tip-pill {{ bucket }}">tip {{ pct }}%</span>
+  {% endif %}
+{% endmacro %}
+
+{# Timeline rail stop inside a ticket. #}
+{% macro stop(label, time_text, live=False, empty=False, items=None) %}
+<div class="cf-stop{% if live %} is-live{% endif %}{% if empty %} is-empty{% endif %}">
+  <div class="cf-stop-head">
+    <span>{{ label }}</span>
+    <em>{{ time_text }}</em>
+  </div>
+  {% if items %}
+    <div class="cf-stop-items">
+      {% for item in items %}
+        <span class="cf-item is-{{ item.kind|replace('nonAlcoholic', 'na') }}">
+          {% if (item.quantity or 1) > 1 %}<b>{{ (item.quantity)|int }}x</b>{% endif %}{{ item.name }}
+        </span>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Empty state for Shifts/Inbox tabs. #}
+{% macro empty_state(title, body, cta_text=None, cta_icon='bell') %}
+<div class="cf-empty-state">
+  <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+    {% if cta_icon == 'calendar' %}
+      <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>
+    {% elif cta_icon == 'message' %}
+      <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
+    {% else %}
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+    {% endif %}
+  </svg>
+  <strong>{{ title }}</strong>
+  <p>{{ body }}</p>
+  {% if cta_text %}<span class="cf-empty-cta">{{ cta_text }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+{# Toggle row used in Inbox > Alerts. on is a bool; htmlid is the button id. #}
+{% macro toggle_row(htmlid, label, hint, on=False, icon_svg=None) %}
+<button type="button" class="cf-row" id="{{ htmlid }}" role="switch" aria-checked="{{ 'true' if on else 'false' }}">
+  <span class="cf-row-icon" aria-hidden="true">
+    {% if icon_svg %}{{ icon_svg|safe }}{% else %}
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+    {% endif %}
+  </span>
+  <span class="cf-row-text"><strong>{{ label }}</strong><small>{{ hint }}</small></span>
+  <span class="cf-switch{% if on %} is-on{% endif %}" aria-hidden="true"></span>
+</button>
+{% endmacro %}
+
+{# Honest source label at the bottom of the Tables tab. #}
+{% macro source_footer(source_label, demo) %}
+<div class="cf-foot">
+  {{ source_label }}{% if demo %} &middot; demo mode &middot; cash tips may be unknown{% else %} &middot; cash tips may be unknown{% endif %}
+</div>
+{% endmacro %}
+
+{# Sync chip override: live vs demo. Drop into the cc-sync slot. #}
+{% macro sync_chip(demo) %}
+<div class="cc-sync" aria-label="Sync status">
+  <span class="cc-sync-dot" aria-hidden="true"></span>
+  <span>{% if demo %}demo mode{% else %}live{% endif %}</span>
+</div>
+{% endmacro %}

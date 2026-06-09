@@ -101,13 +101,22 @@ def employee_messages_page():
         "conversationsUrl": "/employee/messages/conversations",
         "threadBase": "/employee/messages/thread",   # GET <base>/<id>; POST <base>/<id>/read
         "sendUrl": "/employee/messages/send",
+        # Inbox > Alerts panel reads/writes /employee/alarm-preferences. The
+        # endpoint is session-gated by employee_alarm_prefs._require_emp().
+        # second_minutes_before is round-tripped untouched so other surfaces
+        # that set it (the standalone /employee/profile page) keep their value.
+        "prefsUrl": "/employee/alarm-preferences",
         "dashboardUrl": "/employee/dashboard",
         "loginUrl": "/employee/login",
         "pollMs": 10000,
     }
+    section = (request.args.get("view") or "messages").lower()
+    if section not in ("messages", "alerts"):
+        section = "messages"
     return render_template(
         "employee_messages.html",
         employee=view,
+        active_section=section,
         config_json=json.dumps(config),
         dashboard_url="/employee/dashboard",
         login_url="/employee/login",

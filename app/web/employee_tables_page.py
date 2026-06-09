@@ -19,9 +19,54 @@ def employee_tables_page():
         emp = db.query(Employee).filter(Employee.id == emp_id).first()
         if emp is None:
             return redirect("/employee/login")
+
+        # Cenas Floor OS: demo fixture today; the live Toast path lives in
+        # /employee/tables/data above and remains available for callers that
+        # already know how to consume it. The Floor OS shell renders the
+        # demo when the live links are not present.
+        from app.services import floor_demo
+        from app.services.employee_floor_metrics import calculate_day_stats
+
+        day_key = (request.args.get("day") or "today").lower()
+        if day_key not in ("today", "yesterday"):
+            day_key = "today"
+        floor_day = floor_demo.demo_today() if day_key == "today" else floor_demo.demo_yesterday()
+
+        hours = floor_day.get("hours_worked")
+        base_pay_amount = (hours or 0) * 2.13
+        stats = calculate_day_stats(
+            floor_day,
+            pending_tip_rate=floor_demo.PENDING_TIP_RATE,
+            hours=hours,
+            base_pay=base_pay_amount,
+        )
+        target = floor_day.get("target_tips") or 0
+        opportunity = max(0.0, target - (stats.get("recorded_tips") or 0))
+        coaching = floor_demo.best_next_action(floor_day, stats)
+        station_chips = [
+            {
+                "table": t,
+                "attention": floor_demo.table_attention(t),
+                "summary": floor_demo.table_summary(t)["label"],
+            }
+            for t in floor_day["tables"]
+        ]
+
         return render_template(
             "employee_tables.html",
             employee=emp,
+            floor_day=floor_day,
+            stats=stats,
+            opportunity=opportunity,
+            coaching=coaching,
+            station_chips=station_chips,
+            day_key=day_key,
+            day_options=[("today", "Today"), ("yesterday", "Yesterday")],
+            now_minutes=floor_demo.DEMO_NOW_MINUTES,
+            clock=floor_demo.clock,
+            ago=floor_demo.ago,
+            demo_mode=True,
+            sync_label="demo mode",
             dashboard_url="/employee/dashboard",
             login_url="/employee/login",
         )

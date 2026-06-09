@@ -1,519 +1,116 @@
-{# Employee schedule view (Schedules V2, B5). Logged-in employee sees their own
-   PUBLISHED shifts for this + next week, grouped by week. Each published shift is
-   their ASSIGNED shift (Sam's reframe: no accept/decline). If they can't work one,
-   they RELEASE it into the B9 marketplace so a teammate can pick it up, subject to
-   manager approval. A shift with an active offer shows "In the marketplace" (open)
-   or "Picked up - pending manager OK" (taken); while open it can be un-released.
-
-   ck owns the GET /employee/my-schedule PAGE shell; aick owns this template (the
-   reframe) + the data endpoint:
-     GET /employee/my-schedule/shifts -> {ok, employee, shifts:[...]}
-   per-shift: {id, schedule_id, week_start, start_at, end_at, break_minutes,
-               position_name, tag_names[], notes, response, offer}
-       offer = {id, status:"open"|"taken"} | null  (this employee's active release)
-   Release / un-release reuse ckai's B9 offer API:
-     POST /employee/shift-offers {shift_id, unrestricted:true}
-     POST /employee/shift-offers/<id>/cancel
+{# Cenas Floor OS - Shifts tab.
+   My shifts + time-off request, on the ink-navy console look. When no shifts
+   are posted the panel shows the honest empty state. Time-off form is local-
+   only when the backend isn't wired (mock_submit flag); validation lives in
+   the route (and a small client mirror for UX).
 #}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>My Schedule &mdash; Cenas Kitchen</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_theme.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_console.css') }}">
-<style>
-  :root{
-    /* House palette (warm gold / cream / dark) — var NAMES kept from the
-       old blue/cream scheme so the rest of this page's CSS recolours for
-       free. --blue* now carry the dark surface + gold-accent roles; --red*
-       are the warm gold accent; --cream* the house cream. --ok stays green. */
-    --blue:        #E4B340;   /* gold accent (was navy) */
-    --blue-bright: #FFD970;   /* bright gold */
-    --blue-deep:   #FFD970;   /* heading text on dark -> bright gold */
-    --red:         #E4B340;   /* eyebrow / accent -> gold */
-    --red-bright:  #FFD970;
-    --red-deep:    #d4af37;
-    --cream:       #FAF6EC;   /* house cream */
-    --cream-soft:  #ece3d0;
-    --ink:         #FAF6EC;   /* body text -> cream */
-    --ok:          #2f8f57;
-    --ok-deep:     #1f6b3e;
-    --surface:     #241409;   /* card / panel surface */
-    --bd-gold:     rgba(217,164,54,0.18);  /* gold hairline border */
-  }
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  html,body{
-    width:100%; min-height:100vh; background:#241610;
-    font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
-    position:relative; color: var(--ink);
-  }
-  body::before{
-    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
-    background-image: var(--emp-bg, none);
-    background-size:cover; background-position:center; background-repeat:no-repeat;
-    filter: blur(6px) brightness(0.55) saturate(1.05);
-  }
-  body::after{
-    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
-    background: linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%);
-  }
-  .wrap{
-    position:relative; z-index:1;
-    max-width:520px; margin:0 auto; padding:20px 18px 90px;
-    display:flex; flex-direction:column; min-height:100vh;
-  }
+{% extends "employee_console_base.html" %}
+{% from "_floor_macros.html" import segmented, empty_state, sync_chip %}
+{% set active_tab = 'shifts' %}
+{% block title %}Shifts &middot; Cenas Floor OS{% endblock %}
 
-  /* Top bar: logo + back to dashboard — house dark bar look */
-  .topbar{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-    margin-bottom:18px;
-    background:#241409; border:0.5px solid var(--bd-gold);
-    border-radius:14px; padding:12px 14px;
-    box-shadow:0 2px 10px rgba(0,0,0,0.35);
-  }
-  .topbar img{ width:auto; height:34px; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
-  .backlink{
-    display:inline-flex; align-items:center; gap:5px;
-    background: rgba(244,231,208,0.12); color: var(--cream);
-    border:1px solid rgba(244,231,208,0.30); border-radius:10px; padding:8px 13px;
-    font-size:13px; font-weight:600; letter-spacing:0.4px; text-decoration:none;
-    transition: background 120ms ease;
-  }
-  .backlink:hover{ background: rgba(244,231,208,0.22); }
-  .backlink .chev{ font-size:16px; line-height:1; margin-top:-1px; }
+{% block employee_hero %}
+<div class="cf-eyebrow">Your schedule</div>
+{{ segmented('schedule-section', [('shifts', 'My shifts'), ('timeoff', 'Time off')], active_section, 'Schedule section') }}
+{% endblock %}
 
-  /* Page head card — house dark surface with a warm gold edge + glow */
-  .pagehead{
-    background:
-      linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), #241409;
-    border:0.5px solid var(--bd-gold);
-    border-radius:16px; padding:18px 20px; margin-bottom:18px;
-    box-shadow:
-      inset 0 0 0 1px rgba(228,179,64,0.10),
-      0 0 26px rgba(255,217,112,0.10),
-      0 10px 22px rgba(0,0,0,0.5);
-  }
-  .pagehead .eyebrow{
-    font-size:13px; font-weight:700; letter-spacing:3px;
-    text-transform:uppercase; color: var(--red);
-  }
-  .pagehead .name{
-    font-size:24px; font-weight:800; color: var(--blue-deep); line-height:1.15; margin-top:2px;
-  }
-  .pagehead .meta{ font-size:13px; color: rgba(250,246,236,0.72); margin-top:7px; font-weight:600; }
-  .pagehead .meta .dot{ opacity:0.5; margin:0 5px; }
-  .pagehead .meta .pend{ color: var(--red-deep); }
+{% block employee_content %}
 
-  /* Week label */
-  .weeklabel{
-    font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
-    color: rgba(244,231,208,0.78); margin:18px 2px 11px;
-  }
-  .weeklabel:first-child{ margin-top:2px; }
+<section id="cf-pane-shifts" data-pane="shifts"{% if active_section != 'shifts' %} hidden{% endif %}>
+  {% if shifts %}
+    <div class="cf-block">
+      {% for shift in shifts %}
+        <div class="cf-bigrow">
+          <span>
+            <strong style="display:block;color:var(--cf-text);font-weight:800;">{{ shift.date_label or 'Scheduled' }}</strong>
+            <small style="color:var(--cf-faint);font-size:11px;">{{ shift.time_label or '' }}{% if shift.position_name %} &middot; {{ shift.position_name }}{% endif %}</small>
+          </span>
+          <strong>{{ shift.status_label or shift.response or 'assigned' }}</strong>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    {{ empty_state(
+        'No shifts posted yet',
+        'Your manager has not published this week. Email reminders are on.',
+        cta_text='notify me when posted',
+        cta_icon='calendar'
+    ) }}
+  {% endif %}
+</section>
 
-  /* Shift card — house dark surface, gold hairline, kept accent left rail */
-  .scard{
-    position:relative; background: var(--surface);
-    border:0.5px solid var(--bd-gold);
-    border-left:5px solid #E4B340; border-radius:13px;
-    padding:14px 15px 15px; margin-bottom:13px;
-    box-shadow: 0 6px 14px rgba(0,0,0,0.4);
-  }
-  .scard-head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
-  .scard-day{
-    font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
-    color: rgba(250,246,236,0.62);
-  }
-  .scard-time{ font-size:21px; font-weight:800; color: var(--blue-deep); line-height:1.1; margin-top:1px; }
-  .scard-pos{ display:flex; align-items:center; gap:7px; margin-top:9px; font-size:14px; font-weight:700; color: var(--blue); }
-  .pos-dot{ width:11px; height:11px; border-radius:50%; flex:0 0 auto; box-shadow: 0 0 0 1px rgba(0,0,0,0.12); }
-  .scard-meta{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-  .brk{
-    font-size:11px; font-weight:700; color: rgba(250,246,236,0.7);
-    background: rgba(250,246,236,0.08); border-radius:999px; padding:3px 9px;
-  }
-  .tag{
-    font-size:11px; font-weight:700; letter-spacing:0.3px; color: var(--red-deep);
-    background: rgba(228,179,64,0.12); border:1px solid rgba(228,179,64,0.30);
-    border-radius:999px; padding:3px 9px;
-  }
-  .scard-notes{
-    font-size:13px; color: rgba(250,246,236,0.82); margin-top:10px; line-height:1.4;
-    background: rgba(0,0,0,0.25); border-radius:9px; padding:8px 10px;
-    border:1px solid rgba(217,164,54,0.18);
-  }
+<section id="cf-pane-timeoff" data-pane="timeoff"{% if active_section != 'timeoff' %} hidden{% endif %}>
+  <form class="cf-form" id="cf-timeoff" novalidate>
+    <div class="cf-eyebrow" style="margin-top:0;">Request days off</div>
+    <label>
+      <span>Start date</span>
+      <input type="date" name="start" id="cf-start" required />
+    </label>
+    <label>
+      <span>End date</span>
+      <input type="date" name="end" id="cf-end" required />
+    </label>
+    <label>
+      <span>Reason (optional)</span>
+      <textarea name="reason" id="cf-reason" rows="2" placeholder="A quick note helps your manager plan coverage"></textarea>
+    </label>
+    <div class="cf-error" id="cf-timeoff-error" hidden></div>
+    <div class="cf-success" id="cf-timeoff-success" hidden>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+      request saved as pending
+    </div>
+    <button class="cf-primary" type="submit" id="cf-timeoff-submit">Request time off</button>
+    {% if mock_submit %}
+      <small style="color:var(--cf-faint);font: 800 10px var(--cf-mono);text-align:center;letter-spacing:.1em;text-transform:uppercase;">demo mode &middot; request stays on this device</small>
+    {% endif %}
+  </form>
+</section>
 
-  /* Action row */
-  .scard-actions{ display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap; }
-  .btn-accept, .btn-decline{
-    flex:1 1 0; min-width:108px; border:none; border-radius:11px; padding:11px 12px;
-    font-size:14px; font-weight:800; letter-spacing:0.4px; cursor:pointer;
-    transition: filter 120ms ease, transform 80ms ease;
-  }
-  .btn-accept{ background: var(--ok); color:#fff; box-shadow: 0 2px 0 var(--ok-deep); }
-  .btn-decline{ background: rgba(200,48,42,0.10); color: var(--red-deep); border:1.5px solid rgba(200,48,42,0.45); }
-  .btn-accept:hover{ filter:brightness(1.07); }
-  .btn-decline:hover{ background: rgba(200,48,42,0.18); }
-  .btn-accept:active, .btn-decline:active{ transform: translateY(1px); }
-  .btn-accept:disabled, .btn-decline:disabled, .btn-decline-submit:disabled{ opacity:0.55; cursor:default; }
+{% endblock %}
 
-  .resp-badge{
-    font-size:13px; font-weight:800; letter-spacing:0.4px; padding:8px 14px;
-    border-radius:11px; display:inline-flex; align-items:center; gap:6px;
-  }
-  .resp-badge.ok{ background: rgba(47,143,87,0.15); color: var(--ok-deep); border:1.5px solid rgba(47,143,87,0.45); }
-  .resp-badge.no{ background: rgba(200,48,42,0.12); color: var(--red-deep); border:1.5px solid rgba(200,48,42,0.40); }
-  /* reframe: assigned (your shift) / market (released, open) / pending (picked up, awaiting manager) */
-  .resp-badge.assigned{ background: rgba(47,143,87,0.15); color: var(--ok-deep); border:1.5px solid rgba(47,143,87,0.45); }
-  .resp-badge.market{ background: rgba(228,179,64,0.14); color: var(--red-deep); border:1.5px solid rgba(228,179,64,0.48); }
-  .resp-badge.pending{ background: rgba(250,246,236,0.08); color: rgba(250,246,236,0.80); border:1.5px solid rgba(250,246,236,0.22); }
-  .btn-release{
-    margin-left:auto; border:1.5px solid rgba(228,179,64,0.45); border-radius:11px; padding:9px 16px;
-    background: rgba(228,179,64,0.10); color: var(--red-deep);
-    font-size:13px; font-weight:800; letter-spacing:0.4px; cursor:pointer;
-    transition: filter 120ms ease, transform 80ms ease;
-  }
-  .btn-release:hover{ background: rgba(228,179,64,0.18); }
-  .btn-release:active{ transform: translateY(1px); }
-  .btn-release:disabled{ opacity:0.55; cursor:default; }
-  .btn-link{
-    background:none; border:none; color: rgba(250,246,236,0.7);
-    font-size:13px; font-weight:700; text-decoration:underline; cursor:pointer; padding:6px 4px;
-  }
-  .btn-link:hover{ color: var(--blue-deep); }
-
-  /* Decline reason form */
-  .decline-form{ margin-top:12px; }
-  .decline-form[hidden]{ display:none; }
-  .decline-reason{
-    width:100%; resize:vertical; min-height:54px;
-    border:1.5px solid rgba(217,164,54,0.30); border-radius:10px; padding:9px 11px;
-    font-family:inherit; font-size:13px; color: var(--ink); background: rgba(0,0,0,0.3);
-  }
-  .decline-reason:focus{ outline:none; border-color: var(--red); }
-  .decline-reason.invalid{ border-color: #e54a3f; background: rgba(200,48,42,0.10); }
-  .decline-hint{ font-size:11px; color: rgba(250,246,236,0.55); margin-top:4px; }
-  .decline-hint.err{ color: #e87f7f; font-weight:700; }
-  .decline-btns{ display:flex; gap:9px; margin-top:9px; }
-  .btn-mini{
-    flex:1 1 0; border-radius:10px; padding:9px 10px;
-    font-size:13px; font-weight:800; letter-spacing:0.3px; cursor:pointer; border:none;
-  }
-  .btn-ghost{ background: rgba(250,246,236,0.10); color: rgba(250,246,236,0.85); }
-  .btn-decline-submit{ background: var(--red); color:#fff; box-shadow: 0 2px 0 var(--red-deep); }
-  .btn-decline-submit:hover{ filter:brightness(1.06); }
-
-  /* States: loading / empty / access */
-  .statecard{
-    background: var(--surface); border:0.5px solid var(--bd-gold);
-    border-radius:14px; padding:26px 22px; text-align:center;
-    box-shadow: 0 6px 14px rgba(0,0,0,0.4); margin-top:4px;
-  }
-  .statecard[hidden]{ display:none; }
-  .statecard .s-title{ font-size:16px; font-weight:800; color: var(--blue-deep); }
-  .statecard .s-body{ font-size:13.5px; color: rgba(250,246,236,0.72); margin-top:8px; line-height:1.5; }
-  .statecard .s-cta{
-    display:inline-block; margin-top:16px; background: var(--red); color:#fff;
-    border-radius:11px; padding:11px 22px; font-size:14px; font-weight:800;
-    text-decoration:none; box-shadow: 0 2px 0 var(--red-deep);
-  }
-  .loading-dots{ font-size:14px; font-weight:700; letter-spacing:1px; color: rgba(244,231,208,0.8); text-align:center; padding:30px 0; }
-
-  /* Toast */
-  .toast{
-    position:fixed; left:50%; bottom:84px; transform:translateX(-50%) translateY(20px);
-    z-index:50; max-width:440px; width:calc(100% - 36px);
-    background: #2a2419; color: var(--cream);
-    border:1px solid rgba(217,164,54,0.30); border-radius:12px; padding:12px 16px;
-    font-size:13.5px; font-weight:600; text-align:center;
-    box-shadow: 0 10px 26px rgba(0,0,0,0.55); opacity:0; pointer-events:none;
-    transition: opacity 180ms ease, transform 180ms ease;
-  }
-  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
-
-  .footnote{
-    margin-top:auto; padding-top:24px; text-align:center;
-    font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
-  }
-</style>
-</head>
-<body style="--emp-bg:url('{{ url_for('static', filename='brand/bg-tequila.jpg') }}')">
-<div class="wrap">
-
-  <div class="topbar">
-    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
-    <a class="backlink" href="{{ dashboard_url|default('/employee/dashboard') }}"><span class="chev">&lsaquo;</span> Dashboard</a>
-  </div>
-
-  <div class="pagehead">
-    <div class="eyebrow">My Schedule</div>
-    <div class="name">{{ (employee.first_name if employee and employee.first_name else (employee.full_name if employee and employee.full_name else 'My shifts')) }}</div>
-    <div class="meta" id="emp-summary">This week &amp; next</div>
-  </div>
-
-  <div class="loading-dots" id="emp-loading">Loading your shifts&hellip;</div>
-
-  <div class="statecard" id="emp-access" hidden>
-    <div class="s-title">Please sign in again</div>
-    <div class="s-body">Your session has expired. Sign back in to see your schedule.</div>
-    <a class="s-cta" href="{{ login_url|default('/employee/login') }}">Go to login</a>
-  </div>
-
-  <div class="statecard" id="emp-empty" hidden>
-    <div class="s-title">No published shifts yet</div>
-    <div class="s-body">When your manager publishes the schedule, your shifts for this week and next will show up here.</div>
-  </div>
-
-  <div id="emp-weeks"></div>
-
-  <div class="footnote">Schedules V2 &middot; your published shifts</div>
-</div>
-
-{% set active_nav = 'shifts' %}{% include 'partials/_employee_nav.html' %}
-
-<div class="toast" id="emp-toast"></div>
-
-<script type="application/json" id="sv2-emp-config">{{ config_json | safe }}</script>
+{% block scripts %}
 <script>
 (function(){
   "use strict";
-  var CFG = JSON.parse(document.getElementById("sv2-emp-config").textContent);
-
-  var elLoading = document.getElementById("emp-loading");
-  var elAccess  = document.getElementById("emp-access");
-  var elEmpty   = document.getElementById("emp-empty");
-  var elWeeks   = document.getElementById("emp-weeks");
-  var elSummary = document.getElementById("emp-summary");
-  var elToast   = document.getElementById("emp-toast");
-
-  var state = { shifts: [] };
-
-  // ---- helpers --------------------------------------------------------------
-  function show(el){ el.hidden = false; }
-  function hide(el){ el.hidden = true; }
-
-  function esc(s){
-    return String(s == null ? "" : s)
-      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-  }
-
-  var DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-  // Parse a naive ISO ("2026-06-01T09:00:00" or "2026-06-01") to LOCAL Date parts
-  // (avoid Date(string) UTC drift).
-  function isoToDate(s){
-    if(!s) return null;
-    var d = String(s).split("T")[0].split("-");
-    return new Date(+d[0], (+d[1]) - 1, +d[2]);
-  }
-  function hm(iso){
-    var t = String(iso || "").split("T")[1] || "00:00:00";
-    var p = t.split(":");
-    return { h: +p[0] || 0, m: +p[1] || 0 };
-  }
-  function fmtT(iso){
-    var x = hm(iso), h = x.h, m = x.m;
-    var ap = h >= 12 ? "p" : "a";
-    var hh = h % 12; if(hh === 0) hh = 12;
-    return m ? (hh + ":" + (m < 10 ? "0" + m : m) + ap) : (hh + ap);
-  }
-  function fmtRange(a,b){ return fmtT(a) + " - " + fmtT(b); }
-  function dayLabel(iso){
-    var d = isoToDate(iso); if(!d) return "";
-    return DOW[d.getDay()] + " " + MON[d.getMonth()] + " " + d.getDate();
-  }
-  function weekLabel(iso){
-    var d = isoToDate(iso); if(!d) return "Week";
-    return "Week of " + MON[d.getMonth()] + " " + d.getDate();
-  }
-
-  // Same palette + hash as the manager week-view, so a position keeps its colour
-  // across the manager and employee surfaces.
-  var POS_PALETTE = ["#5BCAC5", "#E89B40", "#E4B340", "#6FB1E0",
-                     "#C98BDB", "#7FD18A", "#E8857F", "#D2A24A"];
-  function posColor(name){
-    if(!name) return "#9aa0b4";
-    var key = String(name), h = 0;
-    for(var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 1000003;
-    return POS_PALETTE[h % POS_PALETTE.length];
-  }
-
-  var toastTimer = null;
-  function toast(msg){
-    elToast.textContent = msg;
-    elToast.classList.add("show");
-    if(toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function(){ elToast.classList.remove("show"); }, 3200);
-  }
-
-  function denied(){
-    hide(elLoading); hide(elEmpty); elWeeks.innerHTML = ""; show(elAccess);
-  }
-
-  // ---- render ---------------------------------------------------------------
-  function updateSummary(total, released){
-    if(!total){ elSummary.textContent = "This week & next"; return; }
-    var s = total + (total === 1 ? " shift" : " shifts");
-    if(released > 0){
-      elSummary.innerHTML = esc(s) + '<span class="dot">&middot;</span>' +
-        '<span class="pend">' + released + " in the marketplace</span>";
-    } else {
-      elSummary.innerHTML = esc(s);
-    }
-  }
-
-  function cardHtml(s){
-    var color = posColor(s.position_name);
-    var offer = s.offer;  // {id, status:"open"|"taken"} | null -- this employee's active release
-
-    var meta = [];
-    if(s.break_minutes) meta.push('<span class="brk">' + (+s.break_minutes) + 'm break</span>');
-    (s.tag_names || []).forEach(function(t){ meta.push('<span class="tag">' + esc(t) + '</span>'); });
-
-    var actions;
-    if(offer && offer.status === "taken"){
-      actions = '<span class="resp-badge pending">&#8635; Picked up &middot; pending manager OK</span>';
-    } else if(offer && offer.status === "open"){
-      actions = '<span class="resp-badge market">&#9873; In the marketplace</span>' +
-                '<button class="btn-link" data-act="unrelease" data-offer="' + (+offer.id) + '">Cancel release</button>';
-    } else {
-      actions = '<span class="resp-badge assigned">&#10003; Assigned</span>' +
-                '<button class="btn-release" data-act="release">Release shift</button>';
-    }
-
-    return '' +
-      '<div class="scard" data-shift="' + (+s.id) + '" style="border-left-color:' + color + '">' +
-        '<div class="scard-head"><div class="scard-when">' +
-          '<div class="scard-day">' + esc(dayLabel(s.start_at)) + '</div>' +
-          '<div class="scard-time">' + esc(fmtRange(s.start_at, s.end_at)) + '</div>' +
-        '</div></div>' +
-        '<div class="scard-pos"><span class="pos-dot" style="background:' + color + '"></span>' +
-          (s.position_name ? esc(s.position_name) : 'Unassigned position') + '</div>' +
-        (meta.length ? '<div class="scard-meta">' + meta.join('') + '</div>' : '') +
-        (s.notes ? '<div class="scard-notes">' + esc(s.notes) + '</div>' : '') +
-        '<div class="scard-actions">' + actions + '</div>' +
-      '</div>';
-  }
-
-  function render(){
-    hide(elLoading);
-    var shifts = state.shifts.slice().sort(function(a,b){
-      return String(a.start_at).localeCompare(String(b.start_at));
-    });
-    if(!shifts.length){ hide(elAccess); show(elEmpty); elWeeks.innerHTML = ""; updateSummary(0,0); return; }
-    hide(elAccess); hide(elEmpty);
-
-    var groups = {}, order = [];
-    shifts.forEach(function(s){
-      var k = s.week_start || "";
-      if(!groups[k]){ groups[k] = []; order.push(k); }
-      groups[k].push(s);
-    });
-    order.sort();
-
-    var html = "";
-    order.forEach(function(wk){
-      html += '<div class="weeklabel">' + esc(weekLabel(wk)) + '</div>';
-      groups[wk].forEach(function(s){ html += cardHtml(s); });
-    });
-    elWeeks.innerHTML = html;
-
-    var released = shifts.filter(function(s){ return s.offer && (s.offer.status === "open" || s.offer.status === "taken"); }).length;
-    updateSummary(shifts.length, released);
-  }
-
-  function setOffer(id, offer){
-    for(var i = 0; i < state.shifts.length; i++){
-      if((+state.shifts[i].id) === (+id)){ state.shifts[i].offer = offer; break; }
-    }
-  }
-
-  // ---- load -----------------------------------------------------------------
-  async function load(){
-    show(elLoading); hide(elAccess); hide(elEmpty); elWeeks.innerHTML = "";
-    try{
-      var res = await fetch(CFG.dataUrl, { credentials: "same-origin", headers: { "Accept": "application/json" } });
-      if(res.status === 401 || res.status === 403 || res.redirected){ denied(); return; }
-      var ct = res.headers.get("content-type") || "";
-      if(!res.ok || ct.indexOf("application/json") < 0){
-        if(ct.indexOf("application/json") < 0){ denied(); return; } // got the login HTML
-        hide(elLoading); toast("Couldn't load your schedule. Try again."); return;
-      }
-      var data = await res.json();
-      state.shifts = (data && data.shifts) || [];
-      render();
-    } catch(e){
-      hide(elLoading); toast("Network error loading your schedule.");
-    }
-  }
-
-  // ---- actions --------------------------------------------------------------
-  // Release = offer one of my own assigned shifts into the marketplace (ckai's
-  // POST /employee/shift-offers). unrestricted:true => anyone can pick it up
-  // (Sam: "allow everyone to see it"); a manager still approves before it moves.
-  var OFFER_BASE = "/employee/shift-offers";
-
-  async function postJson(url, body){
-    var opts = { method: "POST", credentials: "same-origin", headers: { "Accept": "application/json" } };
-    if(body){ opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
-    return fetch(url, opts);
-  }
-
-  function actionDenied(res){
-    if(res.status === 401 || res.status === 403 || res.redirected){
-      toast("That shift isn't on your schedule."); return; }
-    toast("Couldn't do that - try again.");
-  }
-
-  async function doRelease(id, btn){
-    if(btn) btn.disabled = true;
-    try{
-      var res = await postJson(OFFER_BASE, { shift_id: id, unrestricted: true });
-      var j = await res.json().catch(function(){ return {}; });
-      if(res.ok && j && j.ok && j.offer){
-        setOffer(id, { id: j.offer.id, status: j.offer.status }); render();
-        toast("Shift released - teammates can now pick it up.");
-      } else {
-        if(res.status === 401 || res.status === 403 || res.redirected){ actionDenied(res); }
-        else { toast((j && j.error) ? j.error : "Couldn't release that shift."); }
-        if(btn) btn.disabled = false;
-      }
-    } catch(e){ toast("Network error - try again."); if(btn) btn.disabled = false; }
-  }
-
-  async function doUnrelease(id, offerId, btn){
-    if(btn) btn.disabled = true;
-    try{
-      var res = await postJson(OFFER_BASE + "/" + offerId + "/cancel", null);
-      var j = await res.json().catch(function(){ return {}; });
-      if(res.ok && j && j.ok){
-        setOffer(id, null); render();
-        toast("Release cancelled - the shift is yours again.");
-      } else {
-        toast((j && j.error) ? j.error : "Couldn't cancel - it may already be picked up.");
-        if(btn) btn.disabled = false;
-      }
-    } catch(e){ toast("Network error - try again."); if(btn) btn.disabled = false; }
-  }
-
-  elWeeks.addEventListener("click", function(ev){
-    var btn = ev.target.closest("[data-act]");
+  // Segmented control swaps panes.
+  document.addEventListener('click', function(ev){
+    var btn = ev.target.closest('button[data-seg="schedule-section"]');
     if(!btn) return;
-    var card = ev.target.closest(".scard");
-    if(!card) return;
-    var id = +card.dataset.shift;
-    switch(btn.dataset.act){
-      case "release":   doRelease(id, btn); break;
-      case "unrelease": doUnrelease(id, +btn.dataset.offer, btn); break;
-    }
+    var value = btn.getAttribute('data-value');
+    document.querySelectorAll('button[data-seg="schedule-section"]').forEach(function(b){
+      var on = (b === btn);
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-pane]').forEach(function(p){
+      p.hidden = (p.getAttribute('data-pane') !== value);
+    });
   });
 
-  load();
+  // Time-off form: matching client-side validation. The route does the real
+  // check; we keep this only to avoid a round-trip on obvious mistakes.
+  var form = document.getElementById('cf-timeoff');
+  if(form){
+    form.addEventListener('submit', function(ev){
+      ev.preventDefault();
+      var start = document.getElementById('cf-start').value;
+      var end   = document.getElementById('cf-end').value;
+      var err   = document.getElementById('cf-timeoff-error');
+      var ok    = document.getElementById('cf-timeoff-success');
+      err.hidden = true; ok.hidden = true;
+      if(!start || !end){
+        err.textContent = 'Start and end dates are required.';
+        err.hidden = false; return;
+      }
+      if(end < start){
+        err.textContent = 'End date cannot be before start date.';
+        err.hidden = false; return;
+      }
+      // Mock-submit path: show success, keep the data local. The honest
+      // signal is the "demo mode" footnote under the button.
+      ok.hidden = false;
+    });
+  }
 })();
 </script>
-</body>
-</html>
+{% endblock %}

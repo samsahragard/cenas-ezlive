@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from flask import redirect, render_template, session
+from flask import redirect, render_template, request, session
 
 from app.db import SessionLocal
 from app.models import Employee
@@ -71,9 +71,23 @@ def my_schedule_page():
         "dashboardUrl": "/employee/dashboard",
         "loginUrl": "/employee/login",
     }
+
+    # Cenas Floor OS: the Floor OS Shifts tab reads its own shift list. The
+    # /employee/my-schedule/shifts JSON endpoint is the live source -- but for
+    # the initial server-render we ship the empty-state path so the tab works
+    # before the JSON client is wired. The active_section + mock_submit flag
+    # control the segmented control + time-off form.
+    section = (request.args.get("view") or "shifts").lower()
+    if section not in ("shifts", "timeoff"):
+        section = "shifts"
     return render_template(
         "employee_schedule.html",
         employee=view,
+        shifts=[],            # populated by /employee/my-schedule/shifts client-side
+        active_section=section,
+        mock_submit=True,     # the time-off form posts to a backend that ships later
+        demo_mode=True,
+        sync_label="demo mode",
         config_json=json.dumps(config),
         dashboard_url="/employee/dashboard",
         login_url="/employee/login",

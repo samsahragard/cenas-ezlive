@@ -1,283 +1,70 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>My Profile &mdash; Cenas Kitchen</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_console.css') }}">
-<style>
-  :root{
-    --black:#070403; --surface:rgba(27,13,7,.84); --surface2:rgba(15,7,4,.92);
-    --line:rgba(214,163,58,.32); --line2:rgba(255,197,89,.55);
-    --text:#fff4dc; --muted:#cdbb9c; --dim:#8e806f;
-    --gold:#d8a33a; --gold-soft:#ffd36a; --green:#5dd98b; --red:#d8342a;
-    --shadow:0 12px 28px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.05);
-  }
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  html,body{min-height:100vh;background:#241610;color:var(--text);font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;letter-spacing:0;}
-  body::before{content:'';position:fixed;inset:-20px;z-index:0;pointer-events:none;background:url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}") center/cover no-repeat;filter:blur(4px) brightness(46%) saturate(1.05);}
-  body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:rgba(10,5,2,.72);box-shadow:inset 0 0 180px rgba(0,0,0,.86);}
-  .shell{position:relative;z-index:1;width:min(1080px,100%);margin:0 auto;padding:18px 16px 104px;}
-  .topbar,.hero,.panel,.mini-card,.row,.section-tabs{border:1px solid var(--line);border-radius:12px;background:linear-gradient(140deg,var(--surface),var(--surface2));box-shadow:var(--shadow);backdrop-filter:blur(14px);}
-  .topbar{min-height:62px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
-  .topbar img{height:36px;width:auto;filter:drop-shadow(0 4px 8px rgba(0,0,0,.55));}
-  .top-actions{display:flex;gap:8px;align-items:center;}
-  .btn{color:#f7e7c2;text-decoration:none;border:1px solid rgba(212,160,62,.45);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;background:rgba(25,14,8,.75);}
-  .hero{margin-top:14px;padding:18px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;}
-  .avatar{width:78px;height:78px;border-radius:50%;display:grid;place-items:center;color:#241409;font-size:30px;font-weight:900;background:radial-gradient(circle at 35% 25%,#fff4bd,#d8a33a 55%,#8b5a11);box-shadow:0 0 22px rgba(255,211,106,.28);}
-  .eyebrow{color:var(--gold-soft);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;}
-  .name{margin-top:5px;color:#FFD970;font-size:clamp(28px,5vw,44px);line-height:1.02;font-weight:900;}
-  .meta{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px;font-weight:700;}
-  .pill{border:1px solid rgba(214,163,58,.36);border-radius:999px;padding:5px 8px;background:rgba(0,0,0,.22);}
-  .section-tabs{margin-top:12px;padding:6px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
-  .section-tab{min-height:38px;display:flex;align-items:center;justify-content:center;border-radius:8px;text-decoration:none;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase;}
-  .section-tab.active{background:linear-gradient(135deg,#E4B340,#d4af37);color:#241409;box-shadow:0 2px 12px rgba(228,179,64,.32);}
-  .grid{margin-top:12px;display:grid;grid-template-columns:1.1fr .9fr;gap:12px;}
-  .panel{padding:15px;}
-  .panel h2{font-size:16px;color:var(--gold-soft);font-weight:900;margin-bottom:4px;}
-  .hint{font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px;}
-  .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;}
-  .mini-card{padding:12px;min-height:76px;text-decoration:none;color:inherit;display:block;}
-  .mini-card b{display:block;color:var(--text);font-size:22px;line-height:1.1;overflow-wrap:anywhere;}
-  .mini-card span{display:block;margin-top:5px;color:var(--dim);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;}
-  .mini-card small{display:block;margin-top:4px;color:var(--muted);font-size:11px;line-height:1.3;}
-  .rows{display:grid;gap:8px;}
-  .row{padding:10px 11px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;color:var(--muted);font-size:13px;}
-  .row strong{display:block;color:var(--text);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .row .sub{margin-top:2px;color:var(--dim);font-size:11.5px;}
-  .row .val{color:var(--gold-soft);font-weight:900;text-align:right;white-space:nowrap;}
-  .status{padding:13px;border:1px dashed rgba(214,163,58,.45);border-radius:10px;color:var(--muted);font-size:13px;line-height:1.45;background:rgba(0,0,0,.18);}
-  .wide{grid-column:1/-1;}
-  .split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
-  .footer-note{margin-top:14px;color:rgba(255,244,220,.52);font-size:11px;line-height:1.45;text-align:center;}
-  @media(max-width:820px){
-    .shell{padding:12px 12px 100px;}
-    .hero{grid-template-columns:1fr;align-items:start;}
-    .avatar{width:64px;height:64px;font-size:24px;}
-    .grid,.split{grid-template-columns:1fr;}
-    .cards{grid-template-columns:repeat(2,minmax(0,1fr));}
-    .topbar{align-items:flex-start;}
-    .top-actions{flex-direction:column;align-items:stretch;}
-  }
-</style>
-</head>
-<body>
-<main class="shell">
-  <div class="topbar">
-    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
-    <div class="top-actions">
-      <a class="btn" href="{{ dashboard_url|default('/employee/dashboard') }}">Today</a>
-      <a class="btn" href="{{ login_url|default('/employee/login') }}?_clear=1">Login</a>
-    </div>
+{# Cenas Floor OS - You tab.
+   Profile + badges + settings rows + What's new. Reads the session employee
+   directly from the route; no cross-employee data.
+#}
+{% extends "employee_console_base.html" %}
+{% set active_tab = 'you' %}
+{% block title %}You &middot; Cenas Floor OS{% endblock %}
+
+{% block employee_hero %}
+<div class="cf-eyebrow">You</div>
+<div class="cf-profile">
+  <div class="cf-avatar cf-avatar-lg" aria-hidden="true">{{ employee.initials|default('--') }}</div>
+  <strong>{{ employee.full_name|default('Team member') }}</strong>
+  <span>
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+    {{ employee.role|default('Server') }}{% if employee.location %} &middot; {{ employee.location }}{% endif %}
+  </span>
+  <div class="cf-badges">
+    {% if tenure_label %}
+      <em>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 15 8.5 22 9.3 17 14.2 18.2 21 12 17.8 5.8 21 7 14.2 2 9.3 9 8.5"/></svg>
+        {{ tenure_label }}
+      </em>
+    {% endif %}
+    {% if stats and stats.recorded_tips and stats.sales %}
+      {% set tip_pct = ((stats.recorded_tips / stats.sales) * 100)|round(0)|int %}
+      <em class="good">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        {{ tip_pct }}% avg tip
+      </em>
+    {% endif %}
   </div>
+</div>
+{% endblock %}
 
-  <section class="hero">
-    <div>
-      <div class="eyebrow">My profile</div>
-      <div class="name">{{ employee.full_name if employee and employee.full_name else 'Team Member' }}</div>
-      <div class="meta" id="profile-meta"></div>
-    </div>
-    <div class="avatar" id="avatar">TM</div>
-  </section>
+{% block employee_content %}
 
-  <nav class="section-tabs" aria-label="Employee sections">
-    <a class="section-tab active" href="/employee/dashboard">Performance</a>
-    <a class="section-tab" href="/employee/dashboard#roster">Roster</a>
-    <a class="section-tab" href="/employee/tables">Tables</a>
-  </nav>
+<div class="cf-block">
+  <a href="/employee/messages?view=alerts" class="cf-row" style="text-decoration:none;">
+    <span class="cf-row-icon" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+    </span>
+    <span class="cf-row-text"><strong>Notifications</strong><small>Shift reminders, how you hear from us</small></span>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+  </a>
+  <a href="/employee/availability" class="cf-row" style="text-decoration:none;">
+    <span class="cf-row-icon" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18"/></svg>
+    </span>
+    <span class="cf-row-text"><strong>Availability</strong><small>Set the days you can work</small></span>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+  </a>
+  <a href="/employee/time-off" class="cf-row" style="text-decoration:none;">
+    <span class="cf-row-icon" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    </span>
+    <span class="cf-row-text"><strong>Time off</strong><small>Request days off and check status</small></span>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+  </a>
+</div>
 
-  <section class="grid">
-    <div class="panel">
-      <h2>Hours &amp; pay</h2>
-      <div class="hint" id="perf-hint">Loading your profile.</div>
-      <div class="cards" id="pay-cards"></div>
-    </div>
+<div class="cf-news">
+  <span class="cf-news-icon" aria-hidden="true">&#x2728;</span>
+  <div>
+    <strong>Coming soon</strong>
+    <p>Live goals, safe tip leaderboards, and instant payout status.</p>
+  </div>
+</div>
 
-    <div class="panel">
-      <h2>Current standing</h2>
-      <div class="hint">Role-aware rankings only. Tipped metrics stay hidden when they do not apply.</div>
-      <div class="cards" id="rank-cards"></div>
-    </div>
-
-    <div class="split wide">
-      <div class="panel">
-        <h2>Upcoming schedule</h2>
-        <div class="hint">Published shifts from your own schedule.</div>
-        <div class="rows" id="schedule-rows"><div class="status">Loading schedule.</div></div>
-      </div>
-
-      <div class="panel">
-        <h2>Attendance</h2>
-        <div class="hint">Clean employee-visible attendance signals from the selected period.</div>
-        <div class="cards" id="attendance-cards"></div>
-      </div>
-    </div>
-
-    <div class="panel wide">
-      <h2>Team roster</h2>
-      <div class="hint">Coworkers in your store view, with no private pay or hidden identifiers.</div>
-      <div class="rows" id="roster-rows"><div class="status">Loading roster.</div></div>
-    </div>
-  </section>
-
-  <div class="footer-note">Personal profile hub &middot; built from session-owned employee data</div>
-</main>
-{% set active_nav = 'you' %}
-{% include 'partials/_employee_nav.html' %}
-
-<script type="application/json" id="profile-config">{{ config_json | safe }}</script>
-<script type="application/json" id="profile-data">{{ profile_data_json | safe }}</script>
-<script>
-(function(){
-  "use strict";
-  var CFG = JSON.parse(document.getElementById("profile-config").textContent);
-  var SAFE_DATA = JSON.parse(document.getElementById("profile-data").textContent);
-  var PROFILE = {{ {
-    "full_name": employee.full_name if employee else None,
-    "first_name": employee.first_name if employee else None,
-    "stores": employee.stores if employee else [],
-    "positions": employee.positions if employee else []
-  } | tojson }};
-
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-  function money(v){ var n=Number(v); return Number.isFinite(n) ? '$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : 'Not available'; }
-  function num(v,d){ var n=Number(v); return Number.isFinite(n) ? n.toLocaleString(undefined,{minimumFractionDigits:d||0,maximumFractionDigits:d||0}) : 'Not available'; }
-  function pct(v){ var n=Number(v); if(!Number.isFinite(n)) return 'Not available'; var p=Math.abs(n)<=1?n*100:n; return p.toFixed(1)+'%'; }
-  function dt(s){ if(!s) return 'Not available'; var d=new Date(s); return isNaN(d) ? String(s) : d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }
-  function tm(s){ if(!s) return ''; var d=new Date(s); return isNaN(d) ? '' : d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}); }
-  function card(value,label,sub,href){
-    var body = '<b>'+esc(value)+'</b><span>'+esc(label)+'</span>'+(sub?'<small>'+esc(sub)+'</small>':'');
-    return href ? '<a class="mini-card" href="'+esc(href)+'">'+body+'</a>' : '<div class="mini-card">'+body+'</div>';
-  }
-  function status(text){ return '<div class="status">'+esc(text)+'</div>'; }
-  function rankText(o, formatter){
-    if(!o) return {value:'Not available', sub:'Not ranked'};
-    if(o.status === 'not_eligible') return {value:'Not eligible', sub:'Role-based'};
-    if(o.status === 'cohort_too_small' || o.rank == null) return {value:'Cohort too small', sub:'Needs more qualifying teammates'};
-    var val = formatter && o.value != null ? formatter(o.value) : '';
-    return {value:'#'+o.rank+' of '+o.cohort_size, sub:val};
-  }
-  function detail(metric, period){ return '/employee/performance/'+metric+'?period='+encodeURIComponent(period || 'last30'); }
-
-  function renderMeta(){
-    var meta = [];
-    (PROFILE.stores||[]).forEach(function(s){ if(s) meta.push(s); });
-    (PROFILE.positions||[]).slice(0,4).forEach(function(p){
-      var label = p.name || '';
-      if(p.store){ label += ' / ' + p.store; }
-      if(label) meta.push(label);
-    });
-    document.getElementById('profile-meta').innerHTML = meta.length
-      ? meta.map(function(x){ return '<span class="pill">'+esc(x)+'</span>'; }).join('')
-      : '<span class="pill">Profile ready</span>';
-    var name = PROFILE.full_name || PROFILE.first_name || 'Team Member';
-    var parts = String(name).trim().split(/\s+/);
-    document.getElementById('avatar').textContent = (((parts[0]||'T')[0]||'T') + ((parts[1]||'M')[0]||'M')).toUpperCase();
-  }
-
-  function renderPerformance(data){
-    var pay = document.getElementById('pay-cards');
-    var ranks = document.getElementById('rank-cards');
-    var att = document.getElementById('attendance-cards');
-    var hint = document.getElementById('perf-hint');
-    if(!data || !data.ok){
-      hint.textContent = 'Performance is not available right now.';
-      pay.innerHTML = status('Try again in a few minutes.');
-      ranks.innerHTML = status('Rankings are not available right now.');
-      att.innerHTML = status('Attendance is not available right now.');
-      return;
-    }
-    if(data.linked === false){
-      hint.textContent = 'Your profile is active. Performance appears after your verified work profile is connected.';
-      pay.innerHTML = status('Not available yet.');
-      ranks.innerHTML = status('Not available yet.');
-      att.innerHTML = status('Not available yet.');
-      return;
-    }
-    if(data["sync"+"ing"]){
-      hint.textContent = 'Your profile is active. Performance is not available yet.';
-      pay.innerHTML = status('Performance will appear when ready.');
-      ranks.innerHTML = status('Rankings will appear when ready.');
-      att.innerHTML = status('Attendance will appear when ready.');
-      return;
-    }
-    var periods = data.periods || {};
-    var periodKey = periods.last30 ? 'last30' : Object.keys(periods)[0];
-    var p = periods[periodKey] || {};
-    var m = p.money || {};
-    var tipped = !!data.is_tipped;
-    hint.textContent = tipped ? 'Last 30 days, including approved tipped-role metrics.' : 'Last 30 days, with tipped-role metrics hidden because they do not apply.';
-    var cards = [
-      card(money(m.total_pay),'Total pay',periodKey,detail('total_pay',periodKey)),
-      card(money(m.effective_hourly) + (m.effective_hourly==null?'':'/hr'),'Effective hourly',periodKey,detail('effective_hourly',periodKey)),
-      card(num(m.hours,2)+'h','Total hours',periodKey,detail('shifts',periodKey)+'&view=hours'),
-      card(money(m.base_pay),'Base pay',periodKey,detail('base_pay',periodKey)),
-      card(num(m.shifts,0),'Total shifts',periodKey,detail('shifts',periodKey)+'&view=count')
-    ];
-    if(tipped){
-      cards.push(card(money(m.tips),'Total tips',periodKey,detail('tips',periodKey)));
-      cards.push(card(money(m.tips_per_hour) + (m.tips_per_hour==null?'':'/hr'),'Tips per hour',periodKey,detail('tips_per_hour',periodKey)));
-      cards.push(card(pct(m.tip_pct),'Tip percentage',periodKey,detail('tip_pct',periodKey)));
-    } else {
-      cards.push(card('Not eligible','Tipped metrics','Role-based'));
-    }
-    pay.innerHTML = cards.join('');
-
-    var r = p.rankings || {};
-    var stand = r.standing || r.combined;
-    var standing = stand && stand.standing_percentile != null
-      ? {value:'Top '+Math.max(1, Math.min(100, 100-Number(stand.standing_percentile))).toFixed(1)+'%', sub:stand.band || 'Role-safe'}
-      : rankText(r.combined, pct);
-    var hourly = rankText(r.effective_hourly, money);
-    var rankCards = [
-      card(standing.value,'Standing',standing.sub,detail(tipped?'rank_combined':'rank_standing',periodKey)),
-      card(hourly.value,tipped?'Hourly rank':'Hourly rank',hourly.sub,detail('rank_effective_hourly',periodKey))
-    ];
-    if(tipped){
-      var tipPct = rankText(r.tip_pct, pct);
-      rankCards.push(card(tipPct.value,'Tip % rank',tipPct.sub,detail('rank_tip_pct',periodKey)));
-    }
-    ranks.innerHTML = rankCards.join('');
-
-    var a = p.attendance || {};
-    att.innerHTML = [
-      card(num(a.late || 0,0),'Late records',periodKey,detail('attendance',periodKey)),
-      card(num(a.missed || 0,0),'Needs review',periodKey,detail('attendance',periodKey)),
-      card((a.rows||[]).length ? 'Review available' : 'Clean / none','Attendance notes',periodKey,detail('attendance',periodKey))
-    ].join('');
-  }
-
-  function renderSchedule(data){
-    var box = document.getElementById('schedule-rows');
-    var rows = (data && data.shifts) || [];
-    if(!rows.length){ box.innerHTML = status('No published shifts in the current schedule window.'); return; }
-    box.innerHTML = rows.slice(0,5).map(function(s){
-      var when = dt(s.start_at);
-      var time = [tm(s.start_at), tm(s.end_at)].filter(Boolean).join(' - ');
-      var sub = [s.position_name, time, s.response || 'pending'].filter(Boolean).join(' / ');
-      return '<div class="row"><div><strong>'+esc(when)+'</strong><div class="sub">'+esc(sub)+'</div></div><div class="val">'+esc(s.response || 'Open')+'</div></div>';
-    }).join('');
-  }
-
-  function renderRoster(data){
-    var box = document.getElementById('roster-rows');
-    var rows = (data && data.coworkers) || [];
-    if(!rows.length){ box.innerHTML = status('No published roster rows are available for your store view yet.'); return; }
-    box.innerHTML = rows.slice(0,8).map(function(c){
-      var sub = [c.position, c.store, c.shift_when].filter(Boolean).join(' / ');
-      return '<div class="row"><div><strong>'+esc(c.name || 'Team member')+'</strong><div class="sub">'+esc(sub)+'</div></div><div class="val">'+esc(c.shift_label || '')+'</div></div>';
-    }).join('');
-  }
-
-  renderMeta();
-  Promise.all([
-    fetch(CFG.performanceUrl,{credentials:'same-origin',headers:{Accept:'application/json'}}).then(function(r){return r.json();}).catch(function(){return null;})
-  ]).then(function(all){
-    renderPerformance(all[0]);
-    renderSchedule(SAFE_DATA.schedule);
-    renderRoster(SAFE_DATA.roster);
-  });
-})();
-</script>
-</body>
-</html>
+{% endblock %}

@@ -194,11 +194,17 @@ def employee_my_profile_page():
             seen.add(key)
             positions.append({"name": label, "store": store_label})
 
+        initials = "".join(w[0] for w in (full_name or "").split()[:2]).upper() or "--"
+        role = positions[0]["name"] if positions else "Team member"
+        location = stores[0] if stores else None
         view = SimpleNamespace(
             first_name=first_name,
             full_name=full_name or None,
             stores=stores,
             positions=positions,
+            initials=initials,
+            role=role,
+            location=location,
         )
         profile_data = {
             "schedule": _profile_schedule(db, emp.id),
@@ -206,6 +212,20 @@ def employee_my_profile_page():
         }
     finally:
         db.close()
+
+    # Cenas Floor OS: render demo-derived stats for the badge strip until the
+    # live Toast-backed performance path is wired. The badge is hidden when
+    # the data isn't usable so we never invent a number.
+    from app.services import floor_demo
+    from app.services.employee_floor_metrics import calculate_day_stats
+
+    floor_day = floor_demo.demo_today()
+    stats = calculate_day_stats(
+        floor_day,
+        pending_tip_rate=floor_demo.PENDING_TIP_RATE,
+        hours=floor_day.get("hours_worked"),
+        base_pay=(floor_day.get("hours_worked") or 0) * 2.13,
+    )
 
     config = {
         "performanceUrl": "/employee/performance-center",
@@ -215,6 +235,10 @@ def employee_my_profile_page():
     return render_template(
         "employee_my_profile.html",
         employee=view,
+        stats=stats,
+        tenure_label=None,         # not derivable from the current Employee row
+        demo_mode=True,
+        sync_label="demo mode",
         config_json=json.dumps(config),
         profile_data_json=json.dumps(profile_data),
         dashboard_url="/employee/dashboard",

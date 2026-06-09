@@ -1,731 +1,161 @@
-{# Employee dashboard (Schedules V2, B2) - SKELETON. Landing page after a
-   logged-in employee signs in via /employee/login. For B2 it shows the
-   employee name + a logout, plus placeholder tiles for the surfaces that
-   later blocks fill in (schedule B5, time-off B7, availability B8,
-   marketplace B9, announcements + messages B10). Tiles are marked
-   "Coming soon" until their block ships - they do NOT link anywhere yet.
-
-   ck owns this template + the GET /employee/dashboard route.
-   aick owns POST {{ logout_url }} (clears the session).
+{# Cenas Floor OS - Today tab.
+   Employee landing page. Surfaces projected take-home, settled vs pending
+   tips, opportunity, next-best-action coaching, the rich metric grid, and a
+   daily ledger. Demo data feeds these helpers when Toast is not connected;
+   the source label is honest about which.
 #}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>My Dashboard &mdash; Cenas Kitchen</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_console.css') }}">
+{% extends "employee_console_base.html" %}
+{% from "_floor_macros.html" import welcome_row, segmented, hero_command, coaching_card, metric_card, station_chip, empty_state, sync_chip %}
+{% set active_tab = 'today' %}
+{% block title %}Today &middot; Cenas Floor OS{% endblock %}
+
+{% block head_extra %}
 <style>
-  :root{
-    /* House palette (warm gold / cream / dark) — var NAMES kept from the
-       old blue/cream scheme so the rest of this page's CSS recolours for
-       free. --blue* now carry the dark surface + gold-accent roles; --red*
-       are the warm gold accent; --cream* the house cream. */
-    --blue:        #E4B340;   /* gold accent (was navy) */
-    --blue-bright: #FFD970;   /* bright gold */
-    --blue-deep:   #FFD970;   /* heading text on dark -> bright gold */
-    --red:         #E4B340;   /* eyebrow / accent -> gold */
-    --red-bright:  #FFD970;
-    --red-deep:    #d4af37;
-    --cream:       #FAF6EC;   /* house cream */
-    --cream-soft:  #ece3d0;
-    --ink:         #FAF6EC;   /* body text -> cream */
-    --surface:     #241409;   /* card / panel surface */
-    --bd-gold:     rgba(217,164,54,0.18);  /* gold hairline border */
-  }
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  html,body{
-    width:100%; min-height:100vh; background:#241610;
-    font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;
-    position:relative; color: var(--ink);
-  }
-  body::before{
-    content:''; position:fixed; inset:-20px; pointer-events:none; z-index:0;
-    background-image: url("{{ url_for('static', filename='brand/bg-tequila.jpg') }}");
-    background-size:cover; background-position:center; background-repeat:no-repeat;
-    filter: blur(6px) brightness(0.55) saturate(1.05);
-  }
-  body::after{
-    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
-    background: linear-gradient(180deg, rgba(10,6,4,0.45) 0%, rgba(10,6,4,0.70) 100%);
-  }
-  .wrap{
-    position:relative; z-index:1;
-    max-width:520px; margin:0 auto; padding:20px 18px 90px;
-    display:flex; flex-direction:column; min-height:100vh;
-  }
-
-  /* Top bar: logo + logout — house dark bar look */
-  .topbar{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-    margin-bottom:18px;
-    background:#241409; border:0.5px solid var(--bd-gold);
-    border-radius:14px; padding:12px 14px;
-    box-shadow:0 2px 10px rgba(0,0,0,0.35);
-  }
-  .topbar img{
-    width:auto; height:34px;
-    filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6));
-  }
-  .logout-btn{
-    background: rgba(244,231,208,0.12);
-    color: var(--cream);
-    border:1px solid rgba(244,231,208,0.30);
-    border-radius:10px; padding:8px 14px;
-    font-size:13px; font-weight:600; letter-spacing:0.4px;
-    cursor:pointer; transition: background 120ms ease;
-  }
-  .logout-btn:hover{ background: rgba(244,231,208,0.22); }
-
-  /* Greeting card — house dark surface with a warm gold edge + glow */
-  .greeting{
-    background:
-      linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), #241409;
-    border:0.5px solid var(--bd-gold);
-    border-radius:16px; padding:18px 20px; margin-bottom:18px;
-    box-shadow:
-      inset 0 0 0 1px rgba(228,179,64,0.10),
-      0 0 26px rgba(255,217,112,0.10),
-      0 10px 22px rgba(0,0,0,0.5);
-  }
-  .greeting .hi{
-    font-size:13px; font-weight:700; letter-spacing:3px;
-    text-transform:uppercase; color: var(--red);
-  }
-  .greeting .name{
-    font-size:26px; font-weight:800; color: var(--blue-deep); line-height:1.15;
-    margin-top:2px;
-  }
-  .greeting .meta{
-    font-size:13px; color: rgba(250,246,236,0.7); margin-top:6px;
-  }
-
-  /* Feature tiles */
-  .section-label{
-    font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
-    color: rgba(244,231,208,0.7); margin:4px 2px 12px;
-  }
-  .tiles{
-    display:grid; grid-template-columns: repeat(2, 1fr); gap:14px;
-  }
-  .tile{
-    position:relative; background: var(--surface);
-    border:0.5px solid var(--bd-gold);
-    border-radius:14px; padding:16px 14px 18px;
-    box-shadow: 0 6px 14px rgba(0,0,0,0.4);
-    display:flex; flex-direction:column; gap:10px; min-height:108px;
-  }
-  .tile.soon{ opacity:0.62; }
-  a.tile{ text-decoration:none; transition: transform 100ms ease, filter 100ms ease; }
-  a.tile:hover{ transform: translateY(-1px); filter: brightness(1.03); }
-  a.tile:active{ transform: translateY(0); }
-  .tile .icon{
-    width:34px; height:34px; fill:none; stroke: var(--red);
-    stroke-width:2; stroke-linecap:round; stroke-linejoin:round;
-  }
-  .tile .t-title{ font-size:15px; font-weight:700; color: var(--blue-deep); }
-  .tile .t-badge{
-    position:absolute; top:10px; right:10px;
-    font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
-    color: var(--red-deep); background: rgba(228,179,64,0.12);
-    border:1px solid rgba(228,179,64,0.30); border-radius:999px; padding:2px 8px;
-  }
-
-  /* Personalized "My Hours & Pay" panel (Sam #2829) — appears only when a
-     the employee's performance data is available. */
-  /* Phase 4 (Sam #2983): Performance tab -- period pills + summary cards + shift list. */
-  .perf-card{
-    background: linear-gradient(135deg, rgba(40,22,14,0.96), rgba(15,8,5,0.97)), #241409;
-    border:0.5px solid var(--bd-gold); border-radius:16px;
-    padding:16px 16px 18px; margin-bottom:18px;
-    box-shadow: inset 0 0 0 1px rgba(228,179,64,0.10), 0 10px 24px rgba(0,0,0,0.45);
-  }
-  .perf-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:13px; }
-  .perf-title{ font-size:18px; font-weight:800; color:var(--blue-deep); letter-spacing:0.3px; }
-  .perf-subtitle{ font-size:11px; color:rgba(250,246,236,0.72); white-space:nowrap; }
-  .perf-note{ font-size:12.5px; color:rgba(250,246,236,0.72); margin-bottom:4px; line-height:1.45; }
-  .perf-tabs{ display:flex; gap:6px; margin-bottom:14px; }
-  .perf-tab{ flex:1; text-align:center; font-size:12px; font-weight:700; letter-spacing:0.2px;
-    color:rgba(244,231,208,0.82); background:var(--surface); border:0.5px solid var(--bd-gold);
-    border-radius:999px; padding:7px 4px; cursor:pointer; transition: all 120ms ease; user-select:none; }
-  .perf-tab.active{ color:#241409; background:var(--bd-gold); border-color:var(--bd-gold);
-    box-shadow:0 2px 9px rgba(228,179,64,0.35); }
-  .perf-cards{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
-  .pcard{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:13px; padding:13px 12px; }
-  .pcard.hero{ grid-column:1 / -1; background:linear-gradient(135deg, rgba(228,179,64,0.18), rgba(228,179,64,0.04)); }
-  .pcard-val{ font-size:22px; font-weight:800; color:var(--blue-deep); line-height:1.1; }
-  .pcard.hero .pcard-val{ font-size:31px; }
-  .pcard-lbl{ font-size:10.5px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;
-    color:rgba(244,231,208,0.62); margin-top:5px; }
-  .pcard-sub{ font-size:11px; color:rgba(250,246,236,0.66); margin-top:3px; }
-  .pcard-val .u{ font-size:13px; font-weight:600; color:rgba(244,231,208,0.7); }
-  .perf-sub{ margin-top:16px; }
-  .perf-sub-lbl{ font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
-    color:rgba(244,231,208,0.6); margin-bottom:9px; display:flex; justify-content:space-between; align-items:baseline; }
-  .perf-sub-lbl .cnt{ letter-spacing:0.3px; color:rgba(244,231,208,0.45); font-weight:600; }
-  .live-summary{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:10px; }
-  .live-pill{ background:rgba(228,179,64,0.10); border:0.5px solid var(--bd-gold); border-radius:11px;
-    padding:9px 10px; min-width:0; }
-  .live-pill b{ display:block; font-size:16px; color:var(--blue-deep); line-height:1.1; }
-  .live-pill span{ display:block; font-size:9.5px; font-weight:800; letter-spacing:0.55px; text-transform:uppercase;
-    color:rgba(244,231,208,0.58); margin-top:4px; }
-  .live-list{ display:flex; flex-direction:column; gap:7px; }
-  .live-row{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:11px; padding:10px 12px; }
-  .live-row.open{ border-color:rgba(104,218,130,0.54); box-shadow:0 0 0 1px rgba(104,218,130,0.08); }
-  .live-top{ display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
-  .live-title{ font-size:13px; font-weight:800; color:var(--blue-deep); overflow:hidden; text-overflow:ellipsis; }
-  .live-status{ flex:none; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:0.5px;
-    color:#241409; background:var(--blue-bright); border-radius:999px; padding:3px 7px; }
-  .live-status.open{ background:#68da82; }
-  .live-meta{ display:flex; gap:9px; flex-wrap:wrap; margin-top:7px; font-size:11.5px; color:rgba(250,246,236,0.78); }
-  .live-meta b{ color:var(--cream); font-weight:800; }
-  .live-empty{ font-size:12px; line-height:1.45; color:rgba(250,246,236,0.68); background:var(--surface);
-    border:0.5px dashed rgba(228,179,64,0.42); border-radius:11px; padding:11px 12px; }
-  .shift-list{ display:flex; flex-direction:column; gap:7px; }
-  .shift-row{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:11px; padding:10px 12px; }
-  .shift-row.flag{ border-color:#E4B340; box-shadow:0 0 0 1px rgba(228,179,64,0.28); }
-  .shift-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .shift-date{ font-size:13px; font-weight:700; color:var(--blue-deep); }
-  .shift-hrs{ font-size:13px; font-weight:800; color:var(--red-deep); white-space:nowrap; }
-  .shift-meta{ display:flex; gap:14px; margin-top:5px; font-size:11.5px; color:rgba(250,246,236,0.8); flex-wrap:wrap; }
-  .shift-meta b{ color:var(--cream); font-weight:700; }
-  .badge-review{ display:inline-block; margin-top:8px; font-size:10.5px; font-weight:800; color:#241409;
-    background:#E4B340; border-radius:7px; padding:3px 8px; cursor:pointer; letter-spacing:0.2px; }
-  .review-reason{ font-size:11px; color:rgba(228,179,64,0.92); margin-top:6px; line-height:1.4; }
-
-  /* Phase 5.1 ranking surface */
-  .rank-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:13px; }
-  .rcard{ background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:12px; padding:12px 8px; text-align:center; }
-  a.rcard{ display:block; color:inherit; text-decoration:none; transition:transform 100ms ease, filter 100ms ease; }
-  a.rcard:hover{ transform:translateY(-1px); filter:brightness(1.06); }
-  a.rcard:active{ transform:translateY(0); }
-  .rcard-rank{ font-size:21px; font-weight:800; color:var(--blue-deep); line-height:1.05; }
-  .rcard-rank .of{ font-size:12px; font-weight:600; color:rgba(244,231,208,0.6); }
-  .rcard-gate{ font-size:11px; font-weight:700; color:rgba(228,179,64,0.85); line-height:1.25; }
-  .rcard-lbl{ font-size:9.5px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase; color:rgba(244,231,208,0.6); margin-top:7px; }
-  .rcard-val{ font-size:11px; color:rgba(250,246,236,0.66); margin-top:3px; }
-  .lb-lbl{ font-size:10.5px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:rgba(244,231,208,0.58); margin:12px 0 8px; }
-  .lb-row{ display:flex; align-items:center; gap:10px; background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:10px; padding:9px 11px; margin-bottom:6px; }
-  .lb-row.me{ border-color:var(--bd-gold); background:linear-gradient(135deg, rgba(228,179,64,0.17), rgba(228,179,64,0.03)); }
-  .lb-rank{ font-size:14px; font-weight:800; color:var(--bd-gold); min-width:24px; }
-  .lb-name{ flex:1; font-size:13px; font-weight:700; color:var(--blue-deep); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .lb-name .you{ font-size:10px; font-weight:700; color:rgba(244,231,208,0.6); margin-left:5px; }
-  .lb-metric{ font-size:13px; font-weight:800; color:var(--red-deep); white-space:nowrap; }
-  .lb-gate{ font-size:12px; color:rgba(250,246,236,0.72); line-height:1.45; background:var(--surface);
-    border:0.5px dashed rgba(228,179,64,0.5); border-radius:10px; padding:11px 12px; }
-  .rank-foot{ font-size:10.5px; color:rgba(244,231,208,0.5); margin-top:10px; letter-spacing:0.2px; line-height:1.4; }
-
-  .footnote{
-    margin-top:auto; padding-top:22px; text-align:center;
-    font-size:11px; color: rgba(244,231,208,0.45); letter-spacing:0.5px;
-  }
-
-  /* 3-section tabs (Performance / Roster / Service) — Sam #3245 item 3 */
-  .seg-tabs{ display:flex; gap:6px; margin-bottom:16px; }
-  .seg-tab{ flex:1; text-align:center; font-size:12.5px; font-weight:800; letter-spacing:0.4px;
-    text-transform:uppercase; color:rgba(244,231,208,0.82); background:var(--surface);
-    border:0.5px solid var(--bd-gold); border-radius:12px; padding:10px 4px; cursor:pointer;
-    transition:all 120ms ease; user-select:none; }
-  .seg-tab.active{ color:#241409; background:linear-gradient(135deg,#E4B340,#d4af37);
-    border-color:rgba(228,179,64,0.30); box-shadow:0 2px 9px rgba(228,179,64,0.35); }
-  .seg-panel{ display:none; } .seg-panel.active{ display:block; }
-
-  /* Roster (coworker list — name + position + shift; NO pay/sales/ids — Sam #3251) */
-  .roster-list{ display:flex; flex-direction:column; gap:8px; }
-  .rost-row{ display:flex; align-items:center; gap:12px; background:var(--surface);
-    border:0.5px solid var(--bd-gold); border-radius:12px; padding:11px 13px; }
-  .rost-av{ width:38px; height:38px; border-radius:50%; flex:none; display:flex; align-items:center;
-    justify-content:center; font-weight:800; font-size:15px; color:#241409;
-    background:linear-gradient(135deg,#E4B340,#d4af37); }
-  .rost-main{ flex:1; min-width:0; }
-  .rost-name{ font-size:14px; font-weight:700; color:var(--blue-deep); }
-  .rost-pos{ font-size:11.5px; color:rgba(250,246,236,0.66); margin-top:1px; }
-  .rost-shift{ font-size:11.5px; font-weight:700; color:var(--red-deep); white-space:nowrap; text-align:right; }
-  .rost-shift .sub{ display:block; font-size:10px; font-weight:600; color:rgba(244,231,208,0.5); }
-
-  /* Empty / coming-soon state (Service tab + no-data) */
-  .empty-state{ text-align:center; padding:42px 22px; color:rgba(250,246,236,0.72); }
-  .empty-state .es-icon{ width:46px; height:46px; stroke:var(--red); fill:none; stroke-width:1.6; opacity:0.7; margin-bottom:14px; }
-  .empty-state .es-title{ font-size:17px; font-weight:800; color:var(--blue-deep); margin-bottom:6px; }
-  .empty-state .es-msg{ font-size:13px; line-height:1.5; max-width:300px; margin:0 auto; }
-  /* De-bulk (Sam #3254): compact rankings hint + shifts "view all" -> detail pages */
-  .rank-hint{ font-size:11.5px; color:rgba(244,231,208,0.62); line-height:1.45; background:var(--surface);
-    border:0.5px dashed rgba(228,179,64,0.4); border-radius:10px; padding:11px 12px; }
-  .shift-viewall{ display:block; text-align:center; margin-top:4px; padding:10px; font-size:12.5px;
-    font-weight:800; letter-spacing:0.3px; color:var(--red-deep); text-decoration:none;
-    background:var(--surface); border:0.5px solid var(--bd-gold); border-radius:11px; }
-  .shift-viewall:hover{ filter:brightness(1.08); }
+  /* Today tab: tiny page-level helpers that don't belong in the shared layer */
+  .today-hero-wrap { position: relative; }
+  .today-hero-wrap .cf-demo-badge { position: absolute; right: 16px; top: -10px; }
 </style>
-</head>
-<body>
-<div class="wrap">
+{% endblock %}
 
-  <div class="topbar">
-    <img src="{{ url_for('static', filename='brand/logo-text.png') }}" alt="Cenas Kitchen" />
-    <button class="logout-btn" id="logout-btn">Log out</button>
+{% block employee_hero %}
+  {{ welcome_row(employee.initials|default('--'), employee.full_name|default('Team member'), employee.role|default('Server'), employee.location|default('')) }}
+{% endblock %}
+
+{% block employee_content %}
+
+{{ segmented('today-section', [('performance', 'Performance'), ('roster', 'Roster'), ('service', 'Service')], 'performance', 'Today sections') }}
+
+{# --- PERFORMANCE pane (the default; always visible on initial render) --- #}
+<section id="cf-pane-performance" data-pane="performance">
+
+  {{ segmented('today-range', [('today', 'Today'), ('week', 'Week'), ('month', 'Month'), ('last30', 'Last 30')], 'today', 'Performance range') }}
+
+  <div class="today-hero-wrap">
+    {% if demo_mode %}<span class="cf-demo-badge">Demo mode</span>{% endif %}
+    {{ hero_command('Tonight', stats, opportunity) }}
   </div>
 
-  <div class="greeting">
-    <div class="hi">Welcome</div>
-    <div class="name">{{ (employee.full_name if employee and employee.full_name else (employee.first_name if employee and employee.first_name else 'Team Member')) }}</div>
-    {% if employee and employee.store_name %}<div class="meta">{{ employee.store_name }}</div>{% endif %}
+  {{ coaching_card(coaching.title, coaching.body) }}
+
+  <div class="cf-card-grid">
+    {{ metric_card(
+        '$%.2f' % (base_pay or 0),
+        'base pay so far'
+    ) }}
+    {{ metric_card(
+        '$%.2f' % (stats.tips_per_hour or 0) if stats.tips_per_hour is not none else '--',
+        'tips / hour',
+        trend='on pace' if stats.tips_per_hour else None
+    ) }}
+    {{ metric_card(
+        '$%.2f' % (stats.average_check or 0) if stats.average_check is not none else '--',
+        'average check'
+    ) }}
+    {{ metric_card(
+        stats.bar_drink_count|int if stats.bar_drink_count else 0,
+        'bar drinks',
+        trend='3 over pace' if (stats.bar_drink_count or 0) >= 15 else None
+    ) }}
   </div>
 
-  <div class="seg-tabs" role="tablist">
-    <div class="seg-tab active" data-panel="performance" role="tab">Performance</div>
-    <div class="seg-tab" data-panel="roster" role="tab">Roster</div>
-    <div class="seg-tab" data-panel="service" role="tab">Service</div>
+  <div class="cf-eyebrow">Daily breakdown</div>
+  <div class="cf-ledger">
+    {% for row in ledger %}
+      <div class="cf-ledger-row">
+        <span>{{ row.day }}{% if row.live %} <span class="cf-mini-live" aria-label="today"></span>{% endif %}</span>
+        <span>{{ '%.1fh' % row.hours if row.hours else 'off' }}</span>
+        <span>${{ '%.2f' % row.tips }}</span>
+        <strong>${{ '%.2f' % (row.base + row.tips) }}</strong>
+      </div>
+    {% endfor %}
+    <div class="cf-ledger-key"><span>day</span><span>hours</span><span>tips</span><span>total</span></div>
   </div>
 
-  <div class="seg-panel active" id="panel-performance" role="tabpanel">
-  {# Personalized Toast panel (Sam #2829) — stays hidden until
-     /employee/my-performance returns this employee's performance data. #}
-  <section class="perf-card" id="perf-card" hidden>
-    <div class="perf-head">
-      <div class="perf-title">Performance</div>
-      <div class="perf-subtitle" id="perf-subtitle"></div>
-    </div>
-    <div class="perf-note" id="perf-note" hidden></div>
-    <div class="perf-tabs" id="perf-tabs" role="tablist">
-      <div class="perf-tab active" data-period="today">Today</div>
-      <div class="perf-tab" data-period="week">Week</div>
-      <div class="perf-tab" data-period="month">Month</div>
-      <div class="perf-tab" data-period="last30">Last 30</div>
-    </div>
-    <div class="perf-cards" id="perf-cards"></div>
-    <div class="perf-sub" id="perf-live-wrap" hidden>
-      <div class="perf-sub-lbl"><span>Live today</span><span class="cnt" id="live-date-lbl"></span></div>
-      <div class="live-summary" id="live-summary"></div>
-      <div class="live-list" id="live-list"></div>
-    </div>
-    <div class="perf-sub" id="perf-rank-wrap" hidden>
-      <div class="perf-sub-lbl"><span>Your rankings</span><span class="cnt" id="rank-period-lbl"></span></div>
-      <div class="rank-grid" id="rank-grid"></div>
-      <div id="rank-boards"></div>
-      <div class="rank-foot" id="rank-foot"></div>
-    </div>
-    <div class="perf-sub" id="perf-shifts-wrap" hidden>
-      <div class="perf-sub-lbl"><span>Recent shifts</span><span class="cnt" id="shift-count-lbl"></span></div>
-      <div class="shift-list" id="shift-list"></div>
-    </div>
-  </section>
-    <div class="empty-state" id="perf-empty">
-      <svg class="es-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
-      <div class="es-title">Your performance will appear here</div>
-      <div class="es-msg">Once your hours and shifts sync, you'll see your pay, hours, and team rankings.</div>
-    </div>
-  </div><!-- /panel-performance -->
+</section>
 
-  <div class="seg-panel" id="panel-roster" role="tabpanel">
-    <div class="section-label">Who&rsquo;s on &mdash; your store</div>
-    <div class="roster-list" id="roster-list"></div>
-    <div class="empty-state" id="roster-empty" hidden>
-      <svg class="es-icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M15 20c0-2 1.5-3.5 4-3.5"/></svg>
-      <div class="es-title">No published shifts yet</div>
-      <div class="es-msg">When your team&rsquo;s schedule is published, your coworkers and their shifts show up here.</div>
+{# --- ROSTER pane --- #}
+<section id="cf-pane-roster" data-pane="roster" hidden>
+  <div class="cf-block">
+    <div class="cf-eyebrow">Your station tonight</div>
+    <div class="cf-bigrow"><span>Section</span><strong>{{ section|default('-') }}</strong></div>
+    <div class="cf-bigrow"><span>On since</span><strong>{{ on_since|default('-') }}</strong></div>
+    <div class="cf-bigrow"><span>Manager on duty</span><strong>{{ manager|default('-') }}</strong></div>
+  </div>
+  {{ coaching_card('Floor read',
+      'You are carrying ' ~ (stats.total_tables or 0) ~ ' tables with ' ~ (stats.open_checks or 0)
+      ~ ' open check' ~ ('' if (stats.open_checks or 0) == 1 else 's')
+      ~ '. Hot tables need attention before new seating.') }}
+  <div class="cf-map">
+    <div class="cf-map-head"><strong>Live station map</strong><span>{{ floor_day.tables|length }} tables</span></div>
+    <div class="cf-table-grid">
+      {% for chip in station_chips %}
+        {{ station_chip(chip.table, chip.attention, chip.summary) }}
+      {% endfor %}
     </div>
   </div>
+</section>
 
-  <div class="seg-panel" id="panel-service" role="tabpanel">
-    <div class="empty-state">
-      <svg class="es-icon" viewBox="0 0 24 24"><path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 7.7l5.4-.8z"/></svg>
-      <div class="es-title">Service insights &mdash; coming soon</div>
-      <div class="es-msg">A dedicated view of your service activity is on the way. We&rsquo;ll turn it on once it&rsquo;s ready.</div>
-    </div>
+{# --- SERVICE pane --- #}
+<section id="cf-pane-service" data-pane="service" hidden>
+  <div class="cf-card-grid">
+    {{ metric_card(
+        ('%dm' % (stats.seat_to_first_drink_avg_min|round(0)|int)) if stats.seat_to_first_drink_avg_min is not none else '--',
+        'seat -> first drink',
+        trend='1m faster' if (stats.seat_to_first_drink_avg_min or 99) < 7 else None
+    ) }}
+    {{ metric_card(
+        ('%dm' % (stats.seat_to_kitchen_fire_avg_min|round(0)|int)) if stats.seat_to_kitchen_fire_avg_min is not none else '--',
+        'seat -> kitchen',
+        trend='on pace' if stats.seat_to_kitchen_fire_avg_min else None
+    ) }}
+    {{ metric_card(
+        ('%dm' % (stats.average_table_turn_min|round(0)|int)) if stats.average_table_turn_min is not none else '--',
+        'average turn',
+        trend='6m slow' if (stats.average_table_turn_min or 0) > 68 else None,
+        bad=(stats.average_table_turn_min or 0) > 68
+    ) }}
+    {{ metric_card(
+        ('%d%%' % (stats.dessert_attach_pct|int)) if stats.dessert_attach_pct is not none else '--',
+        'dessert attach',
+        trend='add 2' if (stats.dessert_attach_pct or 0) < 18 else None,
+        bad=(stats.dessert_attach_pct or 0) < 18
+    ) }}
   </div>
+  {{ coaching_card(
+      'Service coaching',
+      'Your drink pace is strong. The biggest improvement tonight is closing tables faster and asking dessert before the check hits the table.'
+  ) }}
+</section>
 
-  <div class="section-label">My tools</div>
-  <div class="tiles">
+{% endblock %}
 
-    <a class="tile" href="/employee/my-profile">
-      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4-6 8-6s6.6 2 8 6"/></svg>
-      <div class="t-title">My Profile</div>
-    </a>
-
-    <a class="tile" href="/employee/tables">
-      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/><path d="M3 15h18"/></svg>
-      <div class="t-title">My Tables</div>
-    </a>
-
-    <a class="tile" href="/employee/my-schedule">
-      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-      <div class="t-title">My Schedule</div>
-    </a>
-
-    <a class="tile" href="/employee/time-off">
-      <svg class="icon" viewBox="0 0 24 24"><path d="M5 21 V8 a2 2 0 0 1 2 -2 h10 a2 2 0 0 1 2 2 v13"/><path d="M9 13 l2 2 l4 -4"/></svg>
-      <div class="t-title">Time Off</div>
-    </a>
-
-    <a class="tile" href="/employee/shift-marketplace">
-      <svg class="icon" viewBox="0 0 24 24"><path d="M3 7 h18 l-2 12 H5 Z"/><path d="M8 7 a4 4 0 0 1 8 0"/></svg>
-      <div class="t-title">Shift Marketplace</div>
-    </a>
-
-    <a class="tile" href="/employee/profile">
-      <svg class="icon" viewBox="0 0 24 24"><path d="M18 8 a6 6 0 0 0 -12 0 c0 7 -3 9 -3 9 h18 s-3 -2 -3 -9"/><path d="M13.7 21 a2 2 0 0 1 -3.4 0"/></svg>
-      <div class="t-title">Notifications</div>
-    </a>
-
-    <div class="tile soon">
-      <span class="t-badge">Soon</span>
-      <svg class="icon" viewBox="0 0 24 24"><path d="M3 11 l18 -7 v16 Z"/><line x1="3" y1="11" x2="3" y2="17"/></svg>
-      <div class="t-title">Announcements</div>
-    </div>
-
-    <div class="tile soon">
-      <span class="t-badge">Soon</span>
-      <svg class="icon" viewBox="0 0 24 24"><path d="M21 15 a2 2 0 0 1 -2 2 H7 l-4 4 V5 a2 2 0 0 1 2 -2 h14 a2 2 0 0 1 2 2 Z"/></svg>
-      <div class="t-title">Messages</div>
-    </div>
-
-  </div>
-
-  <div class="footnote">Schedules V2 &middot; more tools arriving block by block</div>
-</div>
-
-{# House bottom nav. Dashboard is the Today hub. #}
-{% set active_nav = 'today' %}
-{% include 'partials/_employee_nav.html' %}
-
+{% block scripts %}
 <script>
-  const LOGOUT_URL = {{ (logout_url|default('/employee/logout'))|tojson }};
-  const LOGIN_URL  = {{ (login_url|default('/employee/login'))|tojson }};
-  document.getElementById('logout-btn').addEventListener('click', async () => {
-    try{
-      await fetch(LOGOUT_URL, { method:'POST', credentials:'same-origin' });
-    } catch(_){}
-    // Clear the remembered phone too, then back to the numeric keypad
-    // (same destination as the driver logout, driver_routes.py:701 ->
-    // /keypad-login?_clear=1; the keypad template reads ?_clear=1 to wipe
-    // the persisted phone). NOT the typed /employee/login form.
-    window.location.replace('/keypad-login?_clear=1');
+(function(){
+  "use strict";
+  // Section segmented control: hides/shows panes locally without a route reload.
+  function showPane(name){
+    var panes = document.querySelectorAll('[data-pane]');
+    panes.forEach(function(p){ p.hidden = (p.getAttribute('data-pane') !== name); });
+  }
+  document.addEventListener('click', function(ev){
+    var btn = ev.target.closest('button[data-seg]');
+    if(!btn) return;
+    var group = btn.getAttribute('data-seg');
+    var value = btn.getAttribute('data-value');
+    // Update active state for buttons in the same group
+    document.querySelectorAll('button[data-seg="' + group + '"]').forEach(function(b){
+      var on = (b === btn);
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    if(group === 'today-section'){
+      showPane(value);
+    }
+    // today-range is a placeholder: today's data is the only range with content
+    // in this initial release. The control still selects to give an honest
+    // signal that ranges are coming, without faking numbers.
   });
-
-  // --- Phase 4 (Sam #2983): Performance tab. Reads only the employee performance
-  //     feed (/employee/my-performance). Period tabs drive the summary cards; the
-  //     shift list shows recent shifts with a needs_review badge (raw totals kept). ---
-  (function(){
-    var card = document.getElementById('perf-card');
-    var PERIODS = {}, shifts = [], sel = 'today', RANK = null, LIVE = null, tabsBound = false;
-    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-    function money(v){ return '$' + (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
-    function num(v,dp){ return (Number(v)||0).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:(dp==null?2:dp)}); }
-    function show(){ card.hidden = false; var pe=document.getElementById('perf-empty'); if(pe){ pe.hidden=true; } }
-    function emptyState(title, msg){
-      var pe=document.getElementById('perf-empty');
-      if(!pe){ return; }
-      var t=pe.querySelector('.es-title'), m=pe.querySelector('.es-msg');
-      if(t){ t.textContent=title; }
-      if(m){ m.textContent=msg; }
-      pe.hidden=false;
-    }
-    function note(txt){ var n=document.getElementById('perf-note'); n.textContent=txt; n.hidden=!txt; }
-    function pending(){
-      show();
-      document.getElementById('perf-tabs').style.display='none';
-      document.getElementById('perf-subtitle').textContent='Linked to your profile';
-      note('Your profile is linked. Your hours, shifts and pay will appear here shortly.');
-    }
-    function hm(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString(undefined,{hour:'numeric', minute:'2-digit'}); }
-    function hms(sec){
-      if(sec==null || !Number.isFinite(Number(sec))) return '';
-      sec = Math.max(0, Number(sec)||0);
-      var m = Math.round(sec/60);
-      if(m < 1) return '<1m';
-      if(m < 60) return m + 'm';
-      var h = Math.floor(m/60), r = m % 60;
-      return h + 'h' + (r ? ' ' + r + 'm' : '');
-    }
-    function inWin(bd, p){ return !!(bd && p && bd >= p.period_start && bd <= p.period_end); }
-    var PLABEL = { today:'today', week:'this week', month:'this month', last30:'last 30 days' };
-    function pcard(val, lbl, sub, hero, href){
-      var inner = '<div class="pcard-val">'+val+'</div>'+
-             '<div class="pcard-lbl">'+esc(lbl)+'</div>'+(sub?'<div class="pcard-sub">'+esc(sub)+'</div>':'');
-      var cls = 'pcard'+(hero?' hero':'');
-      if(href){
-        return '<a class="'+cls+'" href="'+esc(href)+'" style="text-decoration:none;color:inherit;display:block">'+inner+'</a>';
-      }
-      return '<div class="'+cls+'">'+inner+'</div>';
-    }
-    function u(s){ return '<span class="u">'+s+'</span>'; }
-    function renderCards(){
-      var p = PERIODS[sel]; var box = document.getElementById('perf-cards');
-      if(!p){ box.innerHTML=''; return; }
-      var hrs=Number(p.total_hours)||0, base=Number(p.base_pay)||0, tips=Number(p.tips)||0, total=base+tips;
-      var rate = hrs>0 ? total/hrs : 0, tph = hrs>0 ? tips/hrs : 0;
-      var inw = shifts.filter(function(s){ return inWin(s.business_date, p); });
-      var sc = inw.length, rc = inw.filter(function(s){ return s.needs_review; }).length;
-      document.getElementById('perf-subtitle').textContent = p.period_start + ' to ' + p.period_end;
-      // Role-aware (Sam #3077): BOH/non-tipped (RANK.is_tipped===false) omit the tip cards
-      // entirely so the set stays coherent — no empty tip holes. Tipped/RANK-null = full set.
-      // FAIL-SAFE (FLAG-2 lesson / aick #3269): show tip $ ONLY when EXPLICITLY tipped.
-      // RANK null or is_tipped missing -> hide tips (never a cosmetic $0.00-tips fallback).
-      var showTips = !!(RANK && RANK.is_tipped===true);
-      function metricHref(metric, view){
-        var href = '/employee/performance/' + metric + '?period=' + encodeURIComponent(sel);
-        return view ? href + '&view=' + encodeURIComponent(view) : href;
-      }
-      var html =
-        pcard(money(total), 'Total pay (' + PLABEL[sel] + ')', (showTips ? (money(base)+' base + '+money(tips)+' tips') : 'base pay'), true, metricHref('total_pay')) +
-        pcard(money(rate)+u('/hr'), 'Effective rate', 'pay / hours', false, metricHref('effective_hourly')) +
-        pcard(num(hrs,2)+u('h'), 'Total hours', null, false, metricHref('shifts', 'hours'));
-      if(showTips){ html += pcard(money(tips), 'Tips', null, false, metricHref('tips')); }
-      html += pcard(money(base), 'Base pay', null, false, metricHref('base_pay'));
-      if(showTips){ html += pcard(money(tph)+u('/hr'), 'Tips per hour', null, false, metricHref('tips_per_hour')); }
-      html +=
-        pcard(num(sc,0), 'Shifts', null, false, metricHref('shifts', 'count')) +
-        pcard(num(rc,0), 'Need review', rc ? 'tap a flagged shift' : 'all clean', false, metricHref('attendance'));
-      box.innerHTML = html;
-    }
-    function livePill(value, label){
-      return '<div class="live-pill"><b>'+esc(value)+'</b><span>'+esc(label)+'</span></div>';
-    }
-    function renderLive(){
-      var wrap=document.getElementById('perf-live-wrap'), sum=document.getElementById('live-summary'), list=document.getElementById('live-list');
-      if(!wrap || !sum || !list){ return; }
-      if(sel !== 'today'){ wrap.hidden = true; return; }
-      wrap.hidden = false;
-      var live = LIVE || {};
-      var rows = Array.isArray(live.activities) ? live.activities : [];
-      var showTips = !!(RANK && RANK.is_tipped===true);
-      var dateLbl = live.date || '';
-      document.getElementById('live-date-lbl').textContent = dateLbl;
-      var chips = [
-        livePill(num(live.tickets||0,0), 'tickets'),
-        livePill(num(live.open_checks||0,0), 'open now')
-      ];
-      if(showTips){
-        chips.push(livePill(money(live.cc_tips||0), 'cc tips'));
-        chips.push(livePill(live.tip_pct==null ? '-' : (num(live.tip_pct,1)+'%'), 'tip percent'));
-      }
-      chips.push(livePill(live.avg_duration_secs==null ? '-' : hms(live.avg_duration_secs), 'avg duration'));
-      chips.push(livePill(live.avg_gap_secs==null ? '-' : hms(live.avg_gap_secs), 'drink to entree'));
-      sum.innerHTML = chips.join('');
-      if(!rows.length){
-        list.innerHTML = '<div class="live-empty">No live table activity yet for today. Once Toast shows a check under your name, it appears here.</div>';
-        return;
-      }
-      list.innerHTML = rows.slice(0,8).map(function(a){
-        var title = a.table_name ? ('Table ' + a.table_name) : 'Check activity';
-        var status = String(a.status||'open').toLowerCase();
-        var meta = [];
-        if(a.opened_at){ meta.push('<span>opened <b>'+esc(hm(a.opened_at))+'</b></span>'); }
-        if(status==='open' && a.open_for_secs!=null){ meta.push('<span>open <b>'+esc(hms(a.open_for_secs))+'</b></span>'); }
-        if(status!=='open' && a.duration_secs!=null){ meta.push('<span>duration <b>'+esc(hms(a.duration_secs))+'</b></span>'); }
-        if(a.drink_secs!=null){ meta.push('<span>drink <b>'+esc(hms(a.drink_secs))+'</b></span>'); }
-        if(a.app_secs!=null){ meta.push('<span>apps <b>'+esc(hms(a.app_secs))+'</b></span>'); }
-        if(a.entree_secs!=null){ meta.push('<span>entree <b>'+esc(hms(a.entree_secs))+'</b></span>'); }
-        if(a.gap_secs!=null){ meta.push('<span>gap <b>'+esc(hms(a.gap_secs))+'</b></span>'); }
-        if(showTips && a.cc_tips!=null){ meta.push('<span>tips <b>'+money(a.cc_tips)+'</b></span>'); }
-        return '<div class="live-row '+(status==='open'?'open':'')+'">'+
-          '<div class="live-top"><div class="live-title">'+esc(title)+'</div><div class="live-status '+(status==='open'?'open':'')+'">'+esc(status)+'</div></div>'+
-          '<div class="live-meta">'+meta.join('')+'</div></div>';
-      }).join('');
-    }
-    function renderShifts(){
-      var wrap=document.getElementById('perf-shifts-wrap'), list=document.getElementById('shift-list');
-      if(!shifts.length){ wrap.hidden = true; return; }
-      wrap.hidden = false;
-      document.getElementById('shift-count-lbl').textContent = shifts.length + ' shifts';
-      list.innerHTML='';
-      shifts.slice(0,4).forEach(function(s){
-        var row=document.createElement('div'); row.className='shift-row' + (s.needs_review ? ' flag' : '');
-        var d = s.business_date ? new Date(s.business_date+'T00:00:00') : null;
-        var dstr = (d && !isNaN(d)) ? d.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'}) : esc(s.business_date||'');
-        var rng = hm(s.clock_in) + ' - ' + (hm(s.clock_out) || '?');
-        var tipTxt = (s.tips_declared===false) ? 'not declared' : money(s.tips);
-        // role-aware (FLAG 2): BOH/non-tipped shift rows omit the tips span -- the payload no longer
-        // carries shift tips for BOH, so don't render an own-zero "$0.00 tips".
-        var tipSpan = (RANK && RANK.is_tipped===true) ? '<span><b>'+esc(tipTxt)+'</b> tips</span>' : '';  // fail-safe: own shift tips ONLY if explicitly tipped (aick #3269)
-        var meta = '<div class="shift-meta"><span>'+esc(rng)+'</span><span><b>'+money(s.base_pay)+'</b> pay</span>'+tipSpan+'</div>';
-        var badge = s.needs_review ? '<div class="badge-review" data-r="'+esc(s.review_reason||'needs review')+'">! needs review</div>' : '';
-        row.innerHTML = '<div class="shift-top"><span class="shift-date">'+esc(dstr)+'</span><span class="shift-hrs">'+num(s.total_hours,2)+'h</span></div>' + meta + badge;
-        list.appendChild(row);
-      });
-      list.querySelectorAll('.badge-review').forEach(function(b){
-        b.addEventListener('click', function(){
-          var nx=b.nextElementSibling;
-          if(nx && nx.className==='review-reason'){ nx.remove(); return; }
-          var r=document.createElement('div'); r.className='review-reason'; r.textContent=b.getAttribute('data-r'); b.parentNode.appendChild(r);
-        });
-      });
-      if(shifts.length>4){
-        var more=document.createElement('a'); more.className='shift-viewall';
-        more.href='/employee/performance/shifts';
-        more.textContent='View all '+shifts.length+' shifts →';
-        list.appendChild(more);
-      }
-    }
-    // --- Phase 5.1 (Sam #3009/#3014): ranking surface. Consumes ONLY the sanitized
-    //     `ranking` block (own ranks + per-cohort leaderboards). Peer rows carry only
-    //     name + rank + allowed metrics; min-cohort-gated cohorts show "too small". No
-    //     peer pay breakdown; held-days stays pending (no faked history). ---
-    function pctTxt(v){
-      if(v==null) return '';
-      var n=Number(v);
-      if(!Number.isFinite(n)) return '';
-      var p=Math.abs(n)<=1 ? n*100 : n;
-      return (Math.round(p*10)/10) + '%';
-    }
-    function rcard(o, lbl, fmt, href){
-      var gate=null;
-      // Server-side role gate (Sam #3077): BOH/non-tipped payloads OMIT tip/combined objects
-      // entirely; the UI infers a clean 'Not eligible' from role metadata (is_tipped=false).
-      if(!o) gate = (RANK && RANK.is_tipped===false) ? 'Not<br>eligible' : 'Not<br>ranked';
-      else if(o.status==='not_eligible') gate='Not<br>eligible';
-      else if(o.status==='cohort_too_small' || o.rank==null) gate='Cohort<br>too small';
-      var tag = href ? 'a class="rcard" href="'+esc(href)+'"' : 'div class="rcard"';
-      var close = href ? 'a' : 'div';
-      if(gate) return '<'+tag+'><div class="rcard-gate">'+gate+'</div><div class="rcard-lbl">'+esc(lbl)+'</div></'+close+'>';
-      var val = (fmt && o.value!=null) ? '<div class="rcard-val">'+fmt(o.value)+'</div>' : '';
-      return '<'+tag+'><div class="rcard-rank">#'+o.rank+' <span class="of">of '+o.cohort_size+'</span></div>'+
-             '<div class="rcard-lbl">'+esc(lbl)+'</div>'+val+'</'+close+'>';
-    }
-    // Score tile (own-view only): relative STANDING, not a letter grade. The band word
-    // (e.g. "Strong") is a secondary sub-label. Gates cleanly to "Not available".
-    function scard(score, href){
-      var tag = href ? 'a class="rcard" href="'+esc(href)+'"' : 'div class="rcard"';
-      var close = href ? 'a' : 'div';
-      var gate = '<div class="rcard-gate">Not<br>available</div><div class="rcard-lbl">Your standing</div>';
-      if(!score || score.status==='not_available' || typeof score.standing_percentile !== 'number'){
-        return '<'+tag+'>'+gate+'</'+close+'>';
-      }
-      var top = Math.max(1, Math.min(100, 100 - score.standing_percentile));
-      top = Math.round(top*10)/10;
-      var band = score.band ? '<div class="rcard-val">'+esc(score.band)+'</div>' : '';
-      return '<'+tag+'><div class="rcard-rank">Top '+top+'<span class="of">%</span></div>'+
-             '<div class="rcard-lbl">Your standing</div>'+band+'</'+close+'>';
-    }
-    function lbBoard(b, title, key, fmt){
-      if(!b){ return ''; }
-      var h='<div class="lb-lbl">'+esc(title)+'</div>';
-      if(b.status==='cohort_too_small' || !b.rows || !b.rows.length){
-        return h+'<div class="lb-gate">Cohort too small &mdash; a ranking needs at least 4 qualifying teammates. It appears once more of your team is on board.</div>';
-      }
-      return h + b.rows.map(function(r){
-        var v = (r[key]==null) ? '' : fmt(r[key]);
-        return '<div class="lb-row'+(r.is_me?' me':'')+'"><span class="lb-rank">#'+r.rank+'</span>'+
-               '<span class="lb-name">'+esc(r.name)+(r.is_me?'<span class="you">you</span>':'')+'</span>'+
-               '<span class="lb-metric">'+v+'</span></div>';
-      }).join('');
-    }
-    function renderRank(){
-      var wrap=document.getElementById('perf-rank-wrap');
-      if(!RANK || !RANK.ranks){ wrap.hidden=true; return; }
-      wrap.hidden=false;
-      document.getElementById('rank-period-lbl').textContent = PLABEL[sel] || sel;
-      var R = RANK.ranks[sel] || {};
-      // Role-split labels (Sam #3031): tipped board says "with tips"; BOH says "Hourly rate".
-      var tipped = (RANK.is_tipped === true);  // fail-closed (samai #3274 / FLAG-2): tip-rank presentation ONLY when explicitly tipped
-      var effCardLbl = tipped ? 'Eff. rate (w/tips)' : 'Hourly rate';
-      var effTitle = tipped ? 'Effective hourly (with tips)' : 'Hourly rate';
-      var detailHref = function(metric){
-        return '/employee/performance/'+metric+'?period='+encodeURIComponent(sel);
-      };
-      // BOH/non-tipped: OMIT the tip-rank cards entirely (samai #3274) -- no greyed
-      // "Not eligible" tip cards; show only role-applicable cards (standing + hourly rank).
-      var standingCard = tipped && R.combined
-        ? rcard(R.combined, 'Your standing', null, detailHref('rank_combined'))
-        : scard(R.score, detailHref('rank_standing'));
-      document.getElementById('rank-grid').innerHTML =
-        standingCard +
-        rcard(R.effective_hourly, effCardLbl, function(v){ return money(v)+'/hr'; }, detailHref('rank_effective_hourly')) +
-        (tipped ? (
-          rcard(R.tip_percent, 'Tip %', function(v){ return pctTxt(v); }, detailHref('rank_tip_pct'))
-        ) : '');
-      // De-bulk (Sam #3254): the FULL leaderboards live one tap away on the metric
-      // detail pages; the dashboard keeps a compact rankings summary only.
-      document.getElementById('rank-boards').innerHTML =
-        '<div class="rank-hint">Tap a metric tile above for its day-by-day detail and full team leaderboard.</div>';
-      // Next-best nudge (own-view only): render only when present; NEVER on peer rows.
-      var nb = R.next_best;
-      document.getElementById('rank-foot').textContent =
-        (nb && nb.msg) ? String(nb.msg)
-                       : 'Days held at #1 / last: pending — building rank history from here.';
-    }
-    function selectPeriod(p){
-      sel=p;
-      document.querySelectorAll('.perf-tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-period')===p); });
-      renderCards(); renderLive(); renderRank();
-    }
-    function render(d){
-      show();
-      PERIODS = {};
-      (d.perf_periods||[]).forEach(function(p){ PERIODS[p.period]=p; });
-      shifts = d.shifts || [];
-      RANK = d.ranking || null;
-      LIVE = d.live_service || null;
-      if(!PERIODS[sel]){ var ks=Object.keys(PERIODS); sel = (ks.indexOf('today')>=0) ? 'today' : ((ks.indexOf('last30')>=0) ? 'last30' : (ks[0]||'today')); }
-      if(!tabsBound){
-        tabsBound = true;
-        document.querySelectorAll('.perf-tab').forEach(function(t){ t.addEventListener('click', function(){ selectPeriod(t.getAttribute('data-period')); }); });
-      }
-      selectPeriod(sel);
-      renderShifts();
-    }
-    function loadPerformance(silent){
-      fetch('/employee/my-performance', { credentials:'same-origin', headers:{ 'Accept':'application/json' } })
-        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { status:r.status, d:d }; }); })
-        .then(function(res){
-          var d = res.d || {};
-          // Staff-wide profile rollout: render the performance card only when the
-          // employee-own sanitized feed has data. Pending/no-link cases keep the
-          // polished shell and show a professional unavailable state instead.
-          if (d && d.ok && d.linked && (d.perf_periods || d.shifts || d.live_service)) render(d);
-          else if (!silent && d && d.ok && d.linked && d["sync"+"ing"]) {
-            emptyState('Performance is not available yet', 'Your profile is active. Your schedule, roster, time off, and alerts are available while performance data is prepared.');
-          } else if (!silent && d && d.ok && d.linked === false) {
-            emptyState('Your profile is ready', 'Your schedule, roster, time off, and alerts are available. Performance data appears when your profile is linked and verified.');
-          }
-        })
-        .catch(function(){ /* leave the card hidden */ });
-    }
-    loadPerformance(false);
-    window.setInterval(function(){
-      if(sel === 'today' && document.visibilityState === 'visible'){
-        loadPerformance(true);
-      }
-    }, 60000);
-  })();
+})();
 </script>
-<script>
-  // 3-section tabs (Sam #3245 item 3): Performance / Roster / Service.
-  (function(){
-    var tabs = document.querySelectorAll('.seg-tab'); var rosterLoaded=false;
-    function activate(name){
-      tabs.forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-panel')===name); });
-      ['performance','roster','service'].forEach(function(n){
-        var p=document.getElementById('panel-'+n); if(p){ p.classList.toggle('active', n===name); }
-      });
-      if(name==='roster' && !rosterLoaded){ rosterLoaded=true; loadRoster(); }
-    }
-    tabs.forEach(function(t){ t.addEventListener('click', function(){
-      var panel = t.getAttribute('data-panel');
-      activate(panel);
-      if(history && history.replaceState){ history.replaceState(null, '', '#'+panel); }
-    }); });
-    var initial = String(window.location.hash || '').replace('#','');
-    if(['performance','roster','service'].indexOf(initial) >= 0){ activate(initial); }
-    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-    function initials(n){ n=String(n||'').trim(); var p=n.split(/\s+/); return (((p[0]||' ')[0]||'')+((p[1]||'')[0]||'')).toUpperCase(); }
-    function loadRoster(){
-      var list=document.getElementById('roster-list'), empty=document.getElementById('roster-empty');
-      fetch('/employee/roster',{credentials:'same-origin',headers:{Accept:'application/json'}})
-        .then(function(r){ return r.ok ? r.json().catch(function(){ return {}; }) : {}; })
-        .then(function(d){
-          var rows=(d&&d.coworkers)||[];
-          if(!rows.length){ empty.hidden=false; return; }
-          list.innerHTML = rows.map(function(c){
-            var shift = c.shift_label ? '<div class="rost-shift">'+esc(c.shift_label)+(c.shift_when?'<span class="sub">'+esc(c.shift_when)+'</span>':'')+'</div>' : '';
-            return '<div class="rost-row"><div class="rost-av">'+esc(initials(c.name))+'</div>'+
-                   '<div class="rost-main"><div class="rost-name">'+esc(c.name)+'</div>'+
-                   (c.position?'<div class="rost-pos">'+esc(c.position)+'</div>':'')+'</div>'+shift+'</div>';
-          }).join('');
-        })
-        .catch(function(){ empty.hidden=false; });
-    }
-  })();
-</script>
-</body>
-</html>
+{% endblock %}

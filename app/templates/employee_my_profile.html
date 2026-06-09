@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>My Profile &mdash; Cenas Kitchen</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_console.css') }}">
 <style>
   :root{
     --black:#070403; --surface:rgba(27,13,7,.84); --surface2:rgba(15,7,4,.92);
@@ -121,7 +122,7 @@
 
   <div class="footer-note">Personal profile hub &middot; built from session-owned employee data</div>
 </main>
-{% set active_nav = '' %}
+{% set active_nav = 'you' %}
 {% include 'partials/_employee_nav.html' %}
 
 <script type="application/json" id="profile-config">{{ config_json | safe }}</script>

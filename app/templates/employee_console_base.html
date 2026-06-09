@@ -8,7 +8,22 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body class="cc-body{% block body_class %}{% endblock %}">
-{% set _active = active_tab|default(active_nav|default('')) or '' %}
+{% set _raw_active = active_tab|default(active_nav|default('')) or '' %}
+{% set _active_alias = {
+  'today': 'today',
+  'tables': 'tables',
+  'my_schedule': 'shifts',
+  'schedule': 'shifts',
+  'shifts': 'shifts',
+  'messages': 'inbox',
+  'message': 'inbox',
+  'inbox': 'inbox',
+  'profile': 'you',
+  'my_profile': 'you',
+  'you': 'you',
+  'notifications': 'you'
+} %}
+{% set _active = _active_alias.get(_raw_active, _raw_active) %}
 {% set _path = request.path if request else '' %}
 {% set _synced = sync_label|default('synced') %}
 {% set _tabs = [

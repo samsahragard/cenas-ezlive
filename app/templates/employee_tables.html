@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>My Tables &mdash; Cenas Kitchen</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_console.css') }}">
 <style>
   :root{
     --surface:rgba(27,13,7,.86); --surface2:rgba(15,7,4,.94);
@@ -94,7 +95,7 @@
   </section>
   <section class="tickets" id="tickets"><div class="empty"><b>Loading tables</b>Checking Toast now.</div></section>
 </main>
-{% set active_nav = 'today' %}
+{% set active_nav = 'tables' %}
 {% include 'partials/_employee_nav.html' %}
 <script>
 (function(){

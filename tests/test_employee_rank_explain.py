@@ -78,7 +78,9 @@ def test_my_profile_template_omits_hidden_identity_fields():
     assert "SAFE_DATA.schedule" in template
     assert "SAFE_DATA.roster" in template
 
-    assert "/employee/my-profile" not in open("app/templates/partials/_employee_nav.html", encoding="utf-8").read()
+    nav = open("app/templates/partials/_employee_nav.html", encoding="utf-8").read()
+    assert "/employee/my-profile" in nav
+    assert "You" in nav
     assert 'href="/employee/my-profile"' in open("app/templates/employee_dashboard.html", encoding="utf-8").read()
 
 

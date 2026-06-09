@@ -22,6 +22,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>My Schedule &mdash; Cenas Kitchen</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/employee_theme.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_console.css') }}">
 <style>
   :root{
     /* House palette (warm gold / cream / dark) — var NAMES kept from the
@@ -270,7 +271,7 @@
   <div class="footnote">Schedules V2 &middot; your published shifts</div>
 </div>
 
-{% set active_nav = 'my_schedule' %}{% include 'partials/_employee_nav.html' %}
+{% set active_nav = 'shifts' %}{% include 'partials/_employee_nav.html' %}
 
 <div class="toast" id="emp-toast"></div>
 

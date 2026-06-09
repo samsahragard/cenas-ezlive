@@ -269,6 +269,54 @@
 .cc-pill.heat { color: var(--cc-heat); border-color: rgba(255, 106, 61, .24); }
 .cc-pill.live { color: var(--cc-up); border-color: rgba(103, 214, 167, .24); }
 .cc-pill.na { color: var(--cc-na); border-color: rgba(143, 178, 214, .24); }
+.cc-pill.down { color: var(--cc-down); border-color: rgba(251, 113, 133, .24); }
+
+.cc-profile-card,
+.cc-coach-card {
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(255, 106, 61, .11), transparent 36%),
+    linear-gradient(145deg, rgba(20, 25, 37, .94), rgba(10, 12, 18, .96));
+  padding: 18px;
+  box-shadow: var(--cc-shadow), inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+
+.cc-profile-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+}
+
+.cc-avatar {
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--cc-backdrop);
+  background:
+    radial-gradient(circle at 38% 24%, #fff1dc, var(--cc-heat) 58%, #8a2e16);
+  box-shadow: 0 0 35px rgba(255, 106, 61, .30);
+  font: 900 19px/1 var(--cc-mono);
+}
+
+.cc-item-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .055);
+}
+
+.cc-item-line:last-child { border-bottom: 0; }
+.cc-item-name { color: var(--cc-txt); font-size: 13px; line-height: 1.25; }
+.cc-item-meta { color: var(--cc-txt3); font-family: var(--cc-mono); font-size: 10px; white-space: nowrap; }
+.cc-item-line.cocktail .cc-item-name { color: var(--cc-heat); }
+.cc-item-line.non-alcoholic .cc-item-name { color: var(--cc-na); }
+.cc-item-line.dessert .cc-item-name { color: var(--cc-warn); }
 
 .cc-chit {
   position: relative;
@@ -520,4 +568,155 @@
   .cc-stop { min-height: 66px; padding: 8px 5px; }
   .cc-stop-label { font-size: 8px; }
   .cc-stop-time { font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+/* Compatibility layer for the existing standalone employee Jinja pages.
+   Those pages still own their data and JS; these overrides give them the new
+   console skin while they migrate component-by-component. */
+html body {
+  background: var(--cc-backdrop) !important;
+  color: var(--cc-txt) !important;
+  font-family: var(--cc-sans) !important;
+}
+
+body::before {
+  background:
+    radial-gradient(circle at 82% 8%, rgba(255, 106, 61, .15), transparent 32%),
+    radial-gradient(circle at 8% 24%, rgba(143, 178, 214, .10), transparent 26%),
+    var(--cc-backdrop) !important;
+  filter: none !important;
+}
+
+body::after {
+  background: linear-gradient(180deg, rgba(5, 6, 10, .44), rgba(5, 6, 10, .84)) !important;
+  box-shadow: inset 0 -160px 220px rgba(0, 0, 0, .52) !important;
+}
+
+.wrap,
+.shell {
+  width: min(100%, 760px) !important;
+  max-width: 760px !important;
+  padding-bottom: calc(102px + env(safe-area-inset-bottom)) !important;
+}
+
+.topbar,
+.greeting,
+.card,
+.tile,
+.pagehead,
+.hero,
+.panel,
+.mini-card,
+.row,
+.section-tabs,
+.filters,
+.stat,
+.ticket,
+.empty,
+.rank-panel,
+.rank-card {
+  border: 1px solid var(--cc-border) !important;
+  background: linear-gradient(145deg, rgba(20, 25, 37, .92), rgba(10, 12, 18, .96)) !important;
+  box-shadow: var(--cc-shadow), inset 0 1px 0 rgba(255, 255, 255, .03) !important;
+}
+
+.greeting .hi,
+.eyebrow,
+.section-label,
+.rank-head h2,
+.panel h2,
+.items-title,
+.cc-compat-eyebrow {
+  color: var(--cc-heat) !important;
+  font-family: var(--cc-mono) !important;
+  letter-spacing: .12em !important;
+}
+
+.greeting .name,
+.title,
+.name,
+.card-title,
+.t-title,
+.table-title,
+.mini-card b,
+.row strong,
+.page-title,
+.cc-compat-title {
+  color: var(--cc-txt) !important;
+}
+
+.greeting .meta,
+.sub,
+.hint,
+.ticket-sub,
+.step-detail,
+.meta,
+.empty,
+.row .sub {
+  color: var(--cc-txt2) !important;
+}
+
+.logout-btn,
+.btn,
+.backlink,
+.seg-tab,
+.section-tab,
+.filter {
+  border-color: var(--cc-border) !important;
+  background: rgba(20, 25, 37, .72) !important;
+  color: var(--cc-txt2) !important;
+}
+
+.seg-tab.active,
+.section-tab.active,
+.filter.active {
+  color: #160904 !important;
+  border-color: rgba(255, 106, 61, .40) !important;
+  background: var(--cc-heat) !important;
+  box-shadow: 0 0 26px rgba(255, 106, 61, .28) !important;
+}
+
+.status,
+.pill,
+.t-badge,
+.item {
+  border-color: var(--cc-border) !important;
+  background: rgba(255, 255, 255, .04) !important;
+  color: var(--cc-txt2) !important;
+}
+
+.status.open,
+.pill.live,
+.item.drink {
+  border-color: rgba(103, 214, 167, .28) !important;
+  color: var(--cc-up) !important;
+}
+
+.stat b,
+.rank-card b,
+.row .val,
+.step-time {
+  color: var(--cc-heat) !important;
+  font-family: var(--cc-mono) !important;
+}
+
+.step {
+  border-color: var(--cc-border) !important;
+  background: rgba(255, 255, 255, .025) !important;
+}
+
+.step-label,
+.stat span,
+.rank-card span {
+  color: var(--cc-txt3) !important;
+  font-family: var(--cc-mono) !important;
 }

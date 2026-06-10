@@ -42,8 +42,8 @@ from app.web.store_routes import store_bp
 _MGR = "foh_manager"  # lowest manager level allowed to manage schedules
 
 # Normalized lookup for CANONICAL_POSITIONS (Sam #2227): case/space-insensitive
-# match so the board's position dropdown shows ONLY the 14 canonical jobs (13
-# FOH + Cook) and hides Sling-import junk. Read-side filter only - never deletes
+# match so the board's position dropdown shows ONLY the canonical jobs and hides
+# Sling-import junk. Read-side filter only - never deletes
 # a Position row (EmployeePosition.position_id is ondelete=CASCADE).
 _CANONICAL_NORM = {name.lower(): name for name in CANONICAL_POSITIONS}
 
@@ -569,11 +569,11 @@ def sv2_board():
     store = _store()  # location ("tomball"/"copperfield")
     db = SessionLocal()
     try:
-        # positions: filtered to the CANONICAL 14 (Sam #2227 - 13 FOH + Cook);
+        # positions: filtered to the canonical scheduling jobs;
         # Sling-import junk (C-Grill, C-Prep, Chba, Dish, ...) is hidden. store_key
         # null = all-store. NON-DESTRUCTIVE read filter - never deletes a row
         # (EmployeePosition cascade). Missing canonical names are seeded at boot
-        # (app/__init__.py), so the dropdown always offers the full 14.
+        # (app/__init__.py), so the dropdown always offers the full list.
         positions = [{"id": p.id, "name": p.name, "store_key": p.store_key}
                      for p in db.query(Position).order_by(Position.name).all()
                      if _is_canonical_position(p.name)]
@@ -877,6 +877,75 @@ def sv2_shift_copy_to_date():
             copied += 1
         db.commit()
         return jsonify({"ok": True, "copied": copied, "skipped": skipped,
+                        "opened_for_timeoff": opened_for_timeoff}), 201
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/shifts/copy-to-week", methods=["POST"])
+@require_level(_MGR)
+def sv2_shift_copy_to_week():
+    """Copy selected shifts into another week in the same store, preserving each
+    shift's visible day-of-week, clock time, duration, notes, position, and tags.
+    The target week schedule is created as a draft if it does not exist yet."""
+    data = request.get_json(silent=True) or {}
+    shift_ids = data.get("shift_ids") or []
+    source_week = (data.get("source_week_start") or "").strip()
+    target_week = (data.get("target_week_start") or "").strip()
+    unassign = bool(data.get("unassign"))
+    skip_checks = bool(data.get("skip_checks"))
+    if not shift_ids or not source_week or not target_week:
+        return jsonify({"ok": False, "error": "shift_ids + source_week_start + target_week_start required"}), 400
+    try:
+        source_start = _date.fromisoformat(source_week)
+        target_start = _date.fromisoformat(target_week)
+    except ValueError:
+        return jsonify({"ok": False, "error": "week starts must be YYYY-MM-DD"}), 400
+
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        target_sched = _schedule_for_week(db, _store(), target_start)
+        created_schedule = False
+        if target_sched is None:
+            target_sched = Schedule(store_key=_store(), week_start=target_start, status="draft",
+                                    created_by=current_user_id(), created_at=now, updated_at=now)
+            db.add(target_sched)
+            db.commit()
+            created_schedule = True
+
+        copied = skipped = opened_for_timeoff = 0
+        for sid in shift_ids:
+            sh = _shift_in_store(db, sid)
+            if sh is None or sh.start_at is None or sh.end_at is None:
+                skipped += 1
+                continue
+            day_offset = (sh.start_at.date() - source_start).days
+            if day_offset < 0 or day_offset > 6:
+                skipped += 1
+                continue
+            new_date = target_start + timedelta(days=day_offset)
+            new_start = datetime.combine(new_date, sh.start_at.time())
+            new_end = new_start + (sh.end_at - sh.start_at)
+            emp_id = None if unassign else sh.employee_id
+            status = "assigned" if emp_id else "open"
+            if emp_id and not skip_checks and scheduling_timeoff.conflict(emp_id, new_start.date()):
+                emp_id, status = None, "open"
+                opened_for_timeoff += 1
+            nsh = Shift(schedule_id=target_sched.id, employee_id=emp_id, position_id=sh.position_id,
+                        start_at=new_start, end_at=new_end, break_minutes=sh.break_minutes,
+                        status=status, notes=sh.notes, published_at=None,
+                        created_at=now, updated_at=now)
+            db.add(nsh)
+            db.flush()
+            for st in db.query(ShiftTag).filter_by(shift_id=sh.id).all():
+                db.add(ShiftTag(shift_id=nsh.id, tag_id=st.tag_id, created_at=now))
+            copied += 1
+        db.commit()
+        return jsonify({"ok": True, "copied": copied, "skipped": skipped,
+                        "target_schedule_id": target_sched.id,
+                        "target_week_start": target_sched.week_start.isoformat(),
+                        "created_schedule": created_schedule,
                         "opened_for_timeoff": opened_for_timeoff}), 201
     finally:
         db.close()

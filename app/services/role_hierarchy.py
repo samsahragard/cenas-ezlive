@@ -31,7 +31,7 @@ from app.services.permissions import _LEGACY_ALIASES
 #   partner > corporate > gm > km/asst_km/manager/foh_manager > hourly
 # corporate_chef at tier 4 is the 1A-spec §11 Q3
 # provisional placements (defensible defaults; Sam to confirm — precond
-# spec §6 Q2). The five hourly roles (cook/server/busser/host/bartender)
+# spec §6 Q2). The hourly roles (cook/server/busser/host/bartender/etc.)
 # are the §5.3 Path A additions; everything else is an existing canonical
 # ROLE_PERMISSIONS key.
 ROLE_TIER: dict[str, int] = {
@@ -54,6 +54,8 @@ ROLE_TIER: dict[str, int] = {
     "busser":         1,   # NEW
     "host":           1,   # NEW
     "bartender":      1,   # NEW
+    "well":           1,
+    "training":       1,
     # Schedules V2 (Sam #1742): floor cashier + the employee scheduling
     # identity + the in-house corporate_driver - bottom working tier.
     "cashier":        1,
@@ -83,6 +85,8 @@ _ROLE_DOMAIN: dict[str, str] = {
     "busser":         "foh",       # NEW
     "host":           "foh",       # NEW
     "bartender":      "foh",       # NEW
+    "well":           "foh",
+    "training":       "foh",
     "expo":           "foh",
     "driver":         "foh",
     "cashier":        "foh",

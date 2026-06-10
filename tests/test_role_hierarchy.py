@@ -4,22 +4,21 @@ Covers app/services/role_hierarchy.py (the new org-tier/domain module)
 + the five new hourly ROLE_PERMISSIONS entries, per the precondition
 spec §4:
 
-  - ROLE_TIER: all 15 roles map to expected tiers; the 5 new hourly
+  - ROLE_TIER: roles map to expected tiers; the hourly
     roles are tier 1; legacy aliases resolve; unknown/None → 0; never
     raises
   - role_domain: all 15 roles map to expected domains; cook→kitchen,
-    server/busser/host/bartender→foh; legacy aliases resolve;
+    server/busser/host/bartender/training→foh; legacy aliases resolve;
     unknown/None → "foh"; never raises
   - consistency with role_classifier: the hourly roles' role_domain
     agrees with role_classifier.classify_role's BOH/FOH verdict —
     catches future drift between the two classifiers
-  - ROLE_PERMISSIONS: the 5 new roles each resolve via _user_has to the
+  - ROLE_PERMISSIONS: hourly roles each resolve via _user_has to the
     minimal baseline set, not None
 
 The existing test_permission_matrix.py (2255c1d) auto-extends — its
-_ALL_ROLES picks up the 5 new keys, so the matrix grows by
-5 × |_ALL_TAGS| rows. That's verified by the full-suite run, not
-re-asserted here.
+_ALL_ROLES picks up the hourly keys. That's verified by the full-suite run,
+not re-asserted here.
 """
 from __future__ import annotations
 
@@ -57,8 +56,8 @@ def _request_context(_shared_app):
         yield
 
 
-# The 5 §5.3 Path A additions.
-_NEW_HOURLY = ["cook", "server", "busser", "host", "bartender"]
+# Hourly self-only roles.
+_NEW_HOURLY = ["cook", "server", "busser", "host", "bartender", "cashier", "well", "training"]
 
 _HOURLY_BASELINE = {
     "ai.ask_claude_personal", "ai.view_transcripts",
@@ -72,13 +71,15 @@ def test_role_tier_all_fifteen_roles():
     expected = {
         "partner": 5,
         "corporate": 4, "corporate_chef": 4,
-        "gm": 3, "prep_manager": 3,
+        "gm": 3,
         "km": 2, "assistant_km": 2, "foh_manager": 2,
         "expo": 1, "driver": 1,
         "cook": 1, "server": 1, "busser": 1, "host": 1, "bartender": 1,
+        "cashier": 1, "well": 1, "training": 1,
+        "employee": 1, "corporate_driver": 1,
     }
     assert ROLE_TIER == expected, "ROLE_TIER drifted from precond spec §2.1"
-    assert len(ROLE_TIER) == 15
+    assert len(ROLE_TIER) == len(expected)
 
 
 def test_role_tier_new_hourly_roles_are_tier_1():
@@ -112,12 +113,14 @@ def test_role_tier_never_raises():
 def test_role_domain_all_roles():
     expected = {
         "partner": "both", "corporate": "both", "gm": "both",
-        "corporate_chef": "kitchen", "prep_manager": "kitchen",
+        "corporate_chef": "kitchen",
         "km": "kitchen", "assistant_km": "kitchen",
         "foh_manager": "foh",
         "cook": "kitchen",
         "server": "foh", "busser": "foh", "host": "foh", "bartender": "foh",
+        "cashier": "foh", "well": "foh", "training": "foh",
         "expo": "foh", "driver": "foh",
+        "employee": "foh", "corporate_driver": "foh",
     }
     for role, dom in expected.items():
         assert role_domain(role) == dom, f"{role} domain mismatch"
@@ -125,7 +128,7 @@ def test_role_domain_all_roles():
 
 def test_role_domain_new_hourly_split():
     assert role_domain("cook") == "kitchen"
-    for r in ("server", "busser", "host", "bartender"):
+    for r in ("server", "busser", "host", "bartender", "cashier", "well", "training"):
         assert role_domain(r) == "foh", f"{r} should be foh"
 
 
@@ -158,7 +161,7 @@ def test_role_domain_agrees_with_role_classifier_on_hourly_staff():
     # role_classifier returns "boh"/"foh"; role_hierarchy returns
     # "kitchen"/"foh"/"both". Map kitchen↔boh for the comparison.
     _DOMAIN_TO_CLASS = {"kitchen": "boh", "foh": "foh"}
-    for role in ("cook", "server", "busser", "host"):
+    for role in ("cook", "server", "busser", "host", "training"):
         rh = role_domain(role)
         rc = classify_role(role)
         assert _DOMAIN_TO_CLASS[rh] == rc, (
@@ -176,7 +179,7 @@ def test_new_hourly_roles_have_baseline_permission_set():
 
 
 def test_new_hourly_roles_resolve_via_user_has():
-    """_user_has must resolve the 5 new roles to a real set (not None) —
+    """_user_has must resolve hourly roles to a real set (not None) —
     the taxonomy-completeness property Sam wants."""
     class _FakeUser:
         def __init__(self, level):

@@ -23,7 +23,7 @@ SECTION model (Sam's confirmed decisions):
 Section role buckets (defaults Sam approved), reconciled to the EXACT role
 keys found in permission_catalog.ROLES:
   MANAGEMENT = corporate_chef, gm, foh_manager, km, assistant_km, expo
-  HOURLY     = bartender, busser, cashier, cook, server, well, host
+  HOURLY     = bartender, busser, cashier, cook, server, well, host, training
   DRIVER     = corporate_driver   (the in-house Driver role; the LOCKED
                ezCater 'driver' is separate and not a catalog role)
   partner, corporate  => NOT section-placed => None
@@ -38,7 +38,7 @@ Role-key reconciliation notes:
     *position* 'Well' onto the bartender ROLE for FOH/BOH domain purposes, but
     permission_catalog keeps "well" as its own role key, so we classify the
     "well" role directly into HOURLY.
-  - "Hostess" position -> role key "host" (HOURLY).
+  - "Host" / legacy "Hostess" position -> role key "host" (HOURLY).
   - The catalog's Driver role key is "corporate_driver" (label "Driver").
 
 KEEP IMPORTS LIGHT: only the pure dict/function we need from
@@ -81,6 +81,7 @@ SECTION_FOR_ROLE: dict[str, str] = {
     "server":         SECTION_HOURLY,
     "well":           SECTION_HOURLY,
     "host":           SECTION_HOURLY,
+    "training":       SECTION_HOURLY,
     # DRIVER (in-house corporate driver; shown elsewhere / ez-driver)
     "corporate_driver": SECTION_DRIVER,
     # partner => intentionally ABSENT (tier-above -> None). corporate moved INTO

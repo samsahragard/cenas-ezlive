@@ -53,6 +53,17 @@ def test_schedule_template_has_sling_style_tag_filter_and_create_controls():
     assert "sv2-chip-tag" in template
 
 
+def test_schedule_template_has_visible_shift_bulk_select_and_inline_position_tags():
+    template = _read("schedules_v2_week.html")
+
+    assert 'id="sv2-select-visible"' in template
+    assert "function visibleShiftIds()" in template
+    assert "function setVisibleSelected(on)" in template
+    assert "function positionNamesForEmployee(emp)" in template
+    assert "sv2-chip-pos-name" in template
+    assert template.index('id="sv2-selcount"') < template.index('id="sv2-sel-edit"')
+
+
 def test_shift_modal_position_choices_follow_selected_employee_positions():
     template = _read("schedules_v2_week.html")
 

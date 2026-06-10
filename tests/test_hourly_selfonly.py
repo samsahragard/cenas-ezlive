@@ -2,7 +2,7 @@
 
 Sam's directive: "hourly has NO company permissions." Sam #1063 (2026-05-26)
 had leaked driver-administration tags (drivers.admin / drivers.view_roster /
-drivers.reset_passcode) into every non-driver role, including the five hourly
+drivers.reset_passcode) into every non-driver role, including hourly
 roles (cook / server / busser / host / bartender). S6b strips them back so an
 hourly user's EFFECTIVE perms are the self-only surface only — own profile +
 own rank, which on the tag side is the personal-AI + transcripts baseline that
@@ -42,12 +42,12 @@ import pytest
 from app.services.permissions import ROLE_PERMISSIONS, _user_has
 
 
-# The seven hourly-tier roles (role_buckets => SECTION_HOURLY on the catalog
+# The hourly-tier roles (role_buckets => SECTION_HOURLY on the catalog
 # side; here we name the ROLE_PERMISSIONS keys that exist as hourly identities).
 # cashier + well joined the explicit list under S6b uniformity (2026-06-07):
 # they were the two hourly roles missing from ROLE_PERMISSIONS and now carry
 # the identical self-only baseline as the other five.
-HOURLY_ROLES = ("cook", "server", "busser", "host", "bartender", "cashier", "well")
+HOURLY_ROLES = ("cook", "server", "busser", "host", "bartender", "cashier", "well", "training")
 
 # The exact self-only surface an hourly role may hold: the personal-AI +
 # transcripts baseline. These tags read ONLY the acting user's own data; none

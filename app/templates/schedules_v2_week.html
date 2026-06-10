@@ -179,6 +179,14 @@
     padding: 0 10px;
   }
   .sv2-filter-create button:hover { background: rgba(228,179,64,.2); }
+  .sv2-select-visible {
+    display: inline-flex; align-items: center; gap: 7px;
+    min-height: 34px; padding: 6px 10px; border-radius: var(--sk-radius-sm);
+    border: 1px solid var(--sk-border-subtle); background: var(--sk-bg-input);
+    color: var(--sk-cream-dim); font-size: 12.5px; font-weight: 700; cursor: pointer;
+  }
+  .sv2-select-visible input { margin: 0; accent-color: var(--sk-gold-bright); cursor: pointer; }
+  .sv2-select-visible:has(input:disabled) { opacity: .48; cursor: not-allowed; }
   /* position-filter people hint + holder list (Sam #2589) */
   .sv2-pos-hint { font-size: 12.5px; color: var(--sk-gold-bright); margin: -4px 2px 10px;
     line-height: 1.4; }
@@ -221,6 +229,10 @@
   .sv2-grid thead th.sv2-namecol { z-index: 4; }
   .sv2-emp-name { font-weight: 700; font-size: 13.5px; color: var(--sk-cream); }
   .sv2-emp-sub { font-size: 11px; color: var(--sk-cream-meta); margin-top: 2px; }
+  .sv2-emp-positions {
+    margin-top: 3px; font-size: 10.5px; line-height: 1.25;
+    color: var(--sk-cream-meta); font-weight: 600;
+  }
   .sv2-row.open .sv2-namecol { background: #2a1410; }
   .sv2-row.open .sv2-emp-name { color: var(--open); letter-spacing:.04em; }
   .sv2-row.former .sv2-emp-name { opacity: .6; }   /* Sam #2872: former staff, struck-through (<s>) + muted */
@@ -256,7 +268,11 @@
   .sv2-chip-unpub { font-size: 9px; letter-spacing:.09em; text-transform:uppercase;
     color: var(--sk-cream-faint); font-weight:700; margin-top:2px; }
   .sv2-chip-time { font-family:'JetBrains Mono',monospace; font-size: 11.5px; font-weight: 600; color: var(--sk-cream); }
-  .sv2-chip-pos { font-size: 11px; color: var(--sk-cream-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sv2-chip-pos {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 3px 5px;
+    font-size: 11px; color: var(--sk-cream-dim); margin-top: 1px; min-width: 0;
+  }
+  .sv2-chip-pos-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .sv2-chip-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
   .sv2-chip-tag {
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -317,15 +333,16 @@
   }
   .sv2-copypanel.sv2-hidden { display: none; }
   .sv2-cp-title { font-size: 13px; font-weight: 800; color: var(--sk-cream); margin-bottom: 9px; }
-  .sv2-cp-days { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 11px; }
-  .sv2-cp-day {
+  .sv2-cp-days, .sv2-cp-weeks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 11px; }
+  .sv2-cp-day, .sv2-cp-week {
     min-width: 60px; text-align: center; padding: 7px 8px; border-radius: 8px;
     border: 1px solid rgba(228,179,64,.3); background: rgba(228,179,64,.06);
     color: var(--sk-cream); font-size: 12px; font-weight: 700; cursor: pointer; line-height: 1.2;
   }
-  .sv2-cp-day:hover { background: rgba(228,179,64,.16); }
-  .sv2-cp-day.sel { background: #E4B340; color: #20130a; border-color: #E4B340; }
-  .sv2-cp-day .d-dow { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+  .sv2-cp-week { min-width: 108px; }
+  .sv2-cp-day:hover, .sv2-cp-week:hover { background: rgba(228,179,64,.16); }
+  .sv2-cp-day.sel, .sv2-cp-week.sel { background: #E4B340; color: #20130a; border-color: #E4B340; }
+  .sv2-cp-day .d-dow, .sv2-cp-week .d-dow { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
   .sv2-cp-opt { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sk-cream-dim); margin-bottom: 6px; cursor: pointer; }
   .sv2-cp-opt input { cursor: pointer; }
   .sv2-cp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
@@ -338,9 +355,12 @@
   .sv2-be-row { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
   .sv2-be-lab { font-size: 12px; font-weight: 700; color: var(--sk-cream-dim); min-width: 46px; }
   .sv2-be-input { flex: 1 1 auto; max-width: 240px; }
-  input.sv2-be-input { padding: 6px 9px; border-radius: 8px; border: 1px solid rgba(228,179,64,.3);
+  input.sv2-be-input, textarea.sv2-be-input { padding: 6px 9px; border-radius: 8px; border: 1px solid rgba(228,179,64,.3);
     background: rgba(20,11,6,.7); color: var(--sk-cream); font-size: 13px; }
+  textarea.sv2-be-input { min-height: 64px; resize: vertical; }
   .sv2-be-input.sv2-hidden { display: none; }
+  .sv2-be-tags { max-width: 520px; }
+  .sv2-be-tags.sv2-hidden { display: none; }
   .sv2-btn.warn { color: var(--sk-red-bright); border-color: rgba(232,88,82,.5); background: rgba(232,88,82,.08); }
   .sv2-btn.warn:hover { background: rgba(232,88,82,.16); border-color: rgba(232,88,82,.7); }
   .sv2-btn.warn.toggled { background: rgba(232,88,82,.22); border-color: var(--sk-red-bright); }
@@ -446,6 +466,10 @@
       <div class="sv2-posfilter-pop sv2-hidden" id="sv2-tagfilter-pop" role="group" aria-label="Filter by tag"></div>
     </div>
     <button class="sv2-btn" id="sv2-today">This week</button>
+    <label class="sv2-select-visible" title="Select every shift currently visible after filters">
+      <input type="checkbox" id="sv2-select-visible">
+      <span>Select visible shifts</span>
+    </label>
     <div class="sv2-spacer"></div>
     <span class="sv2-pill none" id="sv2-status">No schedule</span>
     <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
@@ -480,15 +504,15 @@
   <div id="sv2-gridwrap" class="sv2-gridwrap sv2-hidden">
     <div id="sv2-seltoolbar" class="sv2-seltoolbar sv2-hidden">
       <span class="sv2-selcount" id="sv2-selcount">0 selected</span>
-      <span class="sv2-spacer"></span>
       <button class="sv2-selbtn" id="sv2-sel-edit" title="Edit selected shifts">Edit</button>
       <button class="sv2-selbtn" id="sv2-sel-copy" title="Copy selected to another date">Copy</button>
       <button class="sv2-selbtn danger" id="sv2-sel-delete" title="Delete selected shifts">Delete</button>
+      <span class="sv2-spacer"></span>
       <button class="sv2-selbtn ghost" id="sv2-sel-clear" title="Clear selection">&times;</button>
     </div>
     <div id="sv2-copypanel" class="sv2-copypanel sv2-hidden">
-      <div class="sv2-cp-title">Copy <span id="sv2-cp-n">0</span> selected to which day?</div>
-      <div class="sv2-cp-days" id="sv2-cp-days"></div>
+      <div class="sv2-cp-title">Copy <span id="sv2-cp-n">0</span> selected to which week?</div>
+      <div class="sv2-cp-weeks" id="sv2-cp-weeks"></div>
       <label class="sv2-cp-opt"><input type="checkbox" id="sv2-cp-unassign"> Ignore employees &mdash; copied shifts become unassigned</label>
       <label class="sv2-cp-opt"><input type="checkbox" id="sv2-cp-skip"> Skip all conflict &amp; labor checks</label>
       <div class="sv2-cp-actions">
@@ -502,16 +526,27 @@
         <label class="sv2-be-lab" for="sv2-be-field">Change</label>
         <select id="sv2-be-field" class="sv2-select sv2-be-input">
           <option value="position">Position</option>
+          <option value="employee">Employee / open shift</option>
           <option value="start">Start time</option>
           <option value="end">End time</option>
           <option value="break">Break (minutes)</option>
+          <option value="tags">Tags</option>
+          <option value="notes">Notes</option>
+          <option value="publish">Publish status</option>
         </select>
       </div>
       <div class="sv2-be-row">
         <label class="sv2-be-lab">to</label>
         <select id="sv2-be-pos" class="sv2-select sv2-be-input"></select>
+        <select id="sv2-be-emp" class="sv2-select sv2-be-input sv2-hidden"></select>
         <input id="sv2-be-time" class="sv2-be-input sv2-hidden" type="time">
         <input id="sv2-be-break" class="sv2-be-input sv2-hidden" type="number" min="0" step="5" value="30">
+        <div id="sv2-be-tags" class="sv2-tags sv2-be-tags sv2-hidden"></div>
+        <textarea id="sv2-be-notes" class="sv2-be-input sv2-hidden" placeholder="Notes"></textarea>
+        <select id="sv2-be-publish" class="sv2-select sv2-be-input sv2-hidden">
+          <option value="true">Published</option>
+          <option value="false">Unpublished</option>
+        </select>
       </div>
       <div class="sv2-cp-actions">
         <button class="sv2-selbtn ghost" id="sv2-be-cancel">Cancel</button>
@@ -629,6 +664,10 @@
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function sameDay(a, b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
   function parseISO(s) { return s ? new Date(s) : null; }
+  function parseDateOnly(iso) {
+    var p = String(iso || "").split("-");
+    return p.length === 3 ? new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1) : new Date(NaN);
+  }
   function hhmm(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   function fmtTime(d) {
     var h = d.getHours(), m = d.getMinutes(), ap = h < 12 ? "am" : "pm";
@@ -644,7 +683,8 @@
       elStatus = $("sv2-status"), elWeekLabel = $("sv2-weeklabel"),
       elPosBtn = $("sv2-posfilter-btn"), elPosPop = $("sv2-posfilter-pop"), elCreate = $("sv2-createdraft"),
       elTagBtn = $("sv2-tagfilter-btn"), elTagPop = $("sv2-tagfilter-pop"),
-      elPublish = $("sv2-publish"), elDeclined = $("sv2-declined"), elToast = $("sv2-toast");
+      elPublish = $("sv2-publish"), elDeclined = $("sv2-declined"), elToast = $("sv2-toast"),
+      elSelectVisible = $("sv2-select-visible");
 
   // ---- weekly board load ----
   function show(el) { el.classList.remove("sv2-hidden"); }
@@ -921,15 +961,16 @@
     var cls = "sv2-chip" + (open ? " open" : "") + (unpub ? " unpublished" : "") +
               (resp === "declined" ? " declined" : (resp === "accepted" ? " accepted" : ""));
     var style = open ? "" : ' style="border-left-color:' + posColor(s.position_id) + '"';
-    var posLine = open ? '<div class="sv2-chip-open-tag">Open</div>'
-                       : '<div class="sv2-chip-pos">' + (p ? esc(p.name) : "&mdash;") + '</div>';
-    var tagLine = "";
     var stags = shiftTags(s);
-    if (stags.length) {
-      tagLine = '<div class="sv2-chip-tags">' + stags.map(function (t) {
+    var tagHtml = "";
+    if (!open && stags.length) {
+      tagHtml = stags.map(function (t) {
         return '<span class="sv2-chip-tag">' + esc(t.name || "") + '</span>';
-      }).join("") + '</div>';
+      }).join("");
     }
+    var posLine = open ? '<div class="sv2-chip-open-tag">Open</div>'
+                       : '<div class="sv2-chip-pos"><span class="sv2-chip-pos-name">' +
+                         (p ? esc(p.name) : "&mdash;") + '</span>' + tagHtml + '</div>';
     var respTag = resp === "declined" ? '<div class="sv2-chip-resp-tag declined">Declined</div>'
                 : resp === "accepted" ? '<div class="sv2-chip-resp-tag accepted">&#10003; Accepted</div>'
                 : "";
@@ -937,7 +978,7 @@
     if (state.selected[s.id]) cls += " selected";
     return '<div class="' + cls + '" data-shift="' + s.id + '" draggable="true"' + style + '>' +
              '<div class="sv2-chip-check" data-check="' + s.id + '"></div>' +
-             '<div class="sv2-chip-time">' + t + '</div>' + posLine + tagLine + respTag + unpubTag + '</div>';
+             '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + unpubTag + '</div>';
   }
 
   // Does this employee HOLD one of the filtered positions? (Sam #2589: a position
@@ -950,6 +991,16 @@
       if (state.posFilter.indexOf(String(held[i])) !== -1) return true;
     }
     return false;
+  }
+
+  function positionNamesForEmployee(emp) {
+    var held = (emp && emp.position_ids) || [], out = [];
+    for (var i = 0; i < held.length; i++) {
+      var p = posById(held[i]);
+      if (p && p.name) out.push(p.name);
+    }
+    out.sort(function (a, b) { return String(a).localeCompare(String(b)); });
+    return out;
   }
 
   function renderGrid() {
@@ -980,6 +1031,7 @@
     staffRows.forEach(function (row) { rows += rowHtml(row.emp, row.kind); });
     elBody.innerHTML = rows;
     renderFilterHint(people, roster.length);
+    pruneSelectionToVisible();
     updateSelToolbar();  // Phase 2d: keep the bulk-action bar in sync after a (re)render
   }
 
@@ -1037,12 +1089,14 @@
     var today = new Date();
     var isOpen = (kind === "open");
     var isFormer = (kind === "former");
+    var empPositions = (!isOpen && !isFormer) ? positionNamesForEmployee(emp) : [];
     // Former-staff row (Sam #2872): person no longer employed -> name struck-through,
     // a "former" sub-label, and no "+" add hint (it's a historical record, not schedulable).
     var nameCell = isFormer
       ? '<div class="sv2-emp-name former"><s>' + esc(emp.full_name || "") + '</s></div><div class="sv2-emp-sub">former</div>'
       : '<div class="sv2-emp-name">' + esc(emp.full_name || "Team member") + '</div>' +
-        (isOpen ? '<div class="sv2-emp-sub">unassigned</div>' : "");
+        (isOpen ? '<div class="sv2-emp-sub">unassigned</div>' :
+          (empPositions.length ? '<div class="sv2-emp-positions">' + esc(empPositions.join(", ")) + '</div>' : ""));
     var tds = '<td class="sv2-namecol">' + nameCell + '</td>';
     var hasDraft = !!(state.board && state.board.schedule);
     for (var i = 0; i < 7; i++) {
@@ -1562,6 +1616,32 @@
   // ---- multi-select bulk actions (Phase 2d) ----
   var elSelbar = $("sv2-seltoolbar"), elSelCount = $("sv2-selcount");
   function selectedIds() { return Object.keys(state.selected); }
+  function visibleShiftIds() {
+    var out = [], seen = {};
+    if (!elBody) return out;
+    var chips = elBody.querySelectorAll(".sv2-chip[data-shift]");
+    for (var i = 0; i < chips.length; i++) {
+      var id = chips[i].getAttribute("data-shift");
+      if (id && !seen[id]) { seen[id] = true; out.push(id); }
+    }
+    return out;
+  }
+  function pruneSelectionToVisible() {
+    var keep = {}, ids = visibleShiftIds();
+    ids.forEach(function (id) { keep[id] = true; });
+    selectedIds().forEach(function (id) {
+      if (!keep[id]) delete state.selected[id];
+    });
+  }
+  function syncSelectVisibleControl() {
+    if (!elSelectVisible) return;
+    var ids = visibleShiftIds();
+    var selectedVisible = 0;
+    ids.forEach(function (id) { if (state.selected[id]) selectedVisible++; });
+    elSelectVisible.disabled = ids.length === 0;
+    elSelectVisible.checked = ids.length > 0 && selectedVisible === ids.length;
+    elSelectVisible.indeterminate = selectedVisible > 0 && selectedVisible < ids.length;
+  }
   function toggleSelect(id) {
     if (state.selected[id]) delete state.selected[id]; else state.selected[id] = true;
     var chip = elBody.querySelector('.sv2-chip[data-shift="' + id + '"]');
@@ -1574,10 +1654,20 @@
     for (var i = 0; i < on.length; i++) on[i].classList.remove("selected");
     updateSelToolbar();
   }
+  function setVisibleSelected(on) {
+    var ids = visibleShiftIds();
+    ids.forEach(function (id) {
+      if (on) state.selected[id] = true; else delete state.selected[id];
+      var chip = elBody.querySelector('.sv2-chip[data-shift="' + id + '"]');
+      if (chip) chip.classList.toggle("selected", !!state.selected[id]);
+    });
+    updateSelToolbar();
+  }
   function updateSelToolbar() {
     var n = selectedIds().length;
     if (elBody) elBody.classList.toggle("sv2-selecting", n > 0);
     if (n === 0) { closeCopyPanel(); closeEditPanel(); }
+    syncSelectVisibleControl();
     if (!elSelbar) return;
     if (n > 0) { elSelCount.textContent = n + (n === 1 ? " shift selected" : " shifts selected"); show(elSelbar); }
     else hide(elSelbar);
@@ -1607,36 +1697,48 @@
     $("sv2-sel-edit").onclick = openEditPanel;
     $("sv2-sel-copy").onclick = openCopyPanel;
   }
+  if (elSelectVisible) {
+    elSelectVisible.onchange = function () { setVisibleSelected(elSelectVisible.checked); };
+  }
 
-  // ---- copy-to-date (Phase 2e) ----
-  var elCopyPanel = $("sv2-copypanel"), elCpDays = $("sv2-cp-days"),
+  // ---- copy-to-week (Phase 2e + Sling-style visible selection) ----
+  var elCopyPanel = $("sv2-copypanel"), elCpWeeks = $("sv2-cp-weeks"),
       elCpN = $("sv2-cp-n"), elCpGo = $("sv2-cp-go");
-  var cpTarget = null;
+  var cpTargetWeek = null;
   function openCopyPanel() {
     var ids = selectedIds();
     if (!ids.length || !state.board || !state.board.schedule) return;
     closeEditPanel();
     if (elCpN) elCpN.textContent = ids.length;
-    cpTarget = null; if (elCpGo) elCpGo.disabled = true;
+    cpTargetWeek = null; if (elCpGo) elCpGo.disabled = true;
     var u = $("sv2-cp-unassign"), sk = $("sv2-cp-skip");
     if (u) u.checked = false; if (sk) sk.checked = false;
-    var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], html = "";
-    for (var i = 0; i < 7; i++) {
-      var d = addDays(state.weekStart, i), iso = isoDate(d);
-      html += '<button class="sv2-cp-day" data-iso="' + iso + '">' +
-                '<span class="d-dow">' + DOW[d.getDay()] + '</span>' + d.getDate() + '</button>';
-    }
-    if (elCpDays) elCpDays.innerHTML = html;
+    var choices = [
+      { label: "Previous", d: addDays(state.weekStart, -7) },
+      { label: "Current", d: state.weekStart },
+      { label: "Next", d: addDays(state.weekStart, 7) }
+    ];
+    var html = "";
+    choices.forEach(function (c) {
+      var end = addDays(c.d, 6);
+      html += '<button class="sv2-cp-week" data-week="' + isoDate(c.d) + '">' +
+                '<span class="d-dow">' + c.label + '</span>' +
+                (MON[c.d.getMonth()] + " " + c.d.getDate() + " - " + MON[end.getMonth()] + " " + end.getDate()) +
+              '</button>';
+    });
+    if (elCpWeeks) elCpWeeks.innerHTML = html;
     show(elCopyPanel);
   }
-  function closeCopyPanel() { if (elCopyPanel) hide(elCopyPanel); cpTarget = null; }
+  function closeCopyPanel() { if (elCopyPanel) hide(elCopyPanel); cpTargetWeek = null; }
   function doCopy() {
     var ids = selectedIds();
-    if (!ids.length || !cpTarget || state.busy) return;
+    if (!ids.length || !cpTargetWeek || state.busy) return;
     state.busy = true; if (elCpGo) elCpGo.disabled = true;
-    var url = CFG.shiftNewUrl.replace(/\/new$/, "/copy-to-date");
+    var url = CFG.shiftNewUrl.replace(/\/new$/, "/copy-to-week");
     var body = {
-      shift_ids: ids.map(function (x) { return +x; }), target_date: cpTarget,
+      shift_ids: ids.map(function (x) { return +x; }),
+      source_week_start: isoDate(state.weekStart),
+      target_week_start: cpTargetWeek,
       unassign: !!($("sv2-cp-unassign") && $("sv2-cp-unassign").checked),
       skip_checks: !!($("sv2-cp-skip") && $("sv2-cp-skip").checked)
     };
@@ -1646,18 +1748,21 @@
         var c = (j && j.copied) || 0, msg = "Copied " + c + (c === 1 ? " shift" : " shifts");
         if (j && j.opened_for_timeoff) msg += " (" + j.opened_for_timeoff + " left unassigned for time-off)";
         toast(msg);
-        state.selected = {}; closeCopyPanel(); loadBoard();
+        var targetWeek = cpTargetWeek;
+        state.selected = {}; closeCopyPanel();
+        state.weekStart = parseDateOnly(targetWeek);
+        loadBoard();
       }).catch(function (e) {
         state.busy = false; if (elCpGo) elCpGo.disabled = false;
         toast((e && e.error) ? e.error : "Could not copy the shifts.", true);
       });
   }
-  if (elCpDays) {
-    elCpDays.onclick = function (e) {
-      var b = e.target.closest ? e.target.closest(".sv2-cp-day") : null;
+  if (elCpWeeks) {
+    elCpWeeks.onclick = function (e) {
+      var b = e.target.closest ? e.target.closest(".sv2-cp-week") : null;
       if (!b) return;
-      var cur = elCpDays.querySelector(".sv2-cp-day.sel"); if (cur) cur.classList.remove("sel");
-      b.classList.add("sel"); cpTarget = b.getAttribute("data-iso"); if (elCpGo) elCpGo.disabled = false;
+      var cur = elCpWeeks.querySelector(".sv2-cp-week.sel"); if (cur) cur.classList.remove("sel");
+      b.classList.add("sel"); cpTargetWeek = b.getAttribute("data-week"); if (elCpGo) elCpGo.disabled = false;
     };
     $("sv2-cp-cancel").onclick = closeCopyPanel;
     $("sv2-cp-go").onclick = doCopy;
@@ -1665,14 +1770,58 @@
 
   // ---- bulk edit (Phase 2e) ----
   var elEditPanel = $("sv2-editpanel"), beField = $("sv2-be-field"),
-      bePos = $("sv2-be-pos"), beTime = $("sv2-be-time"), beBreak = $("sv2-be-break"),
+      bePos = $("sv2-be-pos"), beEmp = $("sv2-be-emp"), beTime = $("sv2-be-time"), beBreak = $("sv2-be-break"),
+      beTags = $("sv2-be-tags"), beNotes = $("sv2-be-notes"), bePublish = $("sv2-be-publish"),
       beN = $("sv2-be-n"), beApplyBtn = $("sv2-be-apply");
+  var beTagState = {};
   function beSync() {
     if (!beField) return;
     var f = beField.value;
     (f === "position" ? show : hide)(bePos);
+    (f === "employee" ? show : hide)(beEmp);
     (f === "start" || f === "end" ? show : hide)(beTime);
     (f === "break" ? show : hide)(beBreak);
+    (f === "tags" ? show : hide)(beTags);
+    (f === "notes" ? show : hide)(beNotes);
+    (f === "publish" ? show : hide)(bePublish);
+  }
+  function fillBulkEmployeeSelect() {
+    if (!beEmp) return;
+    var cur = beEmp.value;
+    beEmp.innerHTML = '<option value="">Open shift</option>';
+    ((state.board && state.board.roster) || []).forEach(function (emp) {
+      var o = document.createElement("option");
+      o.value = String(emp.id);
+      o.textContent = emp.full_name || ("Employee #" + emp.id);
+      beEmp.appendChild(o);
+    });
+    beEmp.value = cur;
+  }
+  function paintBulkTags() {
+    if (!beTags) return;
+    beTags.querySelectorAll(".sv2-tag").forEach(function (n) {
+      var id = n.getAttribute("data-tag");
+      n.classList.toggle("on", !!beTagState[id]);
+    });
+  }
+  function fillBulkTags() {
+    if (!beTags) return;
+    beTagState = {};
+    var tags = (state.board && state.board.tags) || [];
+    if (!tags.length) {
+      beTags.innerHTML = '<span class="sv2-tags-empty">No tags yet.</span>';
+      return;
+    }
+    beTags.innerHTML = "";
+    tags.forEach(function (t) {
+      var b = document.createElement("span");
+      b.className = "sv2-tag"; b.setAttribute("data-tag", t.id); b.textContent = t.name;
+      b.onclick = function () {
+        if (beTagState[t.id]) delete beTagState[t.id]; else beTagState[t.id] = true;
+        paintBulkTags();
+      };
+      beTags.appendChild(b);
+    });
   }
   function openEditPanel() {
     var ids = selectedIds();
@@ -1680,6 +1829,10 @@
     closeCopyPanel();
     if (beN) beN.textContent = ids.length;
     if (bePos) fillSelect(bePos, state.board.positions || [], "id", "name", "No position");
+    fillBulkEmployeeSelect();
+    fillBulkTags();
+    if (beNotes) beNotes.value = "";
+    if (bePublish) bePublish.value = "true";
     if (beField) beField.value = "position";
     if (beApplyBtn) beApplyBtn.disabled = false;
     beSync();
@@ -1691,7 +1844,11 @@
     if (!ids.length || state.busy || !beField) return;
     var f = beField.value, common = null, timeVal = null;
     if (f === "position") common = { position_id: bePos.value ? +bePos.value : null };
+    else if (f === "employee") common = { employee_id: beEmp.value ? +beEmp.value : null };
     else if (f === "break") common = { break_minutes: +beBreak.value || 0 };
+    else if (f === "tags") common = { tag_ids: Object.keys(beTagState).map(function (x) { return +x; }) };
+    else if (f === "notes") common = { notes: beNotes.value || "" };
+    else if (f === "publish") common = { publish: bePublish.value === "true" };
     else { timeVal = beTime.value; if (!timeVal) { toast("Pick a time first.", true); return; } }
     state.busy = true; if (beApplyBtn) beApplyBtn.disabled = true;
     var byId = {}; (state.board.shifts || []).forEach(function (s) { byId[s.id] = s; });

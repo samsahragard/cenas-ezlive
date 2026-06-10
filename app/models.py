@@ -3339,7 +3339,7 @@ class Position(Base):
 CANONICAL_POSITIONS = [
     "Partner", "Corporate", "Corporate Chef", "GM", "KM", "Assistant KM",
     "FOH Manager", "Expo", "Busser", "Cashier", "Server", "Well",
-    "Bartender", "Cook", "Prep", "Dishwasher",
+    "Bartender", "Host", "Cook", "Prep", "Dishwasher", "Training",
 ]
 
 

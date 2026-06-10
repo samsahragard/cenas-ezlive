@@ -283,7 +283,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     },
 
     # Phase 2 / Block 1 precondition (samai spec, Sam §5.3 Path A
-    # 2026-05-14). The five hourly roles the task-assignment hierarchy
+    # 2026-05-14). The hourly roles the task-assignment hierarchy
     # (1A can_assign_to) + the counseling cascade (2C) reference. The
     # point of these entries is taxonomy completeness — "everyone in the
     # system is in the role taxonomy" (Sam) — so _user_has resolves them
@@ -299,7 +299,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     # Sam's #1063 grant (drivers.admin / drivers.view_roster /
     # drivers.reset_passcode opened to every non-driver role) is REVERSED for
     # the hourly tier here: an hourly user (cook / server / busser / host /
-    # bartender) must NOT hold any company / admin / labor / sales tag. Their
+    # bartender / training) must NOT hold any company / admin / labor / sales tag. Their
     # effective perms are the self-only surface ONLY — own profile + own rank,
     # which on the tag side is the personal-AI + transcripts baseline that expo
     # + driver already share (these tags read the actor's own data; they grant
@@ -315,13 +315,15 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
                   "transcripts.search", "transcripts.read"},
     "host":      {"ai.ask_claude_personal", "ai.view_transcripts",
                   "transcripts.search", "transcripts.read"},
+    "training":  {"ai.ask_claude_personal", "ai.view_transcripts",
+                  "transcripts.search", "transcripts.read"},
     "bartender": {"ai.ask_claude_personal", "ai.view_transcripts",
                   "transcripts.search", "transcripts.read"},
     # S6b uniformity (ck, 2026-06-07): cashier + well were the two hourly
     # roles MISSING from this dict while the other five carried the self-only
     # baseline — _user_has resolved them to set() (deny-all) rather than the
     # self-only surface. Added here with EXACTLY the same self-only baseline so
-    # all seven hourly roles are identical and self-only (own profile + own
+    # all hourly roles are identical and self-only (own profile + own
     # rank; the personal-AI + transcripts tags read only the actor's own data,
     # grant no roster/admin/labor/sales reach).
     "cashier":   {"ai.ask_claude_personal", "ai.view_transcripts",

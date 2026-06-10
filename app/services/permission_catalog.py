@@ -20,7 +20,7 @@ default_roles = which role templates inherit=ON by default (Sam tunes per-user v
 """
 
 # ---- Roles (Sam #1681 + #2378/#2381: the 14 canonical scheduling positions +
-# DRIVER (corporate_driver) + EXPO; prep_manager dropped; 'host' shown as Hostess,
+# DRIVER (corporate_driver) + EXPO; prep_manager dropped; 'host' shown as Host,
 # corporate_driver shown as Driver. The ezCater 'driver' is LOCKED/separate -
 # not a template here. ----
 ROLES = [
@@ -37,7 +37,8 @@ ROLES = [
     {"key": "bartender",       "label": "Bartender",                "wildcard": False},
     {"key": "well",            "label": "Well",                     "wildcard": False},
     {"key": "busser",          "label": "Busser",                   "wildcard": False},
-    {"key": "host",            "label": "Hostess",                  "wildcard": False},
+    {"key": "host",            "label": "Host",                     "wildcard": False},
+    {"key": "training",        "label": "Training",                 "wildcard": False},
     {"key": "cook",            "label": "Cook",                     "wildcard": False},
     {"key": "corporate_driver","label": "Driver",                   "wildcard": False},
 ]
@@ -81,7 +82,7 @@ ROLE_RANK = {
     "gm": 70, "km": 70,
     "assistant_km": 50, "foh_manager": 50,
     "expo": 10, "cook": 10, "server": 10, "bartender": 10,
-    "well": 10, "busser": 10, "host": 10, "cashier": 10,
+    "well": 10, "busser": 10, "host": 10, "training": 10, "cashier": 10,
     "corporate_driver": 10,
 }
 
@@ -100,13 +101,13 @@ def addable_roles(actor_role):
 
 # Canonical scheduling-position NAME -> permissions ROLE key, for the +Add
 # rank-gate (canonical positions map to their role; expo/driver are access-only,
-# not scheduling positions, so they aren't here). 'Well' -> well, 'Hostess' -> host.
+# not scheduling positions, so they aren't here). 'Well' -> well, 'Host' -> host.
 POSITION_TO_ROLE = {
     "partner": "partner", "corporate": "corporate", "corporate chef": "corporate_chef",
     "gm": "gm", "km": "km", "assistant km": "assistant_km", "foh manager": "foh_manager",
-    "busser": "busser", "hostess": "host", "cashier": "cashier", "server": "server",
+    "busser": "busser", "host": "host", "hostess": "host", "cashier": "cashier", "server": "server",
     "well": "well", "bartender": "bartender", "cook": "cook",
-    "prep": "cook", "dishwasher": "cook", "expo": "expo",
+    "prep": "cook", "dishwasher": "cook", "training": "training", "trainee": "training", "expo": "expo",
 }
 
 def position_role(position_name):

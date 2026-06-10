@@ -1315,7 +1315,7 @@
     var byStore = emp.positions_by_store || {};
     var out = "";
     // Sam 2026-06-07: split the per-store picker into MANAGEMENT (the 7) and
-    // TIPPED/HOURLY (the 8) groups -- not one flat "everything" list. Tier-above
+    // TIPPED/HOURLY groups -- not one flat "everything" list. Tier-above
     // positions (section null, e.g. Partner) are not assignable here, so they are
     // dropped. A person can still hold across both groups (e.g. KM + Prep).
     var mgmtPos = addable.filter(function (p) { return p.section === "management"; });
@@ -1370,7 +1370,6 @@
       // short manager-shown code. Both ride ONE single-use token; whichever the
       // employee uses first sets the PIN, the other stops working.
       '<div class="tws-edit-sec"><h4>Reset passcode</h4>' +
-        '<p class="tws-edit-hint">Emails a fresh setup link and shows you a code to hand over. Either one sets their PIN; signs out their current session.</p>' +
         '<div class="tws-edit-row"><button class="tws-resetbtn" data-act="reset-pin" type="button">Reset PIN</button>' +
           '<span class="tws-edit-msg" data-msg="pin"></span></div>' +
         '<div class="tws-pin-code" data-pin-code>' +
@@ -1384,14 +1383,12 @@
       '</div>' +
       // 3) ASSIGN POSITIONS + STORES
       '<div class="tws-edit-sec"><h4>Positions &amp; stores</h4>' +
-        '<p class="tws-edit-hint">Check the roles they work at each store.</p>' +
         '<div data-assign-picker>' + buildAssignPicker(emp) + '</div>' +
         (canAssign ? '<div class="tws-edit-row"><button class="tws-save" data-act="save-assign" type="button">Save positions</button>' +
           '<span class="tws-edit-msg" data-msg="assign"></span></div>' : '') +
       '</div>' +
       // 4) AVAILABILITY -- dark-themed grid: Day | Start | End | clear (Sam #2808)
       '<div class="tws-edit-sec"><h4>Availability</h4>' +
-        '<p class="tws-edit-hint">Set when this person is available each week; it feeds the schedule. Leave a day blank to mark it unavailable.</p>' +
         '<div class="tws-avail">' +
           '<div class="tws-avail-head"><span></span><span>Start</span><span>End</span><span></span></div>' +
           AVAIL_DAYS.map(function (label, n) {
@@ -1406,7 +1403,6 @@
       '</div>' +
       // 5) DEACTIVATE / REMOVE FROM TEAM (Sam #2626)
       '<div class="tws-edit-sec"><h4>Remove from team</h4>' +
-        '<p class="tws-edit-hint">Deactivates this person -- they drop off the roster and can no longer sign in. Reversible (re-add them later).</p>' +
         '<div class="tws-edit-row"><button class="tws-resetbtn danger" data-act="deactivate" type="button">Deactivate</button>' +
           '<span class="tws-edit-msg" data-msg="deactivate"></span></div>' +
       '</div>' +

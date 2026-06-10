@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, datetime
 
 from werkzeug.security import generate_password_hash
 
@@ -164,4 +164,44 @@ def test_bulk_week_copy_preserves_shift_tags(db_session, monkeypatch):
 
     db_session.expire_all()
     new_shift = db_session.query(Shift).filter_by(schedule_id=101).one()
+    assert [row.tag_id for row in db_session.query(ShiftTag).filter_by(shift_id=new_shift.id).all()] == [tag["id"]]
+
+
+def test_selected_shift_copy_to_week_preserves_tags_and_day_offsets(db_session, monkeypatch):
+    flask_app = _bind_app(db_session, monkeypatch)
+    client = _partner_client(flask_app)
+
+    tag = client.post("/dos/schedules-v2/tags", json={"name": "ENCH/TOGO 1"}).get_json()["tag"]
+    created = client.post("/dos/schedules-v2/shifts/new", json={
+        "schedule_id": 100,
+        "employee_id": 20,
+        "position_id": 10,
+        "start_at": "2026-06-10T15:00:00",
+        "end_at": "2026-06-10T22:00:00",
+        "tag_ids": [tag["id"]],
+    })
+    assert created.status_code == 201, created.get_data(as_text=True)
+    shift_id = created.get_json()["id"]
+
+    copied = client.post("/dos/schedules-v2/shifts/copy-to-week", json={
+        "shift_ids": [shift_id],
+        "source_week_start": "2026-06-07",
+        "target_week_start": "2026-06-14",
+    })
+    assert copied.status_code == 201, copied.get_data(as_text=True)
+    body = copied.get_json()
+    assert body["copied"] == 1
+    assert body["created_schedule"] is True
+
+    db_session.expire_all()
+    target_schedule = db_session.get(Schedule, body["target_schedule_id"])
+    assert target_schedule is not None
+    assert target_schedule.store_key == "tomball"
+    assert target_schedule.week_start == date(2026, 6, 14)
+    new_shift = db_session.query(Shift).filter(
+        Shift.schedule_id == target_schedule.id,
+        Shift.start_at == datetime(2026, 6, 17, 15, 0),
+    ).one()
+    assert new_shift.end_at == datetime(2026, 6, 17, 22, 0)
+    assert new_shift.published_at is None
     assert [row.tag_id for row in db_session.query(ShiftTag).filter_by(shift_id=new_shift.id).all()] == [tag["id"]]

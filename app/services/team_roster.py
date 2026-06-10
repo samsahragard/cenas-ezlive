@@ -18,13 +18,13 @@ from app.services.role_hierarchy import role_domain
 
 # Canonical Position NAME -> role_hierarchy role key, so role_domain (which keys
 # off role/permission_level values) classifies each position BOH/FOH. 'Well'
-# (the bar/service well) maps to bartender = FOH; 'Hostess' -> host.
+# (the bar/service well) maps to bartender = FOH; 'Host' / legacy 'Hostess' -> host.
 _POSITION_ROLE_KEY = {
     "partner": "partner", "corporate": "corporate", "corporate chef": "corporate_chef",
     "gm": "gm", "km": "km", "assistant km": "assistant_km", "foh manager": "foh_manager",
-    "busser": "busser", "hostess": "host", "cashier": "cashier", "server": "server",
+    "busser": "busser", "host": "host", "hostess": "host", "cashier": "cashier", "server": "server",
     "well": "bartender", "bartender": "bartender", "cook": "cook",
-    "prep": "cook", "dishwasher": "cook",
+    "prep": "cook", "dishwasher": "cook", "training": "training", "trainee": "training",
 }
 _CANON_LC = {p.lower() for p in CANONICAL_POSITIONS}
 _STORE_LABELS = {"tomball": "Tomball", "copperfield": "Copperfield"}

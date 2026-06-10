@@ -56,7 +56,7 @@ def test_management_roles():
 
 
 def test_hourly_roles():
-    for k in ("bartender", "busser", "cashier", "cook", "server", "well", "host"):
+    for k in ("bartender", "busser", "cashier", "cook", "server", "well", "host", "training"):
         assert section_for_role(k) == SECTION_HOURLY, k
     # explicit spot-checks called out in the task
     assert section_for_role("well") == SECTION_HOURLY
@@ -86,12 +86,14 @@ def test_section_for_position():
     assert section_for_position("GM") == SECTION_MANAGEMENT
     assert section_for_position("KM") == SECTION_MANAGEMENT
     assert section_for_position("FOH Manager") == SECTION_MANAGEMENT
-    assert section_for_position("Hostess") == SECTION_HOURLY  # Hostess -> host
+    assert section_for_position("Host") == SECTION_HOURLY
+    assert section_for_position("Hostess") == SECTION_HOURLY  # legacy Hostess -> host
     assert section_for_position("Well") == SECTION_HOURLY
     assert section_for_position("Server") == SECTION_HOURLY
     assert section_for_position("Cook") == SECTION_HOURLY
     assert section_for_position("Prep") == SECTION_HOURLY
     assert section_for_position("Dishwasher") == SECTION_HOURLY
+    assert section_for_position("Training") == SECTION_HOURLY
     # Corporate is now a Management-section role (Sam 2026-06-07); Partner stays tier-above.
     assert section_for_position("Corporate") == SECTION_MANAGEMENT
     assert section_for_position("Partner") is None

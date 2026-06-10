@@ -2086,6 +2086,33 @@ def assistant_review_item_ack(message_id: int):
         db.close()
 
 
+_L3_DATA_QUESTION_RE = re.compile(
+    r"\b(sales|net|gross|revenue|orders?|catering|labor|hours?|overtime|\bot\b|"
+    r"avg|average|check|covers?|drivers?|deliver\w*|items?|sold|menu|store|"
+    r"copperfield|tomball|week|weekly|day|daypart|month|april|may|march|june|"
+    r"anomal\w*|trend|compare|comparison|why|how many|how much|busiest|slowest|"
+    r"top|best|worst|highest|lowest|splh|prime cost|spend)\b",
+    re.IGNORECASE,
+)
+
+
+def _l3_investigation_answer(question: str) -> dict[str, Any] | None:
+    """Local/dev L3 path: investigate a data question that matched no tool.
+    Defensive - any failure returns None so the conversational fallback runs."""
+    if not _L3_DATA_QUESTION_RE.search(question or ""):
+        return None
+    try:
+        from app.services.cena_sql_orchestrator import answer_question
+
+        res = answer_question(question)
+    except Exception:  # noqa: BLE001
+        log.exception("assistant: L3 investigation failed")
+        return None
+    if not isinstance(res, dict) or not res.get("ok") or not str(res.get("answer", "")).strip():
+        return None
+    return res
+
+
 @assistant_bp.route("/assistant/ask", methods=["POST"])
 def assistant_ask():
     ctx = _principal_context()
@@ -2146,6 +2173,22 @@ def assistant_ask():
             "routed_tool_id": None,
         }
         return respond(response)
+
+    # L3: no deterministic tool matched; investigate a data question directly.
+    # (Production routes through the CK runtime above; this is the local/dev path.)
+    investigation = _l3_investigation_answer(safety_question)
+    if investigation is not None:
+        return respond({
+            "ok": True,
+            "answer": investigation["answer"],
+            "queued": False,
+            "confidence": investigation.get("confidence"),
+            "confidence_reason": investigation.get("confidence_reason"),
+            "show_work": investigation.get("show_work"),
+            "trace": investigation.get("trace"),
+            "route_path": "investigation",
+            "routed_tool_id": None,
+        })
 
     try:
         answer, model = _gemini_answer(question, ctx)

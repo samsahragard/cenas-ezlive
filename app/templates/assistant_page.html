@@ -91,6 +91,42 @@
   .aiassist-msg.queued {
     border-color: rgba(228, 179, 64, 0.42);
   }
+  .aiassist-confidence {
+    margin-top: 8px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    color: var(--ai-faint);
+  }
+  .aiassist-confidence.conf-high { color: #5bcac5; }
+  .aiassist-confidence.conf-medium { color: #e4b340; }
+  .aiassist-confidence.conf-low { color: #e08a7a; }
+  .aiassist-showwork {
+    margin-top: 8px;
+  }
+  .aiassist-showwork > summary {
+    cursor: pointer;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ai-faint);
+    user-select: none;
+  }
+  .aiassist-trace {
+    margin: 8px 0 0;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--ai-line);
+    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow: auto;
+  }
   .aiassist-meta {
     margin-bottom: 6px;
     font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -553,7 +589,17 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var answer = data && data.answer ? data.answer : "I could not answer that yet.";
-        pending.innerHTML = '<div class="aiassist-meta">' + esc(meta("C.E.N.A")) + '</div>' + esc(answer);
+        var html = '<div class="aiassist-meta">' + esc(meta("C.E.N.A")) + '</div>' + esc(answer);
+        if (data && data.confidence) {
+          html += '<div class="aiassist-confidence conf-' + esc(data.confidence) + '">'
+            + esc(String(data.confidence).toUpperCase()) + ' confidence'
+            + (data.confidence_reason ? ' - ' + esc(data.confidence_reason) : '') + '</div>';
+        }
+        if (data && data.show_work) {
+          html += '<details class="aiassist-showwork"><summary>Show work</summary>'
+            + '<pre class="aiassist-trace">' + esc(data.show_work) + '</pre></details>';
+        }
+        pending.innerHTML = html;
         if (data && data.queued) {
           pending.classList.add("queued");
           loadReviewItems();

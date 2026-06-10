@@ -2175,6 +2175,42 @@ def _gemini_answer(question: str, principal: dict) -> tuple[str | None, str | No
     return _gemini_generate(prompt)
 
 
+# --- C.E.N.A. Level 3: when no deterministic tool matched, investigate the data --
+_DATA_QUESTION_RE = re.compile(
+    r"\b(sales|net|gross|revenue|orders?|catering|labor|hours?|overtime|\bot\b|"
+    r"avg|average|check|covers?|drivers?|deliver\w*|items?|sold|menu|store|"
+    r"copperfield|tomball|week|weekly|day|daypart|month|april|may|march|june|"
+    r"anomal\w*|trend|compare|comparison|why|how many|how much|busiest|slowest|"
+    r"top|best|worst|highest|lowest|splh|prime cost|spend)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_data_question(question: str) -> bool:
+    return bool(_DATA_QUESTION_RE.search(question or ""))
+
+
+def _investigation_answer(question: str, principal: dict) -> dict | None:
+    """Run the L3 reasoning engine for a data question that matched no tool.
+    Defensive: any failure (engine/ snapshots/ model unavailable) returns None so
+    the caller falls through to the existing conversational path - the live
+    runtime must never regress because L3 is mid-deploy."""
+    if not _looks_like_data_question(question):
+        return None
+    try:
+        from app.services.cena_sql_orchestrator import answer_question
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        res = answer_question(question, principal)
+    except Exception:  # noqa: BLE001
+        log.exception("assistant runtime: L3 investigation failed")
+        return None
+    if not isinstance(res, dict) or not res.get("ok") or not str(res.get("answer", "")).strip():
+        return None
+    return res
+
+
 def _answer(payload: dict) -> tuple[dict, int]:
     question = str(payload.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
     previous_question = str(payload.get("previous_question") or "").strip()[:_MAX_QUESTION_CHARS]
@@ -2262,6 +2298,24 @@ def _answer(payload: dict) -> tuple[dict, int]:
             "routed_tool_id": None,
         }
         return response, 200
+
+    # L3: no deterministic tool matched and the question cleared the review gate.
+    # If it is a data/operations question, investigate the data instead of a plain
+    # conversational reply. Falls through to the model on any failure.
+    investigation = _investigation_answer(resolved_question, principal)
+    if investigation is not None:
+        return {
+            "ok": True,
+            "answer": investigation["answer"],
+            "queued": False,
+            "confidence": investigation.get("confidence"),
+            "confidence_reason": investigation.get("confidence_reason"),
+            "show_work": investigation.get("show_work"),
+            "trace": investigation.get("trace"),
+            "storage": "ck_runtime",
+            "route_path": "investigation",
+            "routed_tool_id": None,
+        }, 200
 
     answer = None
     model = None

@@ -336,3 +336,32 @@ def admin_force_recovery(agent_id: str):
         return jsonify({"ok": True})
     finally:
         sess.close()
+
+
+@bp.route("/admin/<agent_id>/cancel_sequence", methods=["POST"])
+def admin_cancel_sequence(agent_id: str):
+    """Close any open restart sequence for the agent (spec #1191 — was
+    documented in this file's header but never implemented). An open row
+    blocks _maybe_start_recovery forever, so a sequence orphaned by a
+    worker restart mid-execution leaves the agent with no auto-recovery."""
+    if not _check_admin_auth():
+        return jsonify({"error": "unauthorized"}), 401
+    sess = SessionLocal()
+    try:
+        agent = sess.get(DocckAgent, agent_id)
+        if agent is None:
+            return jsonify({"error": "not_found"}), 404
+        open_seqs = sess.execute(
+            select(DocckRestartSequence).where(
+                DocckRestartSequence.agent_id == agent_id,
+                DocckRestartSequence.ended_at.is_(None),
+            )
+        ).scalars().all()
+        for seq in open_seqs:
+            seq.ended_at = datetime.utcnow()
+            seq.outcome = "cancelled"
+        sess.commit()
+        return jsonify({"ok": True,
+                        "cancelled_sequence_ids": [s.id for s in open_seqs]})
+    finally:
+        sess.close()

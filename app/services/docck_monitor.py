@@ -165,6 +165,36 @@ def _post_to_dev_chat(body: str) -> None:
         sess.close()
 
 
+# A live sequence's executor thread dies silently when its gunicorn worker
+# restarts (deploy, crash, OOM) — the row keeps ended_at NULL forever, and
+# _maybe_start_recovery treats that as "sequence_already_active", so the agent
+# silently loses ALL future auto-recovery (pwck seq #9 / cena seq #12, 6/9).
+# Reap such rows once the agent is alive again and the row is old enough that
+# no legitimately-running sequence could still be mid-step.
+ORPHAN_SEQUENCE_MAX_AGE_SECONDS = 1800
+
+
+def _reap_orphaned_sequences(sess, agent_id: str) -> list[int]:
+    """Close open sequences for an ALIVE agent. Only rows older than
+    ORPHAN_SEQUENCE_MAX_AGE_SECONDS are touched, so a live executor about to
+    mark its sequence 'recovered' isn't raced; if it is raced anyway, the
+    executor just overwrites outcome/ended_at — benign. New duplicate
+    sequences can't spawn off this, because recovery only starts for agents
+    in 'missing' state."""
+    cutoff = datetime.utcnow() - timedelta(seconds=ORPHAN_SEQUENCE_MAX_AGE_SECONDS)
+    rows = sess.execute(
+        select(DocckRestartSequence).where(
+            DocckRestartSequence.agent_id == agent_id,
+            DocckRestartSequence.ended_at.is_(None),
+            DocckRestartSequence.started_at < cutoff,
+        )
+    ).scalars().all()
+    for row in rows:
+        row.ended_at = datetime.utcnow()
+        row.outcome = "orphaned"
+    return [r.id for r in rows]
+
+
 def run_tick_evaluation() -> dict:
     """Evaluate all enabled agents once. Posts alerts on missing/never.
     v1 = ALERT-ONLY. v1.1 will add the restart-sequence executor here.
@@ -177,8 +207,22 @@ def run_tick_evaluation() -> dict:
             select(DocckAgent).where(DocckAgent.enabled == True)  # noqa: E712
         ).scalars().all()
         recoveries: list[str] = []
+        reaped: list[int] = []
         for agent in agents:
             state, secs = _agent_state(sess, agent)
+            if state == "alive":
+                seq_ids = _reap_orphaned_sequences(sess, agent.id)
+                if seq_ids:
+                    reaped.extend(seq_ids)
+                    _post_alert_deduped(
+                        sess=sess, agent_id=agent.id, severity="info",
+                        channel="dev_chat",
+                        dedupe_key=f"{agent.id}_orphan_reap_{seq_ids[0]}",
+                        body=f"[docck] {agent.display_name} is alive but had "
+                             f"stale open restart sequence(s) {seq_ids} — "
+                             f"closed as 'orphaned' (auto-recovery unblocked).",
+                        dedupe_window_seconds=300,
+                    )
             if state in ("missing", "never"):
                 # Only count as "fired" if a NEW alert was actually posted
                 # (i.e. not suppressed by the 5-min dedupe window). Previously
@@ -204,6 +248,7 @@ def run_tick_evaluation() -> dict:
         sess.commit()
         return {"ok": True, "agents_evaluated": len(agents),
                 "alerts_fired": fired, "recoveries_started": recoveries,
+                "orphaned_sequences_reaped": reaped,
                 "autorecover_enabled": AUTORECOVER_ENABLED}
     except Exception:
         log.exception("docck.run_tick_evaluation failed")

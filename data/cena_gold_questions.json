@@ -49,9 +49,9 @@
 
     {"id": "L8", "class": "lookup", "store_scope": "copperfield",
      "question": "How many labor hours did Copperfield work between 2026-05-11 and 2026-05-17?",
-     "expected": {"type": "number", "value": 1372.4, "tolerance": 0.01, "accept": ["1372", "1,372"]},
+     "expected": {"type": "number", "value": 1198.7, "tolerance": 0.01, "accept": ["1198", "1,198", "1199"]},
      "reference_sql": ["SELECT ROUND(SUM(total_hours),1) FROM daily_labor_summary WHERE store_key='copperfield' AND business_date BETWEEN '2026-05-11' AND '2026-05-17'"],
-     "notes": "1372.4 hours."},
+     "notes": "1198.7 hours."},
 
     {"id": "L9", "class": "lookup", "store_scope": "tomball",
      "question": "How many overtime hours did Tomball work between 2026-05-11 and 2026-05-17?",
@@ -175,6 +175,6 @@
      "expected": {"type": "driver", "value": "overtime", "tolerance": 0,
                   "accept": ["overtime", "ot ", "ot hours", "over time", "1.5x", "time and a half", "ot exposure"]},
      "reference_sql": ["SELECT store_key, ROUND(SUM(total_hours),1) hrs, ROUND(SUM(ot_hours),1) ot, ROUND(SUM(labor_cost),2) cost FROM daily_labor_summary WHERE business_date BETWEEN '2026-05-11' AND '2026-05-17' GROUP BY 1"],
-     "notes": "tomball 1142.4 hrs / 174.5 OT (15.3%) / $12,527.64 vs copperfield 1372.4 hrs / 73.4 OT (5.3%) / $13,799.59. Tomball does similar cost on fewer hours because of heavy OT at 1.5x. DOMINANT = overtime."}
+     "notes": "tomball 1005.9 hrs / 174.5 OT (17.3%) / $11,100.68 vs copperfield 1198.7 hrs / 73.4 OT (6.1%) / $12,104.49. Tomball does similar cost on fewer hours because of heavy OT at 1.5x. DOMINANT = overtime."}
   ]
 }

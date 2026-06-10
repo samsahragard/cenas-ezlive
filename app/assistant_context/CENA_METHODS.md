@@ -60,6 +60,11 @@ A "why" question. This is where operator instinct lives. Pick the sub-tree by su
 1. **Traffic vs spend.** Split the move into order/check COUNT (traffic) vs AVERAGE CHECK
    (spend per order) from daily_sales_summary / weekly_rollups. Compute each component's
    SHARE of the total delta. This is the first and most important fork.
+   - DECISIVE TEST: if order COUNT is essentially UNCHANGED between the two periods, the
+     move is ~100% an AVERAGE-CHECK (spend-per-order) story — call it that, NOT traffic.
+     If average check is essentially unchanged, it is ~100% a TRAFFIC story. Only when both
+     moved do you report shares. (Decompose as: traffic = Δcount x prior_avg_check;
+     spend = Δavg_check x current_count.)
 2. Drill the mover. If traffic moved: look at day-part distribution (note: day-part signal
    is weak in current data — almost all catering lands in lunch — say so). If average check
    moved: look at category/item MIX from item_sales_summary (qty-based; item dollar columns

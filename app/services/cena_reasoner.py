@@ -190,6 +190,34 @@ def _to_float(val: Any) -> Optional[float]:
         return None
 
 
+_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_WEEK_RE = re.compile(r"\b\d{4}-W\d{1,2}\b", re.IGNORECASE)
+_YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
+
+
+def _derive_headlines(answer: str) -> list[dict]:
+    """Pull up to 2 prominent figures out of an answer that omitted
+    headline_numbers, so they still get cross-checked. Dates/weeks/years are
+    stripped so they don't masquerade as figures."""
+    text = _YEAR_RE.sub(" ", _WEEK_RE.sub(" ", _DATE_RE.sub(" ", answer or "")))
+    seen: list[float] = []
+    for m in _NUM_RE.finditer(text):
+        tok = m.group(0)
+        if not re.search(r"\d", tok):
+            continue
+        neg = tok.startswith("(") and tok.endswith(")")
+        clean = tok.strip("()").replace("$", "").replace(",", "").replace("%", "")
+        try:
+            f = -float(clean) if neg else float(clean)
+        except ValueError:
+            continue
+        if abs(f) < 1 or f in seen:
+            continue
+        seen.append(f)
+    seen.sort(key=abs, reverse=True)
+    return [{"label": "stated figure", "value": str(v)} for v in seen[:2]]
+
+
 def _numbers_in_result(result: dict) -> list[float]:
     nums: list[float] = []
     for row in (result.get("rows", []) or []):
@@ -424,6 +452,11 @@ def investigate(
         trace.append({"step": step, "type": "discard", "note": d})
 
     headlines = answer_obj.get("headline_numbers", []) or []
+    # backstop: if the answer states figures but the model gave no headline_numbers,
+    # derive up to 2 so numbers still get cross-checked (never present an unverified
+    # number as fact).
+    if not headlines and not forced:
+        headlines = _derive_headlines(answer_text)
 
     # ---- VERIFY headline numbers a DIFFERENT way ----
     verify_outcomes: list[bool] = []
@@ -442,6 +475,7 @@ def investigate(
         )
         vprompt = (
             f"SCHEMA:\n{schema}\n\nQUESTION: {question}\n"
+            f"ANSWER GIVEN: {answer_text}\n"
             f"HEADLINE TO CROSS-CHECK: {h.get('label')} = {h.get('value')}\n\n"
             f"OBSERVATIONS:\n{_scratch_text(scratchpad)}\n\n"
             "Write ONE different query that should reproduce that number."

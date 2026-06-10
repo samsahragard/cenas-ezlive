@@ -311,6 +311,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                    help="validate gold ground truth vs snapshots; no reasoner")
     p.add_argument("--no-promote", action="store_true")
     args = p.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):  # Windows cp1252 console -> never crash on a → / —
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                         datefmt="%H:%M:%S")
 

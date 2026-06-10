@@ -427,10 +427,14 @@ _TABLE_NOTES: dict[str, str] = {
     "toastdm.dm_employee_store": "employee<->store mapping (97 rows).",
     "driverdc.dm_driver":
         "48 driver profiles. home_store_key uses slugs 'uno'=copperfield, "
-        "'dos'=tomball (often NULL).",
+        "'dos'=tomball (often NULL). lifetime_delivery_count is a DENORMALIZED, "
+        "stale/sparse snapshot counter - do NOT use it to rank 'most deliveries'; "
+        "COUNT rows in dm_delivery instead.",
     "driverdc.dm_delivery":
         "per-delivery economics (20 rows, new lane, 2026-05-19+). driver_payout & "
-        "bonus fields are management-visible delivery costs.",
+        "bonus fields are management-visible delivery costs. This is the source of "
+        "truth for HOW MANY deliveries a driver made (count rows, join dm_driver for "
+        "the name).",
     "driverdc.dm_pay": "driver pay rollup SNAPSHOT; period only 'last30' today.",
     "driverdc.dm_driver_score": "score/tier history (859 rows) with point components.",
 }

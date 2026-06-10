@@ -379,7 +379,7 @@ def get_excluded_columns() -> dict[str, frozenset[str]]:
 # ---------------------------------------------------------------------------
 # Schema context text
 # ---------------------------------------------------------------------------
-_ANALYTICS_DOC_BUDGET = 4800  # table-aware cap; column signatures always survive
+_ANALYTICS_DOC_BUDGET = 4600  # table-aware cap; column signatures always survive
 
 # Short, load-bearing notes per raw table (verified against live data 2026-06-09).
 _TABLE_NOTES: dict[str, str] = {
@@ -437,10 +437,12 @@ _TABLE_NOTES: dict[str, str] = {
         "stale/sparse snapshot counter - do NOT use it to rank 'most deliveries'; "
         "COUNT rows in dm_delivery instead.",
     "driverdc.dm_delivery":
-        "per-delivery economics (20 rows, new lane, 2026-05-19+). driver_payout & "
-        "bonus fields are management-visible delivery costs. This is the source of "
-        "truth for HOW MANY deliveries a driver made (count rows, join dm_driver for "
-        "the name).",
+        "per-delivery economics (~23 rows, new lane, 2026-05-19+). driver_payout & "
+        "bonus fields are management-visible delivery costs. This is the AUTHORITATIVE "
+        "and ONLY correct source for HOW MANY deliveries a driver made (count rows, "
+        "join dm_driver for the name). Do NOT use ordersdc.dm_order_driver instead "
+        "(order-ASSIGNMENT incl. marketplace drivers - a different number). Sparse: a "
+        "week may truly have very few; report the real small count.",
     "driverdc.dm_pay": "driver pay rollup SNAPSHOT; period only 'last30' today.",
     "driverdc.dm_driver_score": "score/tier history (859 rows) with point components.",
 }

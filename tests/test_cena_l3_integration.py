@@ -93,6 +93,44 @@ def test_answer_non_data_does_not_investigate(rt, monkeypatch):
     assert resp["answer"] == "hello yourself"
 
 
+def test_answer_authorized_data_question_investigates_instead_of_queue(rt, monkeypatch):
+    # the REAL production path: an authorized partner's data question gets the
+    # "needs_approved_tool" queue reason -> L3 investigates instead of saving for Sam
+    import app.services.cena_sql_orchestrator as orch
+    monkeypatch.setattr(orch, "answer_question", lambda q, p=None, **k: _canned())
+    monkeypatch.setattr(rt, "_shared_force_review_reason", lambda q: None)
+    monkeypatch.setattr(rt, "_approved_tool_answer", lambda *a, **k: None)
+    monkeypatch.setattr(rt, "_should_queue",
+                        lambda q, p: (True, "data_question_needs_approved_tool", "ai.ask_claude"))
+
+    resp, status = rt._answer({"question": "how was sales this month?",
+                               "principal": {"role": "partner"}})
+    assert status == 200
+    assert resp["route_path"] == "investigation"
+    assert resp["queued"] is False
+    assert resp["show_work"]
+
+
+def test_answer_unauthorized_data_question_still_queues(rt, monkeypatch):
+    # access layer intact: a user lacking operational permission still gets queued,
+    # L3 is NOT consulted
+    import app.services.cena_sql_orchestrator as orch
+    monkeypatch.setattr(orch, "answer_question",
+                        lambda q, p=None, **k: pytest.fail("must not investigate for unauthorized"))
+    monkeypatch.setattr(rt, "_shared_force_review_reason", lambda q: None)
+    monkeypatch.setattr(rt, "_approved_tool_answer", lambda *a, **k: None)
+    monkeypatch.setattr(rt, "_should_queue",
+                        lambda q, p: (True, "data_question_requires_higher_permission", "ai.ask_claude"))
+    monkeypatch.setattr(rt, "_queue_for_review",
+                        lambda *a, **k: {"id": "qid", "ck_question_id": "ckid"})
+    monkeypatch.setattr(rt, "_queued_answer", lambda reason: "saved for Sam review")
+
+    resp, status = rt._answer({"question": "how was sales?", "principal": {"role": "employee"}})
+    assert status == 200
+    assert resp["route_path"] == "review"
+    assert resp["queued"] is True
+
+
 # --------------------------------------------------------------------------- #
 # Flask route helper seam
 # --------------------------------------------------------------------------- #

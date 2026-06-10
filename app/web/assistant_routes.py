@@ -2159,6 +2159,22 @@ def assistant_ask():
 
     should_queue, reason, required = _should_queue(safety_question, ctx)
     if should_queue:
+        # L3: authorized data question with no approved tool -> investigate, don't queue.
+        if reason in ("data_question_needs_approved_tool",
+                      "sensitive_or_operational_question_needs_approved_tool"):
+            investigation = _l3_investigation_answer(safety_question)
+            if investigation is not None:
+                return respond({
+                    "ok": True,
+                    "answer": investigation["answer"],
+                    "queued": False,
+                    "confidence": investigation.get("confidence"),
+                    "confidence_reason": investigation.get("confidence_reason"),
+                    "show_work": investigation.get("show_work"),
+                    "trace": investigation.get("trace"),
+                    "route_path": "investigation",
+                    "routed_tool_id": None,
+                })
         row = _queue_for_review(question, ctx, reason, required)
         answer = _queued_answer(reason)
         response = {

@@ -2211,6 +2211,29 @@ def _investigation_answer(question: str, principal: dict) -> dict | None:
     return res
 
 
+# reasons from _should_queue that mean "authorized user, but no approved tool" -
+# exactly the turns C.E.N.A. Level 3 should INVESTIGATE instead of saving for review.
+_L3_INVESTIGABLE_REASONS = frozenset({
+    "data_question_needs_approved_tool",
+    "sensitive_or_operational_question_needs_approved_tool",
+})
+
+
+def _investigation_response(investigation: dict) -> tuple[dict, int]:
+    return {
+        "ok": True,
+        "answer": investigation["answer"],
+        "queued": False,
+        "confidence": investigation.get("confidence"),
+        "confidence_reason": investigation.get("confidence_reason"),
+        "show_work": investigation.get("show_work"),
+        "trace": investigation.get("trace"),
+        "storage": "ck_runtime",
+        "route_path": "investigation",
+        "routed_tool_id": None,
+    }, 200
+
+
 def _answer(payload: dict) -> tuple[dict, int]:
     question = str(payload.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
     previous_question = str(payload.get("previous_question") or "").strip()[:_MAX_QUESTION_CHARS]
@@ -2284,6 +2307,14 @@ def _answer(payload: dict) -> tuple[dict, int]:
 
     should_queue, reason, required = _should_queue(resolved_question, principal)
     if should_queue:
+        # L3: an AUTHORIZED user asking a data/operational question with no approved
+        # tool -> investigate the data instead of saving it for Sam review. Access
+        # reasons (not_authenticated / missing permission / requires_higher_permission)
+        # are NOT in this set, so unauthorized users still queue.
+        if reason in _L3_INVESTIGABLE_REASONS:
+            investigation = _investigation_answer(resolved_question, principal)
+            if investigation is not None:
+                return _investigation_response(investigation)
         row = _queue_for_review(question, principal, reason, required, source)
         answer = _queued_answer(reason)
         response = {
@@ -2299,23 +2330,10 @@ def _answer(payload: dict) -> tuple[dict, int]:
         }
         return response, 200
 
-    # L3: no deterministic tool matched and the question cleared the review gate.
-    # If it is a data/operations question, investigate the data instead of a plain
-    # conversational reply. Falls through to the model on any failure.
+    # Non-queued data/operations question -> still investigate before a plain reply.
     investigation = _investigation_answer(resolved_question, principal)
     if investigation is not None:
-        return {
-            "ok": True,
-            "answer": investigation["answer"],
-            "queued": False,
-            "confidence": investigation.get("confidence"),
-            "confidence_reason": investigation.get("confidence_reason"),
-            "show_work": investigation.get("show_work"),
-            "trace": investigation.get("trace"),
-            "storage": "ck_runtime",
-            "route_path": "investigation",
-            "routed_tool_id": None,
-        }, 200
+        return _investigation_response(investigation)
 
     answer = None
     model = None

@@ -378,13 +378,14 @@
   }
 
   function addCkDev(text) {
-    return addMessage("assistant ckdev", text, false, "C.E.N.A. DEVELOPER");
+    return addMessage("assistant ckdev", text, false, "DEV");
   }
 
   (function injectCkDevStyle() {
     var st = document.createElement("style");
-    st.textContent = ".aiassist-msg.ckdev{border-left:3px solid #e0a93f;}" +
-      ".aiassist-msg.ckdev .aiassist-meta{color:#e0a93f;}";
+    st.textContent = ".aiassist-msg.ckdev{background:#2a2316;border:1px solid #e0a93f;" +
+      "border-left:4px solid #e0a93f;border-radius:10px;}" +
+      ".aiassist-msg.ckdev .aiassist-meta{color:#e0a93f;font-weight:700;letter-spacing:.06em;}";
     document.head.appendChild(st);
   })();
 
@@ -626,12 +627,9 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var answer = data && data.answer ? data.answer : "I could not answer that yet.";
-        // Dual-responder payload: ck_intro / cena_answer / ck_answer come from
-        // the CK supervisor lane; legacy single-answer responses still render.
-        if (data && data.ck_intro) {
-          var introMsg = addCkDev(data.ck_intro);
-          thread.insertBefore(introMsg, pending);
-        }
+        // Dual-responder payload: cena_answer / ck_intro / ck_answer come from
+        // the supervisor lane; legacy single-answer responses still render.
+        // Order: CENA's answer, then DEV's intro (first answer only), then DEV's answer.
         var hasSplit = data && Object.prototype.hasOwnProperty.call(data, "cena_answer");
         var cenaText = hasSplit ? data.cena_answer : answer;
         if (cenaText) {
@@ -653,6 +651,9 @@
         } else {
           pending.remove();
           if (data && data.queued) loadReviewItems();
+        }
+        if (data && data.ck_intro) {
+          addCkDev(data.ck_intro);
         }
         if (data && data.ck_answer) {
           addCkDev(data.ck_answer + (data.ck_followup ? "\n\n" + data.ck_followup : ""));

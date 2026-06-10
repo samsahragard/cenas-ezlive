@@ -62,6 +62,7 @@ PROGRESS_HANDLER_N = 1000  # check elapsed every ~1000 VM steps
 
 # Module the snapshot refresh hands off to (Subagent C, stub-tolerant).
 _ANALYTICS_MODULE = "app.services.cena_sql_analytics"
+_DB_CATALOG_MODULE = "app.services.cena_db_catalog"
 
 
 class CenaSqlError(Exception):
@@ -170,6 +171,28 @@ def _run_analytics_build(snap_dir: Path) -> dict:
         return {"ok": False, "error": detail}
 
 
+def _run_db_overlay_build(data_dir: Path) -> dict:
+    """Attempt the organized DB overlay build. STUB-TOLERANT: never raises."""
+    try:
+        mod = importlib.import_module(_DB_CATALOG_MODULE)
+        return mod.build_db_overlay(data_dir=str(data_dir))
+    except Exception as e:  # noqa: BLE001 - overlay issues must not block snapshots
+        detail = f"unavailable: {type(e).__name__}: {e}"
+        logger.info("DB overlay build skipped: %s", detail)
+        return {"ok": False, "error": detail}
+
+
+def _write_snapshot_meta(snap_dir: Path, result: dict) -> None:
+    meta_path = snap_dir / "snapshot_meta.json"
+    tmp_meta = snap_dir / f"snapshot_meta.json.tmp-{os.getpid()}"
+    try:
+        tmp_meta.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp_meta, meta_path)
+        result["meta_path"] = str(meta_path)
+    except OSError as e:
+        result["meta_error"] = f"{type(e).__name__}: {e}"
+
+
 def refresh_snapshots(data_dir: str | None = None) -> dict:
     """Copy every configured source DB into the snapshots dir; build analytics.
 
@@ -190,15 +213,9 @@ def refresh_snapshots(data_dir: str | None = None) -> dict:
         result["sources"][alias] = _copy_one_source(alias, _source_path(alias), snap_dir)
 
     result["analytics"] = _run_analytics_build(snap_dir)
-
-    meta_path = snap_dir / "snapshot_meta.json"
-    tmp_meta = snap_dir / f"snapshot_meta.json.tmp-{os.getpid()}"
-    try:
-        tmp_meta.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp_meta, meta_path)
-        result["meta_path"] = str(meta_path)
-    except OSError as e:
-        result["meta_error"] = f"{type(e).__name__}: {e}"
+    _write_snapshot_meta(snap_dir, result)
+    result["db_overlay"] = _run_db_overlay_build(_data_dir(data_dir))
+    _write_snapshot_meta(snap_dir, result)
     return result
 
 
@@ -217,10 +234,16 @@ def snapshot_status(data_dir: str | None = None) -> dict:
 
     snapshots = {alias: _entry(snap_dir / f"{alias}.sqlite") for alias in SOURCES}
     analytics = _entry(snap_dir / ANALYTICS_DB_NAME)
+    db_root = _data_dir(data_dir) / "DB"
+    db_overlay = {
+        "catalog": _entry(db_root / "catalog.json"),
+        "central": _entry(db_root / "central" / "cena_points.sqlite"),
+    }
     return {
         "snapshot_dir": str(snap_dir),
         "snapshots": snapshots,
         "analytics": analytics,
+        "db_overlay": db_overlay,
         "missing": [a for a, s in snapshots.items() if not s["exists"]],
     }
 

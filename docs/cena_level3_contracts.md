@@ -18,7 +18,16 @@ If reality forces a deviation, document it in your report; do not silently chang
 ## 1. Data sources (env-overridable defaults, verified live today)
 
 Base data dir: `CENA_L3_DATA_DIR` default `C:\Users\sam\cena-l3data`
-(subdirs: `snapshots\`, `memory\` created on demand).
+(subdirs: `snapshots\`, `memory\`, and generated `DB\` overlay created on demand).
+
+`snapshots\` remains canonical for execution. `DB\` is the maintained organized
+overlay for humans and future C.E.N.A. data-point work:
+`DB\central\cena_points.sqlite`, `DB\toast\emp\`, `DB\toast\labor\`,
+`DB\orders\ezcater\`, `DB\drivers\`, `DB\app\`, `DB\analytics\`,
+`DB\memory\`, plus `DB\catalog.json`.
+`DB\central` is the sanitized derived reasoning DB. The other DB folders are
+local-only raw operational mirrors for C.E.N.A. on Sam's machine; they are not
+public sanitized exports and must not be published.
 
 | alias    | env override          | default path                                          | contents (verified) |
 |----------|-----------------------|-------------------------------------------------------|---------------------|
@@ -43,6 +52,12 @@ for it stays NULL with a documented gotcha.
   `%CENA_L3_DATA_DIR%\snapshots\cena_analytics.db`. Writes a `snapshot_meta.json`
   (per-source: source path, copied_at, ok/error, row hint). Missing sources are recorded,
   not fatal.
+- After analytics, `refresh_snapshots()` calls `cena_db_catalog.build_db_overlay()`,
+  which regenerates `%CENA_L3_DATA_DIR%\DB\catalog.json`, organized DB-file copies,
+  and `DB\central\cena_points.sqlite`. This overlay is derived and non-fatal; it must
+  never replace or move canonical `snapshots\` / `memory\` files. It reads the current
+  `snapshot_meta.json` so a failed source refresh removes any stale mirror from `DB\`
+  instead of presenting it as refreshed.
 - `run_readonly_sql` opens MAIN = `snapshots\cena_analytics.db` via URI
   `mode=ro&immutable=1`, then ATTACHes the five snapshot files read-only as schemas
   `appdb`, `toast`, `toastdm`, `ordersdc`, `driverdc`. ATTACH is trusted setup code only;
@@ -79,6 +94,12 @@ snapshot_status() -> dict                             # ages, paths, missing lis
 build_analytics_db(snapshot_dir: str | None = None) -> str   # returns built db path
 SCHEMA_DOC: str        # every analytics table + column documented; A embeds this
                        # in schema context (A falls back to section 4 text if import fails)
+
+# cena_db_catalog.py                                  (owner: shared maintenance)
+build_db_overlay(data_dir: str | None = None) -> dict
+    # Regenerates %CENA_L3_DATA_DIR%\DB: organized source DB copies, catalog.json,
+    # and central/cena_points.sqlite from sanitized analytics. Non-canonical and
+    # safe to delete/rebuild; refresh_snapshots() calls it after analytics.
 
 # cena_memory.py                                      (owner: Subagent D)
 recall(question: str) -> dict                         # {"exemplars": [...], "insights": [...]}

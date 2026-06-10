@@ -11,10 +11,11 @@ import json
 import os
 import sqlite3
 import time
+from pathlib import Path
 
 import pytest
 
-from app.services import cena_sql_executor as ex
+from app.services import cena_db_catalog, cena_sql_executor as ex
 from app.services.cena_sql_executor import (
     CenaSqlError,
     refresh_snapshots,
@@ -111,6 +112,25 @@ def test_refresh_copies_sources_and_writes_meta(snap_env):
     # analytics build attempted, never fatal (module may or may not exist yet)
     assert isinstance(result["analytics"], dict)
     assert "ok" in result["analytics"]
+    # organized DB overlay is derived from the same refresh and maintained with it
+    db_root = snap_env["data_dir"] / "DB"
+    assert result["db_overlay"]["ok"] is True
+    assert (db_root / "catalog.json").exists()
+    assert (db_root / "central" / "cena_points.sqlite").exists()
+    catalog = json.loads((db_root / "catalog.json").read_text(encoding="utf-8"))
+    assert catalog["canonical"]["snapshots"] == str(snap_dir)
+    assert catalog["automation"]["refreshes_overlay"] is True
+    assert catalog["data_policy"]["central_sanitized"] is True
+    assert catalog["data_policy"]["raw_operational_mirrors_local_only"] is True
+    assert set(catalog["folders"]) == {
+        "central", "analytics", "toast/emp", "toast/labor", "orders/ezcater",
+        "drivers", "app", "memory",
+    }
+    files_by_alias = {entry["alias"]: entry for entry in catalog["files"]}
+    for alias in ("appdb", "toast", "toastdm", "ordersdc", "driverdc", "analytics"):
+        assert files_by_alias[alias]["copied"] is True
+        assert files_by_alias[alias]["exists"] is True
+    assert catalog["central"]["data_points"] >= 0
 
 
 def test_refresh_tolerates_missing_source(snap_env, monkeypatch):
@@ -125,6 +145,22 @@ def test_refresh_tolerates_missing_source(snap_env, monkeypatch):
         (snap_env["data_dir"] / "snapshots" / "snapshot_meta.json").read_text(encoding="utf-8")
     )
     assert meta["sources"]["toast"]["ok"] is False
+
+
+def test_refresh_removes_stale_db_overlay_copy_for_failed_source(snap_env, monkeypatch):
+    refresh_snapshots()
+    stale_overlay = snap_env["data_dir"] / "DB" / "toast" / "labor" / "toast.sqlite"
+    assert stale_overlay.exists()
+
+    monkeypatch.setenv("CENA_L3_SRC_TOAST", str(snap_env["src_dir"] / "nope.db"))
+    result = refresh_snapshots()
+    assert result["sources"]["toast"]["ok"] is False
+    assert not stale_overlay.exists()
+    files_by_alias = {entry["alias"]: entry for entry in result["db_overlay"]["files"]}
+    assert files_by_alias["toast"]["copied"] is False
+    assert files_by_alias["toast"]["exists"] is False
+    assert files_by_alias["toast"]["removed_stale"] is True
+    assert result["db_overlay"]["source_refresh"]["failed_aliases"] == ["toast"]
 
 
 def test_refresh_tolerates_missing_analytics_module(snap_env, monkeypatch):
@@ -148,6 +184,72 @@ def test_refresh_tolerates_raising_analytics_build(snap_env, monkeypatch):
     assert "kapow" in result["analytics"]["error"]
 
 
+def test_refresh_tolerates_raising_db_overlay_build(snap_env, monkeypatch):
+    import types, sys
+    mod = types.ModuleType("app.services._boom_db_overlay")
+
+    def _boom(data_dir=None):
+        raise RuntimeError("overlay kapow")
+
+    mod.build_db_overlay = _boom
+    monkeypatch.setitem(sys.modules, "app.services._boom_db_overlay", mod)
+    monkeypatch.setattr(ex, "_DB_CATALOG_MODULE", "app.services._boom_db_overlay")
+    result = refresh_snapshots()
+    assert result["db_overlay"]["ok"] is False
+    assert "overlay kapow" in result["db_overlay"]["error"]
+    assert result["sources"]["appdb"]["ok"] is True
+
+
+def test_db_overlay_extracts_analytics_data_points(tmp_path):
+    data_dir = tmp_path / "data"
+    snap_dir = data_dir / "snapshots"
+    snap_dir.mkdir(parents=True)
+    analytics = snap_dir / "cena_analytics.db"
+    conn = sqlite3.connect(str(analytics))
+    conn.execute(
+        """
+        CREATE TABLE daily_sales_summary (
+          store_key TEXT,
+          business_date TEXT,
+          net_sales REAL,
+          gross_sales REAL,
+          order_count INTEGER,
+          check_count INTEGER,
+          avg_check REAL,
+          covers INTEGER,
+          instore_net REAL,
+          daypart_breakfast_net REAL,
+          daypart_lunch_net REAL,
+          daypart_dinner_net REAL
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO daily_sales_summary VALUES
+          ('copperfield', '2026-06-09', 100.0, 120.0, 3, 3, 40.0, 12, NULL, 0, 20, 100)
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    result = cena_db_catalog.build_db_overlay(data_dir=str(data_dir))
+    central = Path(result["central"]["path"])
+    conn = sqlite3.connect(str(central))
+    try:
+        metrics = {
+            row[0]
+            for row in conn.execute(
+                "SELECT metric FROM data_points WHERE source_table = 'daily_sales_summary'"
+            )
+        }
+    finally:
+        conn.close()
+    assert {"net_sales", "gross_sales", "covers", "daypart_dinner_net"} <= metrics
+    assert "instore_net" not in metrics
+    assert result["central"]["data_points"] == 9
+
+
 def test_snapshot_status_reports_ages_and_missing(refreshed, monkeypatch):
     status = snapshot_status()
     assert status["missing"] == []
@@ -156,6 +258,8 @@ def test_snapshot_status_reports_ages_and_missing(refreshed, monkeypatch):
         assert entry["exists"] is True
         assert entry["age_seconds"] >= 0
     assert "exists" in status["analytics"]
+    assert status["db_overlay"]["catalog"]["exists"] is True
+    assert status["db_overlay"]["central"]["exists"] is True
     # delete one -> shows up in missing
     os.remove(status["snapshots"]["driverdc"]["path"])
     status2 = snapshot_status()

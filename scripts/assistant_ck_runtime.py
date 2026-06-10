@@ -1899,7 +1899,7 @@ def _approved_tool_answer(
         or _requested_store(resolved_question)
     ):
         return None
-    if routed_tool_id == "orders.store_summary" and _wants_cena_l3_business_analytics(resolved_question):
+    if routed_tool_id.startswith("orders.") and _wants_cena_l3_business_analytics(resolved_question):
         return None
     if routed_tool_id == "toast.employee_profiles" and _toast_employee_profiles_tool_authorized(principal, tools):
         employee_profiles = tool_data.get("toast.employee_profiles") if isinstance(tool_data, dict) else None

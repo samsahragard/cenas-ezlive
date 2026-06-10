@@ -327,7 +327,7 @@ def test_ck_runtime_does_not_infer_deterministic_route_from_tool_data(monkeypatc
 
 
 def test_store_scoped_sales_question_routes_to_l3_not_aggregate_toast(monkeypatch):
-    monkeypatch.delenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", raising=False)
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
     monkeypatch.setattr(
         render_routes,
         "_gemini_generate",
@@ -341,6 +341,8 @@ def test_store_scoped_sales_question_routes_to_l3_not_aggregate_toast(monkeypatc
 
     assert route["route_path"] == "review"
     assert route["tool_id"] is None
+    assert route["classifier"]["enabled"] is True
+    assert route["classifier"]["reason"] == "cena_l3_business_analytics"
 
 
 @pytest.mark.parametrize(
@@ -351,7 +353,7 @@ def test_store_scoped_sales_question_routes_to_l3_not_aggregate_toast(monkeypatc
     ],
 )
 def test_l3_business_analytics_questions_route_to_l3_not_deterministic(question, monkeypatch):
-    monkeypatch.delenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", raising=False)
+    monkeypatch.setenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", "1")
     monkeypatch.setattr(
         render_routes,
         "_gemini_generate",
@@ -362,6 +364,8 @@ def test_l3_business_analytics_questions_route_to_l3_not_deterministic(question,
 
     assert route["route_path"] == "review"
     assert route["tool_id"] is None
+    assert route["classifier"]["enabled"] is True
+    assert route["classifier"]["reason"] == "cena_l3_business_analytics"
 
 
 def test_ck_runtime_rejects_stale_aggregate_toast_route_for_store_scoped_sales(monkeypatch):
@@ -415,6 +419,18 @@ def test_ck_runtime_rejects_stale_aggregate_toast_route_for_store_scoped_sales(m
                 "today_orders": 8,
                 "tomorrow_orders": 4,
                 "store_counts": {"tomball": 4, "copperfield": 4},
+            },
+        ),
+        (
+            "How many orders did Tomball ring up yesterday?",
+            "orders.catering_count",
+            {
+                "ok": True,
+                "today": 8,
+                "tomorrow": 4,
+                "next_7_days": 13,
+                "next_30_days": 14,
+                "total_visible": 499,
             },
         ),
     ],

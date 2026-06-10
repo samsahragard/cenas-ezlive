@@ -1630,6 +1630,13 @@ def _route_approved_tool_choice(question: str, ctx: dict[str, Any]) -> dict[str,
             "latency_ms": int((time.perf_counter() - started) * 1000),
             "classifier": {"enabled": _classifier_enabled(), "reason": "unsupported_toast_sales_scope"},
         }
+    if _wants_cena_l3_business_analytics(question):
+        return {
+            "tool_id": None,
+            "route_path": "review",
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            "classifier": {"enabled": _classifier_enabled(), "reason": "cena_l3_business_analytics"},
+        }
     tool_id = _deterministic_route_tool_id(question, ctx)
     if tool_id:
         return {

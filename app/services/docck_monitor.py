@@ -123,6 +123,50 @@ def _agent_state(sess, agent: DocckAgent) -> tuple[str, int | None]:
     return "alive", secs
 
 
+# The heartbeat sidecar posts agent_state='degraded' when the worker's local
+# /health probe fails — i.e. the WORKER is dead but the sidecar is alive. Those
+# heartbeats keep the recency-based state 'alive', so missing-only triggering
+# never fires and a dead worker sits unrevived forever (found 6/9 while
+# verifying "docck can revive pwck"). Treat sustained-degraded as down.
+DEGRADED_STATES = ("degraded", "stopping", "unhealthy")
+DEGRADED_GRACE_SECONDS = 120  # 4+ consecutive bad 30s probes — not a blip
+
+
+def _degraded_down(sess, agent_id: str) -> tuple[bool, int | None]:
+    """True if the latest heartbeat reports a degraded worker AND no
+    non-degraded heartbeat has arrived within the grace window. Returns
+    (is_down, seconds_since_last_good). Agents whose senders don't populate
+    agent_state never trigger this (conservative)."""
+    last_hb = sess.execute(
+        select(DocckHeartbeat).where(DocckHeartbeat.agent_id == agent_id)
+        .order_by(DocckHeartbeat.received_at.desc()).limit(1)
+    ).scalar_one_or_none()
+    if last_hb is None or last_hb.agent_state not in DEGRADED_STATES:
+        return False, None
+    # NB: SQL `NOT IN` silently drops NULL rows — OR the IS NULL in explicitly
+    # so senders that don't populate agent_state count as good.
+    _not_degraded = (DocckHeartbeat.agent_state.is_(None)
+                     | DocckHeartbeat.agent_state.notin_(DEGRADED_STATES))
+    cutoff = datetime.utcnow() - timedelta(seconds=DEGRADED_GRACE_SECONDS)
+    recent_good = sess.execute(
+        select(DocckHeartbeat).where(
+            DocckHeartbeat.agent_id == agent_id,
+            DocckHeartbeat.received_at > cutoff,
+            _not_degraded,
+        ).limit(1)
+    ).scalar_one_or_none()
+    if recent_good is not None:
+        return False, None
+    last_good = sess.execute(
+        select(DocckHeartbeat).where(
+            DocckHeartbeat.agent_id == agent_id,
+            _not_degraded,
+        ).order_by(DocckHeartbeat.received_at.desc()).limit(1)
+    ).scalar_one_or_none()
+    secs = int((datetime.utcnow() - last_good.received_at).total_seconds()) if last_good else None
+    return True, secs
+
+
 def _post_alert_deduped(sess, agent_id, severity, channel, dedupe_key, body,
                         dedupe_window_seconds=300) -> bool:
     cutoff = datetime.utcnow() - timedelta(seconds=dedupe_window_seconds)
@@ -223,6 +267,28 @@ def run_tick_evaluation() -> dict:
                              f"closed as 'orphaned' (auto-recovery unblocked).",
                         dedupe_window_seconds=300,
                     )
+                    # Commit now so _maybe_start_recovery (separate session)
+                    # sees the closed rows in this same tick, not the next.
+                    sess.commit()
+            if state in ("alive", "slow"):
+                # Worker-dead-sidecar-alive: heartbeats keep arriving but
+                # report a failed health probe. Sustained = down → recover.
+                down, good_secs = _degraded_down(sess, agent.id)
+                if down:
+                    posted = _post_alert_deduped(
+                        sess=sess, agent_id=agent.id, severity="urgent",
+                        channel="dev_chat", dedupe_key=f"{agent.id}_degraded_v1",
+                        body=f"[docck] {agent.display_name} DEGRADED — sidecar "
+                             f"heartbeats arriving but worker health probe failing "
+                             f"for {good_secs if good_secs is not None else '>'+str(DEGRADED_GRACE_SECONDS)} s. "
+                             f"(machine {agent.machine_label})",
+                        dedupe_window_seconds=300,
+                    )
+                    if posted:
+                        fired.append(agent.id)
+                    status = _maybe_start_recovery(agent)
+                    if status == "recovery_started":
+                        recoveries.append(agent.id)
             if state in ("missing", "never"):
                 # Only count as "fired" if a NEW alert was actually posted
                 # (i.e. not suppressed by the 5-min dedupe window). Previously
@@ -324,12 +390,18 @@ def _watchdog_post(agent: DocckAgent, path: str, payload: dict, timeout: int = 2
 
 
 def _heartbeat_since(sess, agent_id: str, since: datetime) -> bool:
-    """True if any heartbeat for this agent arrived after `since` — i.e. the
-    agent recovered."""
+    """True if a heartbeat showing a WORKING agent arrived after `since`.
+    Heartbeats whose agent_state reports a dead worker must NOT count as
+    recovery — the sidecar posts 'degraded' continuously even while the
+    worker is down, which previously made any restart step look successful.
+    NULL agent_state still counts (senders that don't populate the field
+    keep the legacy any-heartbeat behavior)."""
     row = sess.execute(
         select(DocckHeartbeat).where(
             DocckHeartbeat.agent_id == agent_id,
             DocckHeartbeat.received_at > since,
+            (DocckHeartbeat.agent_state.is_(None)
+             | DocckHeartbeat.agent_state.notin_(DEGRADED_STATES)),
         ).limit(1)
     ).scalar_one_or_none()
     return row is not None

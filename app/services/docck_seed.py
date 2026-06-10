@@ -54,6 +54,19 @@ _PWCK_RESTART_SEQUENCE = [
     {"action": "reboot_machine",                                                            "wait_seconds": 360},
 ]
 
+# pwck2 — independent driver-assignment verifier/backstop on AiCk (Sam 6/9:
+# 100% separate from pwck; wakes 2 min after an order arrives, verifies pwck
+# assigned the requested driver, performs the assignment itself if not).
+# Scheduled Tasks on AiCk; token plaintext at C:\Users\sam\cena\.secrets\
+# pwck2_heartbeat_token.txt (NOT recorded here — hash only).
+_PWCK2_HASH = "scrypt:32768:8:1$CWd3DHxI5pzju98r$e23c74b0ea5775532755d66c96c8b892c1b3108d1ab95dd615803beb272752afd9fda3bd9f57e20080574955c4205a6ec7ff15996b543ac24e70df3cc1ac83fc"
+_PWCK2_SERVICES = {"primary": "Pwck2Service", "watchers": ["Pwck2HeartbeatSender"]}
+_PWCK2_RESTART_SEQUENCE = [
+    {"action": "restart_service",  "service_name": "Pwck2Service",                            "wait_seconds": 30},
+    {"action": "restart_services", "service_names": ["Pwck2Service", "Pwck2HeartbeatSender"], "wait_seconds": 90},
+    {"action": "reboot_machine",                                                              "wait_seconds": 360},
+]
+
 
 _SPECS = (
     {
@@ -78,6 +91,19 @@ _SPECS = (
         "heartbeat_token_hash": _PWCK_HASH,
         "services_json": _PWCK_SERVICES,
         "restart_sequence_json": _PWCK_RESTART_SEQUENCE,
+        "enabled": True,
+        "alert_dev_chat": True,
+        "alert_telegram_threshold_seconds": 300,
+    },
+    {
+        "id": "pwck2",
+        "display_name": "pwck2",
+        "machine_label": "AiCk",
+        "watchdog_url": "http://100.108.119.19:8767",
+        "watchdog_secret_env_var": "WATCHDOG_AICK_SECRET",
+        "heartbeat_token_hash": _PWCK2_HASH,
+        "services_json": _PWCK2_SERVICES,
+        "restart_sequence_json": _PWCK2_RESTART_SEQUENCE,
         "enabled": True,
         "alert_dev_chat": True,
         "alert_telegram_threshold_seconds": 300,

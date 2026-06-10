@@ -13,10 +13,17 @@ logger = logging.getLogger(__name__)
 
 # add catering utensils calculations here
 
-def per_person_rate(headcount: int, base_oz: float, above_30_oz: float | None = None) -> float:
-    if above_30_oz is None:
-        return base_oz
-    return above_30_oz if headcount > 30 else base_oz
+def per_person_rate(
+    headcount: int,
+    base_oz: float,
+    above_30_oz: float | None = None,
+    above_50_oz: float | None = None,
+) -> float:
+    if above_50_oz is not None and headcount > 50:
+        return above_50_oz
+    if above_30_oz is not None and headcount > 30:
+        return above_30_oz
+    return base_oz
 
 def tortilla_packets(headcount: int, tortilla: TortillaChoice) -> list[PacketLineItem]:
     if tortilla in ("none", None):
@@ -87,7 +94,7 @@ def party_sides(headcount: int, beans_choice: BeansChoice) -> list[KitchenLineIt
 
     lines: list[KitchenLineItem] = []
 
-    onions_pp = per_person_rate(headcount, base_oz=1.5, above_30_oz=1.0)
+    onions_pp = per_person_rate(headcount, base_oz=1.5, above_30_oz=1.0, above_50_oz=0.7)
     onions_total = onions_pp * headcount
     lines.append(make_weight_line("Onions", onions_total, onions_pp, "none"))
 
@@ -99,17 +106,17 @@ def party_sides(headcount: int, beans_choice: BeansChoice) -> list[KitchenLineIt
     guac_total = guac_pp * headcount
     lines.append(make_weight_line("Guacamole", guac_total, guac_pp, container_for_oz(guac_total)))
 
-    sour_cream_pp = per_person_rate(headcount, base_oz=1.5, above_30_oz=1.0)
+    sour_cream_pp = per_person_rate(headcount, base_oz=1.5, above_30_oz=1.0, above_50_oz=0.8)
     sour_cream_total = sour_cream_pp * headcount
     lines.append(make_weight_line("Sour Cream", sour_cream_total, sour_cream_pp, container_for_oz(sour_cream_total)))
 
-    rice_pp = per_person_rate(headcount, base_oz=3.8, above_30_oz=3.5)
+    rice_pp = per_person_rate(headcount, base_oz=3.8, above_30_oz=3.5, above_50_oz=3.0)
     rice_total = rice_pp * headcount
     lines.append(make_weight_line("Rice", rice_total, rice_pp, container_for_oz(rice_total)))
 
     bc = _resolve_beans_choice(beans_choice)
     if bc != "none":
-        beans_pp = per_person_rate(headcount, base_oz=3.8, above_30_oz=3.5)
+        beans_pp = per_person_rate(headcount, base_oz=3.8, above_30_oz=3.5, above_50_oz=3.0)
         beans_total = beans_pp * headcount
         beans_name = { 
             "refried": "Refried Beans",
@@ -118,7 +125,7 @@ def party_sides(headcount: int, beans_choice: BeansChoice) -> list[KitchenLineIt
         }.get(bc, "Beans")
         lines.append(make_weight_line(beans_name, beans_total, beans_pp, container_for_oz(beans_total)))
 
-    chips_pp = per_person_rate(headcount, base_oz=3.0)
+    chips_pp = per_person_rate(headcount, base_oz=3.0, above_30_oz=2.5, above_50_oz=2.3)
     chips_total = chips_pp * headcount
     lines.append(make_weight_line("Chips", chips_total, chips_pp, "none"))
 

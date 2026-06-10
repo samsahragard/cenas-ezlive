@@ -210,9 +210,13 @@
   .sv2-row.open .sv2-namecol { background: #2a1410; }
   .sv2-row.open .sv2-emp-name { color: var(--open); letter-spacing:.04em; }
   .sv2-row.former .sv2-emp-name { opacity: .6; }   /* Sam #2872: former staff, struck-through (<s>) + muted */
-  .sv2-cell { padding: 5px; min-width: 88px; height: 62px; cursor: pointer; transition: background .12s; }
-  .sv2-cell:hover { background: rgba(228,179,64,.06); }
-  .sv2-cell.is-today { background: rgba(228,179,64,.04); }
+  .sv2-cell {
+    padding: 5px; min-width: 88px; height: 62px; cursor: pointer;
+    background: rgba(126, 120, 113, 0.18);
+    transition: background .12s;
+  }
+  .sv2-cell:hover { background: rgba(154, 145, 134, .24); }
+  .sv2-cell.is-today { background: rgba(149, 127, 78, .22); }
   .sv2-addhint { color: var(--sk-cream-meta); font-size: 18px; text-align: center;
     line-height: 52px; opacity: 0; transition: opacity .12s; }
   .sv2-cell:hover .sv2-addhint { opacity: 1; }
@@ -220,7 +224,7 @@
   .sv2-chip {
     position: relative;
     display: block; border-radius: 7px; padding: 5px 7px; margin-bottom: 4px;
-    background: var(--sk-bg-card-hi); border-left: 3px solid var(--foh);
+    background: rgba(58, 32, 21, 0.96); border-left: 3px solid var(--foh);
     cursor: pointer; transition: transform .05s, background .12s;
   }
   .sv2-chip:hover { background: rgba(60,34,22,1); }
@@ -231,9 +235,10 @@
   /* per-shift publish: an UNPUBLISHED shift renders HOLLOW (transparent fill + dashed
      outline) so it's obvious it isn't published yet + the employee can't see it. The
      position color stays on the (now dashed) left bar. */
-  .sv2-chip.unpublished { background: transparent;
+  .sv2-chip.unpublished { background: rgba(58, 32, 21, 0.34);
     border-top: 1px dashed var(--sk-cream-faint); border-right: 1px dashed var(--sk-cream-faint);
-    border-bottom: 1px dashed var(--sk-cream-faint); border-left-style: dashed; }
+    border-bottom: 1px dashed var(--sk-cream-faint); border-left-style: dashed;
+    box-shadow: inset 0 0 0 1px rgba(250,246,236,.05); }
   .sv2-chip-unpub { font-size: 9px; letter-spacing:.09em; text-transform:uppercase;
     color: var(--sk-cream-faint); font-weight:700; margin-top:2px; }
   .sv2-chip-time { font-family:'JetBrains Mono',monospace; font-size: 11.5px; font-weight: 600; color: var(--sk-cream); }
@@ -551,11 +556,10 @@
   // CFG: { storeLabel, boardUrl, scheduleNewUrl, scheduleUrlBase, shiftNewUrl, shiftUrlBase }
   // B5 publish URL = CFG.scheduleUrlBase + "/" + <schedule_id> + "/publish"
 
-  var DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  // Schedule week begins on this weekday (0=Sun..6=Sat). Sam #2603: start Saturday,
-  // so the columns run Sat..Fri. Flip this one value to change the week-start day.
-  var WEEK_START_DOW = 6;  // 6 = Saturday
+  // Schedule week begins on this weekday (0=Sun..6=Sat), so the columns run Sun..Sat.
+  var WEEK_START_DOW = 0;
 
   var state = {
     weekStart: weekStartOf(new Date()),  // Date (local midnight, week-start day)
@@ -771,7 +775,7 @@
     for (var i = 0; i < 7; i++) {
       var d = addDays(state.weekStart, i);
       var isT = sameDay(d, today);
-      html += '<th class="' + (isT ? "is-today" : "") + '">' + DOW[(d.getDay() + 6) % 7] +
+      html += '<th class="' + (isT ? "is-today" : "") + '">' + DOW[d.getDay()] +
               '<span class="dom">' + d.getDate() + '</span></th>';
     }
     elHead.innerHTML = html;

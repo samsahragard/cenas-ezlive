@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import List, TypedDict
 
-KITCHEN_READY_BUFFER = 90
+KITCHEN_READY_BUFFER = 60
 MULTI_STOP_BUFFER_MINUTES = 20
 
 

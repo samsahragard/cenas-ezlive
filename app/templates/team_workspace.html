@@ -280,6 +280,10 @@
   .tws-store-grp .tws-multi { gap: 6px; }
 
   /* embedded sub-tab iframes (Schedule / Market) */
+  .tws-schedule-storebar,
+  .tws-market-storebar { margin-top: 2px; }
+  .tws-store-shell { display: none; position: relative; min-height: 70vh; }
+  .tws-store-shell.active { display: block; }
   .tws-embed-wrap { position: relative; min-height: 70vh; }
   .tws-embed-frame { width: 100%; height: 78vh; border: 0; border-radius: var(--tws-radius); background: #241610; opacity: 0; transition: opacity .25s; }
   .tws-embed-frame.ready { opacity: 1; }
@@ -290,20 +294,11 @@
   .tws-stub { padding: 40px 20px; text-align: center; color: var(--tws-cream-meta); font-size: 13px; }
   .tws-stub b { color: var(--tws-cream-dim); }
 
-  /* "Both stores" mode (Sam #2675b): each Schedule sub-tab stacks BOTH stores'
-     iframes, one per store, with a small store-label header above each. The
-     header only appears in both-mode (JS adds .both to the embed-wrap); in
-     single-store mode the headers are hidden and only the primary iframe shows,
-     so the existing single-store view is byte-for-byte unchanged. */
   .tws-sched-storehead {
-    display: none; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--tws-gold); font-weight: 700; padding: 4px 2px 6px; margin-top: 10px;
   }
-  .tws-embed-wrap.both .tws-sched-storehead { display: block; }
-  .tws-embed-wrap.both .tws-sched-storehead:first-child { margin-top: 0; }
-  /* stacked iframes each keep full width; only the primary is hidden until ready
-     by .tws-embed-frame's opacity rule, so the second slots in below it. */
-  .tws-embed-wrap.both .tws-embed-frame { display: block; }
+  .tws-sched-storehead:first-child { margin-top: 0; }
 
   /* +Add modal */
   .tws-modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: flex-start; justify-content: center; z-index: 300; padding: 40px 16px; overflow-y: auto; }
@@ -366,18 +361,12 @@
     <div id="tws-roster"><div class="tws-empty">Loading roster...</div></div>
   </div>
 
-  {# ---- SCHEDULE panel: nested [Week | Time off | Availability], each a chrome-stripped iframe of the existing mgr page (aick #2333) ----
-     S7 store-split: BOTH stores are always shown. The old single/both store
-     <select> + both-mode scaffolding is REMOVED; instead each sub-tab panel
-     renders TWO labeled iframe blocks -- Copperfield (/uno/) then Tomball
-     (/dos/) -- each a SINGLE-store iframe pointing straight at that store's slug.
-     The three sub-tabs (Week / Time off / Availability) still toggle the
-     .tws-sub2panel blocks; since each panel now holds two store iframes, the
-     toggle reveals BOTH stores for the active sub-tab. Each iframe has its own
-     unique data-embed-frame key "<sub2>-<slug>" so loadFrame/stripChrome/reveal
-     operate per store, UNCHANGED. The stripChrome content-height-grow mechanism
-     (~:464) is untouched and simply runs once per store iframe. #}
+  {# ---- SCHEDULE panel: location tabs first, then Week | Time off | Availability for that store. ---- #}
   <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel">
+    <div class="tws-store-tabs tws-schedule-storebar" role="tablist" aria-label="Schedule location">
+      <button class="tws-store-tab active" type="button" role="tab" data-sched-store-tab="uno">Copperfield</button>
+      <button class="tws-store-tab" type="button" role="tab" data-sched-store-tab="dos">Tomball</button>
+    </div>
     <div class="tws-sched-toolbar">
       <div class="tws-subbar" role="tablist">
         <button class="tws-subtab active" data-sub2="week" type="button" role="tab">Week</button>
@@ -385,34 +374,35 @@
         <button class="tws-subtab" data-sub2="availability" type="button" role="tab">Availability</button>
       </div>
     </div>
-    {# WEEK sub-tab: Copperfield + Tomball stacked #}
-    <div class="tws-sub2panel active" data-sub2-panel="week">
-      <div class="tws-embed-wrap both">
+    <div class="tws-store-shell active" data-sched-store-panel="uno">
+      <div class="tws-sub2panel active" data-sub2-panel="week" data-sched-store="uno">
         <div class="tws-sched-storehead">Copperfield</div>
         <div class="tws-embed-loading" data-embed-loading="week-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Week Builder</span></div>
         <iframe class="tws-embed-frame" data-embed-frame="week-uno" data-src="/uno/schedules-v2/?embed=1" title="Copperfield Week Builder" loading="lazy"></iframe>
+      </div>
+      <div class="tws-sub2panel" data-sub2-panel="timeoff" data-sched-store="uno">
+        <div class="tws-sched-storehead">Copperfield</div>
+        <div class="tws-embed-loading" data-embed-loading="timeoff-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Time off</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="timeoff-uno" data-src="/uno/schedules-v2/time-off?embed=1" title="Copperfield Time off" loading="lazy"></iframe>
+      </div>
+      <div class="tws-sub2panel" data-sub2-panel="availability" data-sched-store="uno">
+        <div class="tws-sched-storehead">Copperfield</div>
+        <div class="tws-embed-loading" data-embed-loading="availability-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Availability</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="availability-uno" data-src="/uno/schedules-v2/availability?embed=1" title="Copperfield Availability" loading="lazy"></iframe>
+      </div>
+    </div>
+    <div class="tws-store-shell" data-sched-store-panel="dos">
+      <div class="tws-sub2panel active" data-sub2-panel="week" data-sched-store="dos">
         <div class="tws-sched-storehead">Tomball</div>
         <div class="tws-embed-loading" data-embed-loading="week-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Week Builder</span></div>
         <iframe class="tws-embed-frame" data-embed-frame="week-dos" data-src="/dos/schedules-v2/?embed=1" title="Tomball Week Builder" loading="lazy"></iframe>
       </div>
-    </div>
-    {# TIME OFF sub-tab: Copperfield + Tomball stacked #}
-    <div class="tws-sub2panel" data-sub2-panel="timeoff">
-      <div class="tws-embed-wrap both">
-        <div class="tws-sched-storehead">Copperfield</div>
-        <div class="tws-embed-loading" data-embed-loading="timeoff-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Time off</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="timeoff-uno" data-src="/uno/schedules-v2/time-off?embed=1" title="Copperfield Time off" loading="lazy"></iframe>
+      <div class="tws-sub2panel" data-sub2-panel="timeoff" data-sched-store="dos">
         <div class="tws-sched-storehead">Tomball</div>
         <div class="tws-embed-loading" data-embed-loading="timeoff-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Time off</span></div>
         <iframe class="tws-embed-frame" data-embed-frame="timeoff-dos" data-src="/dos/schedules-v2/time-off?embed=1" title="Tomball Time off" loading="lazy"></iframe>
       </div>
-    </div>
-    {# AVAILABILITY sub-tab: Copperfield + Tomball stacked #}
-    <div class="tws-sub2panel" data-sub2-panel="availability">
-      <div class="tws-embed-wrap both">
-        <div class="tws-sched-storehead">Copperfield</div>
-        <div class="tws-embed-loading" data-embed-loading="availability-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Availability</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="availability-uno" data-src="/uno/schedules-v2/availability?embed=1" title="Copperfield Availability" loading="lazy"></iframe>
+      <div class="tws-sub2panel" data-sub2-panel="availability" data-sched-store="dos">
         <div class="tws-sched-storehead">Tomball</div>
         <div class="tws-embed-loading" data-embed-loading="availability-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Availability</span></div>
         <iframe class="tws-embed-frame" data-embed-frame="availability-dos" data-src="/dos/schedules-v2/availability?embed=1" title="Tomball Availability" loading="lazy"></iframe>
@@ -420,16 +410,18 @@
     </div>
   </div>
 
-  {# ---- MARKET panel: the B9 manager approval queue (Pending/All live inside the page), chrome-stripped iframe (aick #2333) ----
-     S7 store-split: render the marketplace iframe twice -- Copperfield (/uno/)
-     then Tomball (/dos/) -- each in its own labeled block. Each iframe keeps a
-     unique data-embed-frame key ("market-uno" / "market-dos") so the existing
-     loadFrame/stripChrome pipeline runs once per store, unchanged. #}
+  {# ---- MARKET panel: the B9 manager approval queue, split by location tabs. ---- #}
   <div class="tws-panel" id="tws-panel-market" data-sub-panel="market" role="tabpanel">
-    <div class="tws-embed-wrap both">
+    <div class="tws-store-tabs tws-market-storebar" role="tablist" aria-label="Market location">
+      <button class="tws-store-tab active" type="button" role="tab" data-market-store-tab="uno">Copperfield</button>
+      <button class="tws-store-tab" type="button" role="tab" data-market-store-tab="dos">Tomball</button>
+    </div>
+    <div class="tws-store-shell active" data-market-store-panel="uno">
       <div class="tws-sched-storehead">Copperfield</div>
       <div class="tws-embed-loading" data-embed-loading="market-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Market</span></div>
       <iframe class="tws-embed-frame" data-embed-frame="market-uno" data-src="/uno/schedules-v2/marketplace?embed=1" title="Copperfield Market" loading="lazy"></iframe>
+    </div>
+    <div class="tws-store-shell" data-market-store-panel="dos">
       <div class="tws-sched-storehead">Tomball</div>
       <div class="tws-embed-loading" data-embed-loading="market-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Market</span></div>
       <iframe class="tws-embed-frame" data-embed-frame="market-dos" data-src="/dos/schedules-v2/marketplace?embed=1" title="Tomball Market" loading="lazy"></iframe>
@@ -540,22 +532,44 @@
     var url = frame.getAttribute("data-src");
     frame.setAttribute("src", url + (String(url).includes("?") ? "&" : "?") + "_cb=" + _IFCB);
   }
-  /* ---- per-store Schedule frames (S7 store-split) ----
-     Both stores are ALWAYS shown: each sub-tab panel holds two static iframes
-     with fixed keys "<sub2>-uno" (Copperfield) and "<sub2>-dos" (Tomball), each
-     pointing straight at its store slug in the markup. The old single/both
-     <select> + dynamic both-mode scaffolding is gone; loadSchedFrame just loads
-     both per-store frames for the active sub-tab via the UNCHANGED loadFrame
-     (which drives stripChrome/reveal per iframe). */
-  var SCHED_STORE_SLUGS = ["uno", "dos"];   // Copperfield, Tomball
+  /* ---- per-store Schedule and Market frames. */
   function loadSchedFrame(sub2) {
-    SCHED_STORE_SLUGS.forEach(function (slug) { loadFrame(sub2 + "-" + slug); });
+    loadFrame(sub2 + "-" + activeSchedStore);
   }
-  // S7: the Market tab also shows both stores -- load both marketplace iframes.
   function loadMarketFrames() {
-    SCHED_STORE_SLUGS.forEach(function (slug) { loadFrame("market-" + slug); });
+    loadFrame("market-" + activeMarketStore);
   }
   var activeSub2 = "week";
+  var activeSchedStore = "uno";
+  var activeMarketStore = "uno";
+
+  function setScheduleStore(slug) {
+    activeSchedStore = slug || "uno";
+    root.querySelectorAll("[data-sched-store-tab]").forEach(function (t) {
+      t.classList.toggle("active", t.getAttribute("data-sched-store-tab") === activeSchedStore);
+    });
+    root.querySelectorAll("[data-sched-store-panel]").forEach(function (p) {
+      p.classList.toggle("active", p.getAttribute("data-sched-store-panel") === activeSchedStore);
+    });
+    root.querySelectorAll(".tws-sub2panel").forEach(function (p) {
+      if (p.getAttribute("data-sched-store") === activeSchedStore) {
+        p.classList.toggle("active", p.getAttribute("data-sub2-panel") === activeSub2);
+      }
+    });
+    loadSchedFrame(activeSub2);
+  }
+
+  function setMarketStore(slug) {
+    activeMarketStore = slug || "uno";
+    root.querySelectorAll("[data-market-store-tab]").forEach(function (t) {
+      t.classList.toggle("active", t.getAttribute("data-market-store-tab") === activeMarketStore);
+    });
+    root.querySelectorAll("[data-market-store-panel]").forEach(function (p) {
+      p.classList.toggle("active", p.getAttribute("data-market-store-panel") === activeMarketStore);
+    });
+    loadMarketFrames();
+  }
+
   function show(sub) {
     tabs.forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-sub") === sub); });
     panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub-panel") === sub); });
@@ -568,19 +582,19 @@
   });
   // nested Schedule sub-tabs [Week | Time off | Availability]
   var sub2tabs = root.querySelectorAll(".tws-subtab");
-  var sub2panels = root.querySelectorAll(".tws-sub2panel");
   sub2tabs.forEach(function (t) {
     t.addEventListener("click", function () {
       activeSub2 = t.getAttribute("data-sub2");
       sub2tabs.forEach(function (x) { x.classList.toggle("active", x === t); });
-      sub2panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub2-panel") === activeSub2); });
-      loadSchedFrame(activeSub2);
+      setScheduleStore(activeSchedStore);
     });
   });
-  /* ---- Schedule STORE switch REMOVED (S7 store-split) ----
-     The old single/both store <select> (#tws-sched-store) + its iframe-repoint
-     handler are gone: both stores are now always rendered as static per-store
-     iframes (week-uno/week-dos, ...) so there is nothing to switch. */
+  root.querySelectorAll("[data-sched-store-tab]").forEach(function (t) {
+    t.addEventListener("click", function () { setScheduleStore(t.getAttribute("data-sched-store-tab")); });
+  });
+  root.querySelectorAll("[data-market-store-tab]").forEach(function (t) {
+    t.addEventListener("click", function () { setMarketStore(t.getAttribute("data-market-store-tab")); });
+  });
 
   // honour ?sub= on load
   var initial = (new URLSearchParams(location.search)).get("sub") || "team";

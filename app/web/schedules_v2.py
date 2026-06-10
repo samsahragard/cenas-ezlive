@@ -17,13 +17,14 @@ on shift create/update as no-op stubs now (ckai fills them in B7/B8).
 """
 from __future__ import annotations
 
-from datetime import date as _date, datetime
+from datetime import date as _date, datetime, timedelta
 
 from flask import g, jsonify, request
 
 from app.db import SessionLocal
 from app.models import (
     CANONICAL_POSITIONS,
+    CenaToastLink,
     Employee,
     EmployeePosition,
     EmployeeStoreAssignment,
@@ -49,6 +50,24 @@ _CANONICAL_NORM = {name.lower(): name for name in CANONICAL_POSITIONS}
 
 def _is_canonical_position(name: "str | None") -> bool:
     return (name or "").strip().lower() in _CANONICAL_NORM
+
+
+def _legacy_saturday_week_start(week_start: _date) -> _date | None:
+    """Previous schedule keys were Saturday starts. Keep old rows visible while
+    new weeks are keyed to Sunday."""
+    if week_start.weekday() != 6:  # Python: Sunday
+        return None
+    return week_start - timedelta(days=1)
+
+
+def _schedule_for_week(db, store: str | None, week_start: _date) -> Schedule | None:
+    sched = db.query(Schedule).filter_by(store_key=store, week_start=week_start).first()
+    if sched:
+        return sched
+    legacy = _legacy_saturday_week_start(week_start)
+    if legacy is None:
+        return None
+    return db.query(Schedule).filter_by(store_key=store, week_start=legacy).first()
 
 
 def _store() -> str | None:
@@ -468,7 +487,7 @@ def sv2_schedule_new():
         return jsonify({"ok": False, "error": "week_start required (YYYY-MM-DD)"}), 400
     db = SessionLocal()
     try:
-        existing = db.query(Schedule).filter_by(store_key=_store(), week_start=week_start).first()
+        existing = _schedule_for_week(db, _store(), week_start)
         if existing:
             return jsonify({"ok": False, "error": "a schedule for that week already exists",
                             "id": existing.id}), 409
@@ -492,7 +511,12 @@ def sv2_schedule_list():
         wk = request.args.get("week")
         if wk:
             try:
-                q = q.filter_by(week_start=_date.fromisoformat(wk))
+                week_start = _date.fromisoformat(wk)
+                weeks = [week_start]
+                legacy = _legacy_saturday_week_start(week_start)
+                if legacy is not None:
+                    weeks.append(legacy)
+                q = q.filter(Schedule.week_start.in_(weeks))
             except Exception:
                 pass
         out = [{"id": s.id, "week_start": s.week_start.isoformat(), "status": s.status,
@@ -517,20 +541,6 @@ def sv2_board():
     store = _store()  # location ("tomball"/"copperfield")
     db = SessionLocal()
     try:
-        sched = db.query(Schedule).filter_by(store_key=store, week_start=week_start).first()
-        shifts = []
-        if sched:
-            for sh in db.query(Shift).filter_by(schedule_id=sched.id).all():
-                tag_ids = [st.tag_id for st in db.query(ShiftTag).filter_by(shift_id=sh.id).all()]
-                shifts.append({
-                    "id": sh.id, "employee_id": sh.employee_id, "position_id": sh.position_id,
-                    "start_at": sh.start_at.isoformat() if sh.start_at else None,
-                    "end_at": sh.end_at.isoformat() if sh.end_at else None,
-                    "break_minutes": sh.break_minutes, "status": sh.status,
-                    "notes": sh.notes, "tag_ids": tag_ids,
-                    "display_name": sh.display_name,  # Sam #2872: former-staff name (employee_id NULL) -> struck-through
-                    "published_at": sh.published_at.isoformat() if sh.published_at else None,  # per-shift publish: null = hollow/unpublished
-                })
         # positions: filtered to the CANONICAL 14 (Sam #2227 - 13 FOH + Cook);
         # Sling-import junk (C-Grill, C-Prep, Chba, Dish, ...) is hidden. store_key
         # null = all-store. NON-DESTRUCTIVE read filter - never deletes a row
@@ -544,27 +554,52 @@ def sv2_board():
         # Busser and only Busser-holders stay schedulable. Keyed off
         # EmployeePosition.store_key (the location, == `store`); restricted to the
         # canonical ids above so junk positions never gate the roster. A NULL-store
-        # EmployeePosition row (pre per-store backfill) is treated as held at every
-        # store the employee is rostered to, so an un-backfilled holder isn't hidden.
+        # EmployeePosition row is not enough to schedule someone now that Team is
+        # the source of truth for per-location roster placement.
         _canon_pids = {p["id"] for p in positions}
         pos_by_emp: dict[int, set[int]] = {}
-        for ep in db.query(EmployeePosition).all():
+        for ep in db.query(EmployeePosition).filter(EmployeePosition.store_key == store).all():
             if ep.position_id not in _canon_pids:
                 continue
-            sk = (ep.store_key or "").strip().lower()
-            if sk and sk != store:
-                continue  # held at the OTHER store only
             pos_by_emp.setdefault(ep.employee_id, set()).add(ep.position_id)
-        # roster = employees assigned to THIS store (location-keyed), each carrying
-        # the canonical position ids they hold here (position_ids, additive).
+        # roster = Team-source-of-truth employees for THIS store. A person is
+        # schedulable only when they are store-assigned, active, confirmed in the
+        # Team > Link tab for this store, and hold at least one canonical
+        # per-store position here.
         emp_ids = [a.employee_id for a in
                    db.query(EmployeeStoreAssignment).filter_by(store_key=store).all()]
+        linked_emp_ids = {r.cena_employee_id for r in
+                          db.query(CenaToastLink.cena_employee_id)
+                            .filter_by(store_key=store).all()}
         roster = []
+        eligible_emp_ids: set[int] = set()
         if emp_ids:
-            for e in (db.query(Employee).filter(Employee.id.in_(emp_ids))
-                        .order_by(Employee.full_name).all()):
+            emps = (db.query(Employee).filter(Employee.id.in_(emp_ids))
+                      .order_by(Employee.full_name).all())
+            for e in emps:
+                held = sorted(pos_by_emp.get(e.id, set()))
+                if not e.active or e.id not in linked_emp_ids or not held:
+                    continue
+                eligible_emp_ids.add(e.id)
                 roster.append({"id": e.id, "full_name": e.full_name, "active": e.active,
-                               "position_ids": sorted(pos_by_emp.get(e.id, set()))})
+                               "position_ids": held})
+
+        sched = _schedule_for_week(db, store, week_start)
+        shifts = []
+        if sched:
+            for sh in db.query(Shift).filter_by(schedule_id=sched.id).all():
+                if sh.employee_id is not None and sh.employee_id not in eligible_emp_ids:
+                    continue
+                tag_ids = [st.tag_id for st in db.query(ShiftTag).filter_by(shift_id=sh.id).all()]
+                shifts.append({
+                    "id": sh.id, "employee_id": sh.employee_id, "position_id": sh.position_id,
+                    "start_at": sh.start_at.isoformat() if sh.start_at else None,
+                    "end_at": sh.end_at.isoformat() if sh.end_at else None,
+                    "break_minutes": sh.break_minutes, "status": sh.status,
+                    "notes": sh.notes, "tag_ids": tag_ids,
+                    "display_name": sh.display_name,  # Sam #2872: former-staff name (employee_id NULL) -> struck-through
+                    "published_at": sh.published_at.isoformat() if sh.published_at else None,  # per-shift publish: null = hollow/unpublished
+                })
         tags = [{"id": t.id, "name": t.name} for t in db.query(Tag).order_by(Tag.name).all()]
         return jsonify({
             "ok": True, "store": store,

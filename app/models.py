@@ -3432,7 +3432,7 @@ class Schedule(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # 'tomball' | 'copperfield' - the audience scope (the store-gate keys off this)
     store_key: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
-    week_start: Mapped[date] = mapped_column(Date, nullable=False)  # Monday of the week
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)  # Sunday of the week
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)  # draft | published
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # set on B5 publish
     created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)  # manager user_id

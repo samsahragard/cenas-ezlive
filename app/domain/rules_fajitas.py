@@ -32,16 +32,16 @@ def rule_fajitas(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
 
     proteins = []
     if item["item_key"] == "fajitas_mixed":
-        chicken_oz = 2.25 * headcount
-        beef_oz = 2.25 * headcount
-        proteins.append(make_weight_line("Chicken", chicken_oz, 2.25, "none"))
-        proteins.append(make_weight_line("Beef", beef_oz, 2.25, "none"))
+        chicken_oz = 2.5 * headcount
+        beef_oz = 2.5 * headcount
+        proteins.append(make_weight_line("Chicken", chicken_oz, 2.5, "none"))
+        proteins.append(make_weight_line("Beef", beef_oz, 2.5, "none"))
     elif item["item_key"] == "fajitas_chicken":
-        chicken_oz = 4.5 * headcount
-        proteins.append(make_weight_line("Chicken", chicken_oz, 4.5, "none"))
+        chicken_oz = 5.0 * headcount
+        proteins.append(make_weight_line("Chicken", chicken_oz, 5.0, "none"))
     elif item["item_key"] == "fajitas_beef":
-        beef_oz = 4.5 * headcount
-        proteins.append(make_weight_line("Beef", beef_oz, 4.5, "none"))
+        beef_oz = 5.0 * headcount
+        proteins.append(make_weight_line("Beef", beef_oz, 5.0, "none"))
     else:
         # fallback
         proteins.append(make_weight_line("Fajita Protein", 0, None, "none"))

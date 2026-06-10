@@ -153,6 +153,13 @@
     z-index: 1;
   }
   .legdash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
+  .legdash .legd-heading {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-right: clamp(160px, 24vw, 340px);
+  }
   .legdash .legd-brand {
     display: inline-flex;
     align-items: center;
@@ -188,14 +195,13 @@
     line-height: 1;
     color: var(--legd-cream);
     letter-spacing: -0.02em;
-    margin-bottom: 10px;
-    margin-right: 150px;
+    margin: 0;
   }
   .legdash .legd-rule {
     height: 1px;
     width: 56px;
     background: linear-gradient(90deg, var(--legd-accent), transparent);
-    margin-bottom: 12px;
+    margin-top: 10px;
   }
   .legdash .legd-meta {
     display: flex;
@@ -206,6 +212,7 @@
     font-size: 11px;
     color: var(--legd-cream-faint);
     letter-spacing: 0.05em;
+    margin-bottom: 7px;
   }
   .legdash .legd-meta .legd-sep {
     width: 3px;
@@ -382,11 +389,12 @@
   @media (max-width: 760px) {
     .legdash .legd-ribbon { padding: 16px 14px; }
     .legdash .ribbon-role-badge { top: 16px; right: 14px; }
+    .legdash .legd-heading { gap: 10px; padding-right: 116px; }
     .legdash .legd-brand { margin-bottom: 8px; }
     .legdash .legd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
-    .legdash .legd-title { font-size: 30px; margin-bottom: 6px; margin-right: 96px; }
-    .legdash .legd-rule { width: 40px; margin-bottom: 8px; }
-    .legdash .legd-meta { font-size: 10px; gap: 6px; }
+    .legdash .legd-title { font-size: 30px; }
+    .legdash .legd-rule { width: 40px; margin-top: 8px; }
+    .legdash .legd-meta { font-size: 10px; gap: 6px; margin-bottom: 4px; }
     .legdash .legd-tabs { padding: 0 8px; }
     .legdash .legd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .legdash .legd-tab-icon { width: 12px; height: 12px; }
@@ -402,6 +410,7 @@
   }
   @media (max-width: 380px) {
     .legdash .legd-title { font-size: 26px; }
+    .legdash .legd-heading { padding-right: 0; }
     .legdash .legd-tab { padding: 10px 9px 8px; font-size: 11px; }
     .legdash .legd-ribbon { padding: 14px 14px 12px; }
   }
@@ -435,15 +444,17 @@
         <span class="legd-brand-dot"></span>
         <span class="legd-brand-text">CENAS <span class="legd-div">&middot;</span> OPS <span class="legd-div">&middot;</span> <span class="legd-module">LEGAL</span></span>
       </div>
-      <h1 class="legd-title">Legal</h1>
-      <div class="legd-rule"></div>
-      <div class="legd-meta">
-        <span>{{ today_label }}</span>
-        <span class="legd-sep"></span>
-        <span class="legd-meta-val">{{ store_label }}</span>
-        <span class="legd-sep"></span>
-        <span>{{ tabs|length }} sections</span>
+      <div class="legd-heading">
+        <h1 class="legd-title">Legal</h1>
+        <div class="legd-meta">
+          <span>{{ today_label }}</span>
+          <span class="legd-sep"></span>
+          <span class="legd-meta-val">{{ store_label }}</span>
+          <span class="legd-sep"></span>
+          <span>{{ tabs|length }} sections</span>
+        </div>
       </div>
+      <div class="legd-rule"></div>
     </div>
 
     {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;

@@ -153,6 +153,13 @@
     z-index: 1;
   }
   .kitdash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
+  .kitdash .kitd-heading {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-right: clamp(160px, 24vw, 340px);
+  }
   .kitdash .kitd-brand {
     display: inline-flex;
     align-items: center;
@@ -188,14 +195,13 @@
     line-height: 1;
     color: var(--kitd-cream);
     letter-spacing: -0.02em;
-    margin-bottom: 10px;
-    margin-right: 150px;
+    margin: 0;
   }
   .kitdash .kitd-rule {
     height: 1px;
     width: 56px;
     background: linear-gradient(90deg, var(--kitd-accent), transparent);
-    margin-bottom: 12px;
+    margin-top: 10px;
   }
   .kitdash .kitd-meta {
     display: flex;
@@ -206,6 +212,8 @@
     font-size: 11px;
     color: var(--kitd-cream-faint);
     letter-spacing: 0.05em;
+    margin-bottom: 7px;
+    white-space: nowrap;
   }
   .kitdash .kitd-meta .kitd-sep {
     width: 3px;
@@ -382,11 +390,12 @@
   @media (max-width: 760px) {
     .kitdash .kitd-ribbon { padding: 16px 14px; }
     .kitdash .ribbon-role-badge { top: 16px; right: 14px; }
+    .kitdash .kitd-heading { gap: 10px; padding-right: 116px; }
     .kitdash .kitd-brand { margin-bottom: 8px; }
     .kitdash .kitd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
-    .kitdash .kitd-title { font-size: 30px; margin-bottom: 6px; margin-right: 96px; }
-    .kitdash .kitd-rule { width: 40px; margin-bottom: 8px; }
-    .kitdash .kitd-meta { font-size: 10px; gap: 6px; }
+    .kitdash .kitd-title { font-size: 30px; }
+    .kitdash .kitd-rule { width: 40px; margin-top: 8px; }
+    .kitdash .kitd-meta { font-size: 10px; gap: 6px; margin-bottom: 4px; }
     .kitdash .kitd-tabs { padding: 0 8px; }
     .kitdash .kitd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .kitdash .kitd-tab-icon { width: 12px; height: 12px; }
@@ -402,6 +411,7 @@
   }
   @media (max-width: 380px) {
     .kitdash .kitd-title { font-size: 26px; }
+    .kitdash .kitd-heading { padding-right: 0; }
     .kitdash .kitd-tab { padding: 10px 9px 8px; font-size: 11px; }
     .kitdash .kitd-ribbon { padding: 14px 14px 12px; }
   }
@@ -429,11 +439,13 @@
     <div class="kitd-ribbon">
       <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
       {# eyebrow breadcrumb + meta tail (store + "N sections") removed per Sam #2230; keep the date #}
-      <h1 class="kitd-title">Kitchen</h1>
-      <div class="kitd-rule"></div>
-      <div class="kitd-meta">
-        <span>{{ today_label }}</span>
+      <div class="kitd-heading">
+        <h1 class="kitd-title">Kitchen</h1>
+        <div class="kitd-meta">
+          <span>{{ today_label }}</span>
+        </div>
       </div>
+      <div class="kitd-rule"></div>
     </div>
 
     {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;

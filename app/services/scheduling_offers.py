@@ -12,6 +12,7 @@ from datetime import datetime
 
 from app.db import SessionLocal
 from app.models import (
+    CenaToastLink,
     Employee,
     EmployeePosition,
     EmployeeStoreAssignment,
@@ -35,29 +36,73 @@ def employee_positions(db, employee_id) -> set:
             db.query(EmployeePosition).filter_by(employee_id=employee_id).all()}
 
 
+def employee_positions_for_store(db, employee_id, store_key) -> set:
+    store = (store_key or "").strip().lower()
+    if not store:
+        return set()
+    return {ep.position_id for ep in
+            db.query(EmployeePosition)
+              .filter(EmployeePosition.employee_id == employee_id,
+                      EmployeePosition.store_key == store)
+              .all()}
+
+
 def shift_store(db, shift) -> str | None:
     """The LOCATION store_key of a shift (via its schedule)."""
     sched = db.query(Schedule).filter_by(id=shift.schedule_id).first()
     return sched.store_key if sched else None
 
 
+def is_active_linked_employee(db, employee_id, store_key) -> bool:
+    """Team source-of-truth gate for schedule/market eligibility.
+
+    The employee must still be active and must have a confirmed Toast link for
+    the shift's store. Store assignment and position matching are checked
+    separately so callers can return more specific behavior if needed.
+    """
+    store = (store_key or "").strip().lower()
+    if not employee_id or not store:
+        return False
+    emp = (db.query(Employee)
+             .filter(Employee.id == employee_id,
+                     Employee.active.is_(True))
+             .first())
+    if emp is None:
+        return False
+    return (db.query(CenaToastLink.id)
+              .filter(CenaToastLink.cena_employee_id == employee_id,
+                      CenaToastLink.store_key == store)
+              .first()) is not None
+
+
+def is_eligible_for_shift(db, employee_id, shift) -> bool:
+    """Can this active, linked team member hold this shift?"""
+    store = shift_store(db, shift)
+    if store is None:
+        return False
+    if not is_active_linked_employee(db, employee_id, store):
+        return False
+    if store not in employee_stores(db, employee_id):
+        return False
+    positions = employee_positions_for_store(db, employee_id, store)
+    if shift.position_id is None:
+        return bool(positions)
+    return shift.position_id in positions
+
+
 def is_eligible_taker(db, offer, employee_id) -> bool:
-    """Can employee_id take this offer? The offerer can never take their own; an
-    UNRESTRICTED offer is open to anyone; a RESTRICTED offer needs the same store
-    AND (the shift has no position OR the employee holds that position)."""
+    """Can employee_id take this offer?
+
+    The offerer can never take their own. Marketplace eligibility is tied to the
+    Team roster source of truth: active employee, confirmed Toast link for the
+    store, matching store assignment, and matching store-specific position.
+    """
     if offer.offered_by_employee_id == employee_id:
         return False
-    if not offer.restricted:
-        return True
     sh = db.query(Shift).filter_by(id=offer.shift_id).first()
     if sh is None:
         return False
-    store = shift_store(db, sh)
-    if store is None or store not in employee_stores(db, employee_id):
-        return False
-    if sh.position_id is None:
-        return True
-    return sh.position_id in employee_positions(db, employee_id)
+    return is_eligible_for_shift(db, employee_id, sh)
 
 
 def eligible_open_offers(db, employee_id) -> list:

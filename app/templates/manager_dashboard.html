@@ -145,6 +145,13 @@
     z-index: 1;
   }
   .mgrdash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
+  .mgrdash .mgd-heading {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-right: clamp(160px, 24vw, 340px);
+  }
   .mgrdash .mgd-brand {
     display: inline-flex;
     align-items: center;
@@ -180,14 +187,13 @@
     line-height: 1;
     color: var(--mgd-cream);
     letter-spacing: -0.02em;
-    margin-bottom: 10px;
-    margin-right: 150px;
+    margin: 0;
   }
   .mgrdash .mgd-rule {
     height: 1px;
     width: 56px;
     background: linear-gradient(90deg, var(--mgd-accent), transparent);
-    margin-bottom: 12px;
+    margin-top: 10px;
   }
   .mgrdash .mgd-meta {
     display: flex;
@@ -198,6 +204,8 @@
     font-size: 11px;
     color: var(--mgd-cream-faint);
     letter-spacing: 0.05em;
+    margin-bottom: 7px;
+    white-space: nowrap;
   }
   .mgrdash .mgd-meta .mgd-sep {
     width: 3px;
@@ -328,11 +336,12 @@
   @media (max-width: 760px) {
     .mgrdash .mgd-ribbon { padding: 16px 14px; }
     .mgrdash .ribbon-role-badge { top: 16px; right: 14px; }
+    .mgrdash .mgd-heading { gap: 10px; padding-right: 116px; }
     .mgrdash .mgd-brand { margin-bottom: 8px; }
     .mgrdash .mgd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
-    .mgrdash .mgd-title { font-size: 30px; margin-bottom: 6px; margin-right: 96px; }
-    .mgrdash .mgd-rule { width: 40px; margin-bottom: 8px; }
-    .mgrdash .mgd-meta { font-size: 10px; gap: 6px; }
+    .mgrdash .mgd-title { font-size: 30px; }
+    .mgrdash .mgd-rule { width: 40px; margin-top: 8px; }
+    .mgrdash .mgd-meta { font-size: 10px; gap: 6px; margin-bottom: 4px; }
     .mgrdash .mgd-tabs { padding: 0 8px; }
     .mgrdash .mgd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .mgrdash .mgd-tab-icon { width: 12px; height: 12px; }
@@ -346,6 +355,7 @@
   }
   @media (max-width: 380px) {
     .mgrdash .mgd-title { font-size: 26px; }
+    .mgrdash .mgd-heading { padding-right: 0; }
     .mgrdash .mgd-tab { padding: 10px 9px 8px; font-size: 11px; }
     .mgrdash .mgd-ribbon { padding: 14px 14px 12px; }
   }
@@ -377,11 +387,13 @@
     <div class="mgd-ribbon">
       <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
       {# eyebrow breadcrumb + meta tail (store + "N sections") removed per Sam #2230; keep the date #}
-      <h1 class="mgd-title">Manager</h1>
-      <div class="mgd-rule"></div>
-      <div class="mgd-meta">
-        <span>{{ today_label }}</span>
+      <div class="mgd-heading">
+        <h1 class="mgd-title">Manager</h1>
+        <div class="mgd-meta">
+          <span>{{ today_label }}</span>
+        </div>
       </div>
+      <div class="mgd-rule"></div>
     </div>
 
     {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;

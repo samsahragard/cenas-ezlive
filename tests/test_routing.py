@@ -55,6 +55,7 @@ def test_different_dates_not_feasible():
 def test_feasible_pair_returns_two_stops():
     result = compute_best_two_stop_route(**_common())
     assert result["feasible"] is True
+    assert result["kitchen_ready_at"] == "10:10 AM"
     assert len(result["stops"]) == 2
     assert result["stops"][0]["minutes_late"] == 0
     assert result["stops"][1]["minutes_late"] == 0
@@ -68,7 +69,7 @@ def test_solo_departure_is_latest_leave_time_not_kitchen_ready_plus_buffer():
         window_start="12:00 PM",
         travel_minutes=20,
     )
-    assert result["kitchen_ready_at"] == "10:10 AM"
+    assert result["kitchen_ready_at"] == "10:40 AM"
     assert result["depart_store_at"] == "11:40 AM"
     assert result["pickup_at"] == "11:40 AM"
 

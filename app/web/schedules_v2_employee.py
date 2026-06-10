@@ -58,14 +58,14 @@ def _require_emp():
 
 
 def _week_bounds(today):
-    """(this_week_start, next_week_start) as dates. Weeks key to SATURDAY to match the
-    manager Week Builder (schedules_v2_week.html WEEK_START_DOW=6): schedules are stored
-    with a Saturday week_start, so the employee MUST query Saturdays. The old code anchored
-    to Monday, so the employee never matched their own Saturday-keyed schedule -> my-schedule
-    came up empty for everyone (pre-existing bug). Sat=weekday 5; days since the week's
-    Saturday = (today.weekday() - 5) % 7."""
-    this_sat = today - timedelta(days=(today.weekday() - 5) % 7)
-    return this_sat, this_sat + timedelta(days=7)
+    """(this_week_start, next_week_start) as dates.
+
+    Schedules key to SUNDAY so the employee portal matches the manager Week
+    Builder's Sun-Sat grid. Python weekday(): Mon=0..Sun=6, so days since Sunday
+    is (weekday + 1) % 7.
+    """
+    this_sun = today - timedelta(days=(today.weekday() + 1) % 7)
+    return this_sun, this_sun + timedelta(days=7)
 
 
 def _serialize_shift(sh, week_start, position_name, tag_names, response, offer=None):
@@ -133,8 +133,8 @@ def emp_my_schedule_shifts():
     if err:
         return err
 
-    this_monday, next_monday = _week_bounds(datetime.utcnow().date())
-    allowed = {this_monday, next_monday}
+    this_week, next_week = _week_bounds(datetime.utcnow().date())
+    allowed = {this_week, next_week}
     wk = (request.args.get("week") or "").strip()
     if wk:
         try:
@@ -143,7 +143,7 @@ def emp_my_schedule_shifts():
             return jsonify({"ok": False, "error": "week must be YYYY-MM-DD"}), 400
         weeks = [w] if w in allowed else []  # an employee never sees other weeks
     else:
-        weeks = [this_monday, next_monday]
+        weeks = [this_week, next_week]
 
     db = SessionLocal()
     try:

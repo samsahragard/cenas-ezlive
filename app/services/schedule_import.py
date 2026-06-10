@@ -29,11 +29,10 @@ def _norm(name: str) -> str:
 
 
 def _week_start(d: date) -> date:
-    # The schedule week starts SATURDAY (schedules_v2_week.html WEEK_START_DOW=6,
-    # Sam #2603), and the board queries Schedule by that Saturday week_start -- so
-    # imported schedules MUST be keyed to the Saturday of each shift's week, or
-    # they won't show when a manager pages there. Python weekday(): Mon=0..Sat=5.
-    return d - timedelta(days=(d.weekday() - 5) % 7)
+    # The schedule week starts SUNDAY (schedules_v2_week.html WEEK_START_DOW=0),
+    # and the board queries Schedule by that Sunday week_start. Python weekday():
+    # Mon=0..Sun=6, so days since Sunday is (weekday + 1) % 7.
+    return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
 def _parse_dt(iso_date: str, time_str: str) -> datetime:
@@ -69,7 +68,7 @@ def import_historical(records: list[dict], db) -> dict:
         emp_stores.setdefault(a.employee_id, set()).add(a.store_key)
     pos_cache: dict[str, int | None] = {}
 
-    # group by (store, week_start Monday)
+    # group by (store, week_start Sunday)
     weeks: dict[tuple, list] = {}
     for r in records:
         try:

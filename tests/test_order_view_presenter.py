@@ -23,7 +23,9 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert ".grid-view.is-active" in html
     assert ".order-view-header { display: none !important;" in html
     assert "print-empty-row" in html
-    assert 'class="grid-view{% if active_view == view_name %} is-active{% endif %}"' in html
+    assert 'class="grid-view{% if active_view == view_name %} is-active{% endif %}' in html
+    assert "order-print-landscape" in html
+    assert "size: letter {{ 'landscape'" in html
 
 
 def _row(key: str, label: str, section: str = "Header") -> dict[str, object]:

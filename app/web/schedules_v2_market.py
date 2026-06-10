@@ -65,12 +65,22 @@ def _shift_in_store(db, shift_id):
     return sh
 
 
+def _list_status(raw_status, kind):
+    """Map UI filter labels onto the persisted offer/swap workflow states."""
+    status = (raw_status or "").strip().lower()
+    if not status or status == "all":
+        return None
+    if status == "pending":
+        return "taken" if kind == "offer" else "accepted"
+    return status
+
+
 # ------------------------------------------------------------------ OFFERS
 @store_bp.route("/schedules-v2/offers/list", methods=["GET"])
 @require_level(_MGR)
 def sv2_offers_list():
     """This store's offers (offers whose shift is in this store). ?status filters."""
-    status = (request.args.get("status") or "").strip()
+    status = _list_status(request.args.get("status"), "offer")
     db = SessionLocal()
     try:
         q = (db.query(ShiftOffer)
@@ -149,7 +159,7 @@ def sv2_offer_deny(offer_id):
 @require_level(_MGR)
 def sv2_swaps_list():
     """This store's swaps (scoped by the from_shift's store). ?status filters."""
-    status = (request.args.get("status") or "").strip()
+    status = _list_status(request.args.get("status"), "swap")
     db = SessionLocal()
     try:
         q = (db.query(ShiftSwap)
@@ -190,6 +200,10 @@ def sv2_swap_approve(swap_id):
             return jsonify({"ok": False, "error": "swap must be accepted before approval (it is %s)" % s.status}), 409
         if fsh.employee_id != s.from_employee_id or tsh.employee_id != s.to_employee_id:
             return jsonify({"ok": False, "error": "a shift changed hands since the swap was proposed"}), 409
+        if not scheduling_offers.is_eligible_for_shift(db, s.from_employee_id, tsh):
+            return jsonify({"ok": False, "error": "from employee is no longer eligible for the other shift"}), 409
+        if not scheduling_offers.is_eligible_for_shift(db, s.to_employee_id, fsh):
+            return jsonify({"ok": False, "error": "to employee is no longer eligible for the offered shift"}), 409
         # re-check approved time-off for BOTH new assignments
         if tsh.start_at:
             b1 = scheduling_timeoff.conflict(s.from_employee_id, tsh.start_at.date())

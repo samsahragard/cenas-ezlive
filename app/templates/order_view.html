@@ -5,7 +5,10 @@
 {% block head_extra %}
 <style>
   @media print {
-    @page { size: letter portrait; margin: 0.25in; }
+    @page {
+      size: letter {{ 'landscape' if mode == 'combined' and combined_count|default(0) >= 4 else 'portrait' }};
+      margin: 0.22in;
+    }
     aside.sidebar, .topbar, .order-view-actions, .tabs, .wordmark,
     .order-view-header { display: none !important; }
     body::before, body::after { display: none !important; }
@@ -56,30 +59,56 @@
       letter-spacing: 0.03em;
     }
     .grid-view table tr.print-empty-row { display: none !important; }
-    .grid-view table tr.bold-row td { font-size: 8.6pt; }
+    .grid-view table tr.bold-row td {
+      background: #eee !important;
+      color: #000 !important;
+      font-size: 8.6pt;
+      font-weight: 800;
+    }
     .order-card-grid {
-      display: block !important;
+      display: grid !important;
+      grid-template-columns: repeat(auto-fit, minmax(2.4in, 1fr)) !important;
+      gap: 5pt !important;
       padding: 0 !important;
       overflow: visible !important;
       min-height: 0 !important;
     }
+    .order-print-count-1 .order-card-grid { grid-template-columns: 1fr !important; }
+    .order-print-count-2 .order-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .order-print-count-3 .order-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    .order-print-landscape .order-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
     .order-card {
       background: #fff !important;
       border-color: #555 !important;
       box-shadow: none !important;
       break-inside: avoid;
-      margin: 0 0 6pt !important;
+      margin: 0 !important;
     }
-    .order-card-head { padding: 4pt 6pt !important; background: #eee !important; }
-    .order-card h3 { font-size: 10pt !important; margin: 0 !important; }
-    .order-card-meta { font-size: 7.5pt !important; line-height: 1.15 !important; }
-    .order-card-section { padding: 2.3pt 6pt !important; font-size: 7.4pt !important; }
+    .order-card-head {
+      padding: 4pt 5pt !important;
+      background: #eee !important;
+      border-bottom: 0.5pt solid #888 !important;
+    }
+    .order-card h3 { font-size: 9pt !important; margin: 0 !important; }
+    .order-card-meta { font-size: 6.8pt !important; line-height: 1.12 !important; }
+    .order-card-section {
+      padding: 2.2pt 5pt !important;
+      background: #eee !important;
+      border-top: 0.5pt solid #aaa !important;
+      border-bottom: 0.5pt solid #aaa !important;
+      color: #000 !important;
+      font-size: 6.8pt !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.03em !important;
+    }
     .order-card-row {
-      grid-template-columns: minmax(86px, 31%) minmax(0, 1fr) !important;
-      gap: 5pt !important;
-      padding: 2pt 6pt !important;
+      grid-template-columns: minmax(58pt, 38%) minmax(0, 1fr) !important;
+      gap: 4pt !important;
+      padding: 1.9pt 5pt !important;
     }
-    .order-card-label, .order-card-value { font-size: 8pt !important; line-height: 1.15 !important; }
+    .order-card-label, .order-card-value { font-size: 6.9pt !important; line-height: 1.12 !important; }
+    .order-print-landscape .order-card-label,
+    .order-print-landscape .order-card-value { font-size: 6.5pt !important; }
   }
 </style>
 {% endblock %}
@@ -149,8 +178,9 @@
 </div>
 
 {% set print_empty_values = ["", "-", "—", "0", "0.0", "0.00"] %}
+{% set order_print_count = combined_count|default(0) %}
 {% for view_name, grid in grids.items() %}
-  <div class="grid-view{% if active_view == view_name %} is-active{% endif %}" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
+  <div class="grid-view{% if active_view == view_name %} is-active{% endif %}{% if mode == 'combined' %} order-print-combined order-print-count-{{ order_print_count if order_print_count <= 3 else '4plus' }}{% if order_print_count >= 4 %} order-print-landscape{% endif %}{% endif %}" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
     {% if mode == 'combined' and card_views %}
       <div class="order-card-grid">
         {% for card in card_views.get(view_name, []) %}

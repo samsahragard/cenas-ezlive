@@ -241,12 +241,50 @@ def _agrees(target: float, candidates: list[float]) -> bool:
 # --------------------------------------------------------------------------- #
 # prompts
 # --------------------------------------------------------------------------- #
+_DATA_BOUNDARIES = (
+    "HARD DATA BOUNDARIES - obey exactly. Saying 'not available' is ALWAYS better "
+    "than a confident wrong answer or a number reconstructed from a coverage gap:\n"
+    "1. SALES = NET = caterer_total_due, and it exists ONLY through 2026-05-09. For "
+    "ANY window after that (yesterday, this week, last week, this month, last "
+    "Friday/Saturday, 'recent'), NET SALES ARE UNAVAILABLE - say that as the "
+    "HEADLINE. NEVER substitute ezcater_total (gross) or 'available'/'quoted'/"
+    "unfinalized order amounts and call it 'sales', and NEVER build a 'sales "
+    "up/down/why' conclusion on them. Gross may be named only as an explicitly "
+    "labeled DIFFERENT metric, never as the answer to a 'sales' question.\n"
+    "2. There is NO intra-day/hourly data and NO daypart beyond a single 'lunch' "
+    "bucket. window_start/window_end are midnight placeholders; "
+    "dm_order_timing.delivery_start is CATERING DELIVERY logistics, NOT in-store "
+    "traffic. Treat 'busiest hour', 'lunch rush', 'dinner vs lunch', 'morning vs "
+    "evening', and any breakfast/dinner question as NOT ANSWERABLE - never "
+    "reconstruct dayparts or hours from delivery or placeholder timestamps.\n"
+    "3. labor_pct and SPLH are NULL everywhere (sales ends 05-09, labor starts "
+    "05-11 - no overlap) => NOT AVAILABLE. Never rebuild labor% or SPLH from the "
+    "tiny residual raw overlap.\n"
+    "4. Items are QUANTITY only - item dollar columns and item_sales_summary."
+    "category are NULL. There is NO category dimension (do not invent one from item "
+    "names) and NO per-item revenue.\n"
+    "5. There is NO BOH/FOH or department split - do not invent one from positions.\n"
+    "6. EXACTLY TWO stores exist: copperfield and tomball. Raw store_1/store_3 -> "
+    "copperfield, store_2/store_4 -> tomball; ALWAYS normalize. There is NO third or "
+    "fourth location. Prefer the already-normalized analytics tables over raw store_N.\n"
+    "7. AVERAGES: use daily_sales_summary.avg_check, or compute SUM(value)/SUM(count) "
+    "ONLY over rows where the value is non-NULL. Never divide a sales SUM by an "
+    "order_count that includes NULL-sales rows - it reverses rankings.\n"
+    "8. PRIVACY: NEVER attach pay, earnings, individual hours, a performance score, "
+    "or a best/worst label to a NAMED individual (employee OR driver) - it is "
+    "private. For 'who earns most / individual pay / worst employee' questions, "
+    "REFUSE and offer an AGGREGATE instead. Aggregate labor cost/hours is fine; "
+    "per-person breakdowns by name are not. (Driver DELIVERY COUNTS by name are "
+    "operationally fine; pay/earnings by name are not.)"
+)
+
 _PLAN_SYS = (
     "You are C.E.N.A., a restaurant operations analyst for Cenas Kitchen. You "
     "investigate questions against a read-only SQLite analytics surface. Classify "
     "the question and write a short investigation plan. Respond with STRICT JSON "
     "only: {\"class\": one of lookup|comparison|diagnosis|recommendation, "
-    "\"plan\": [\"step\", ...], \"notes\": \"what would change the answer\"}."
+    "\"plan\": [\"step\", ...], \"notes\": \"what would change the answer\"}.\n\n"
+    + _DATA_BOUNDARIES
 )
 
 _ACT_SYS = (
@@ -265,7 +303,8 @@ _ACT_SYS = (
     "ANSWER PROMPTLY: you have a HARD budget of 6 queries. As soon as the "
     "observations support a conclusion, emit the answer action - do NOT keep "
     "cross-checking a simple lookup. A single analytics-table row is often the "
-    "whole answer; the loop will still cross-check your headline numbers afterward."
+    "whole answer; the loop will still cross-check your headline numbers afterward.\n\n"
+    + _DATA_BOUNDARIES
 )
 
 
@@ -607,7 +646,8 @@ def _final_synthesis(llm, question, scratchpad, timeout, llm_errs) -> Optional[d
         "\"confidence\":\"medium|low\",\"confidence_reason\":\"...\",\"headline_numbers\":"
         "[{\"label\":\"...\",\"value\":\"...\"}],\"discarded\":[...]}. If the observations "
         "support a conclusion, state it; if they do not, say what you could and could "
-        "not determine. NEVER invent a number that isn't in the observations."
+        "not determine. NEVER invent a number that isn't in the observations.\n\n"
+        + _DATA_BOUNDARIES
     )
     prompt = (f"QUESTION: {question}\n\nOBSERVATIONS:\n{_scratch_text(scratchpad)}\n\n"
               "Answer now from these observations.")

@@ -144,6 +144,12 @@ _EXPLICIT_EXCLUDED_COLUMNS: dict[str, frozenset[str]] = {
     # section 5 + curated JSON plumbing (raw Toast GUIDs)
     "toastdm.dm_perf_period": frozenset({
         "base_pay", "tips", "tip_pct", "service_json", "attribution_json"}),
+    # PRIVACY (QA E8/C5): the employee NAME is the join key that turns aggregate
+    # labor into per-person disclosure (name + their OT hours / score). Block it so
+    # employee answers stay aggregate-only. positions_json is a raw-GUID plumbing
+    # blob with no analytic value. (Driver names in driverdc.dm_driver stay - needed
+    # for delivery-COUNT questions; pay-by-name is barred by the reasoner privacy rule.)
+    "toastdm.dm_profile": frozenset({"full_name", "positions_json"}),
 }
 
 # Generic column hygiene (section 5 closing rule): any email/phone/address column

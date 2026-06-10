@@ -119,8 +119,10 @@ def test_select_star_on_raw_table_without_exclusions():
 
 
 def test_json_each_table_function():
-    ok("SELECT p.full_name, j.value FROM toastdm.dm_profile p, "
-       "json_each(p.positions_json) j")
+    # json_each over an allowed *_json column (item modifiers); employee name/positions
+    # json are now privacy-excluded, so use the item-modifier blob instead.
+    ok("SELECT i.name, j.value FROM ordersdc.dm_order_item i, "
+       "json_each(i.modifiers_json) j")
 
 
 def test_date_functions_and_literals():

@@ -79,7 +79,9 @@ def test_key_operational_tables_present_with_correct_columns():
         "reg_hours", "ot_hours"}
     assert allow["toastdm.dm_time_entry"] >= {
         "cena_employee_id", "business_date", "total_hours"}
-    assert allow["toastdm.dm_profile"] >= {"cena_employee_id", "full_name"}
+    assert allow["toastdm.dm_profile"] >= {"cena_employee_id", "primary_store_key"}
+    # PRIVACY: employee name is excluded so aggregate labor can't be joined to a person
+    assert "full_name" not in allow["toastdm.dm_profile"]
     assert allow["appdb.orders"] >= {
         "external_order_id", "delivery_date", "status", "caterer_total_due",
         "potential_payout", "paid_payout"}

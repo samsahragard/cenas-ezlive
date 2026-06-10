@@ -86,6 +86,16 @@ def _toast_phone(e: dict) -> str:
     return _fmt_phone(raw, e.get("phoneNumberCountryCode") or "")
 
 
+def _profile_name_sort_key(name: str | None) -> tuple[str, str]:
+    clean = (name or "").strip().casefold()
+    parts = clean.split()
+    return ((parts[0] if parts else ""), clean)
+
+
+def _sort_by_profile_name(rows: list[dict], field: str) -> list[dict]:
+    return sorted(rows or [], key=lambda row: _profile_name_sort_key(row.get(field)))
+
+
 def _cena_roster(db, store: str) -> list[dict]:
     """THIS store's Cena scheduling roster as [{emp_id, name, phone}].
 
@@ -104,7 +114,7 @@ def _cena_roster(db, store: str) -> list[dict]:
                 "name": e.get("full_name") or "",
                 "phone": e.get("phone") or "",
             })
-    return out
+    return _sort_by_profile_name(out, "name")
 
 
 def _ignored_link_ids(db, store: str) -> tuple[set[int], set[str]]:
@@ -165,7 +175,7 @@ def _confirmed_link_rows(
             "toast_name": (link.toast_name or (toast or {}).get("name") or toast_id[:8]),
             "toast_phone": (toast or {}).get("phone") or "",
         })
-    return rows
+    return _sort_by_profile_name(rows, "cena_name")
 
 
 @store_bp.route("/schedules-v2/toast/match-suggestions", methods=["GET"])
@@ -293,10 +303,10 @@ def sv2_toast_match_suggestions():
 
     return jsonify({
         "ok": True,
-        "confirmed_links": confirmed_links,
-        "suggestions": suggestions,
-        "unmatched_cena": unmatched_cena,
-        "unmatched_toast": unmatched_toast,
+        "confirmed_links": _sort_by_profile_name(confirmed_links, "cena_name"),
+        "suggestions": _sort_by_profile_name(suggestions, "cena_name"),
+        "unmatched_cena": _sort_by_profile_name(unmatched_cena, "name"),
+        "unmatched_toast": _sort_by_profile_name(unmatched_toast, "name"),
     }), 200
 
 

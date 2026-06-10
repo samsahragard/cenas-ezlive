@@ -809,8 +809,22 @@
   }
   function _cenaOpts(uc) {
     var o = '<option value="">Select a person&hellip;</option>';
-    uc.forEach(function (c) { o += '<option value="' + esc(String(c.emp_id)) + '" data-name="' + esc(c.name || "") + '">' + esc(c.name || "") + '</option>'; });
+    _sortByCenaName(uc, function (c) { return c.name; }).forEach(function (c) { o += '<option value="' + esc(String(c.emp_id)) + '" data-name="' + esc(c.name || "") + '">' + esc(c.name || "") + '</option>'; });
     return o;
+  }
+  function _firstNameSortValue(name) {
+    var clean = String(name || "").trim();
+    return {
+      first: (clean.split(/\s+/)[0] || "").toLowerCase(),
+      full: clean.toLowerCase()
+    };
+  }
+  function _sortByCenaName(rows, getter) {
+    return (rows || []).slice().sort(function (a, b) {
+      var av = _firstNameSortValue(getter(a));
+      var bv = _firstNameSortValue(getter(b));
+      return av.first.localeCompare(bv.first) || av.full.localeCompare(bv.full);
+    });
   }
   var _LINK_HEAD = '<div class="tws-link-head"><span>Cena</span><span>Toast</span><span>Verify</span></div>';
   // Build ONE store's panel: 3-col table (Cena | Toast | Action) split into "batches" --
@@ -820,7 +834,10 @@
     if (!res.ok || d.ok === false) {
       return _LINK_HEAD + '<div class="tws-link-row"><div class="tws-link-cena ph">' + esc(d.error || "Toast unavailable") + '</div><div class="tws-link-toast"></div><div class="tws-link-act"></div></div>';
     }
-    var linked = d.confirmed_links || [], sugg = d.suggestions || [], uc = d.unmatched_cena || [], ut = d.unmatched_toast || [];
+    var linked = _sortByCenaName(d.confirmed_links, function (m) { return m.cena_name; });
+    var sugg = _sortByCenaName(d.suggestions, function (m) { return m.cena_name; });
+    var uc = _sortByCenaName(d.unmatched_cena, function (c) { return c.name; });
+    var ut = (d.unmatched_toast || []).slice();
     if (!linked.length && !sugg.length && !uc.length && !ut.length) {
       return _LINK_HEAD + '<div class="tws-link-row"><div class="tws-link-cena ph">No team members at this store.</div><div class="tws-link-toast"></div><div class="tws-link-act"></div></div>';
     }

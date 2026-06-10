@@ -142,6 +142,65 @@ def test_manual_link_returns_as_confirmed_and_is_removed_from_candidate_pools(li
     assert "toast-a" not in copper_text
 
 
+def test_match_suggestions_orders_cena_profiles_by_first_name_for_each_store(link_app):
+    flask_app, db = link_app
+    client = _client(flask_app)
+    _employee(db, 31, "Zoe No Match", "tomball")
+    _employee(db, 32, "Ben No Match", "tomball")
+    _employee(db, 33, "Deylin Garza", "tomball")
+    _employee(db, 34, "Austin Markham", "tomball")
+    _employee(db, 41, "Zane Copper", "copperfield")
+    _employee(db, 42, "Abby Copper", "copperfield")
+
+    tomball = client.get("/dos/schedules-v2/toast/match-suggestions")
+    assert tomball.status_code == 200, tomball.get_data(as_text=True)
+    body = tomball.get_json()
+    assert [row["cena_name"] for row in body["suggestions"]] == [
+        "Austin Markham",
+        "Deylin Garza",
+    ]
+    assert [row["name"] for row in body["unmatched_cena"]] == [
+        "Ben No Match",
+        "Zoe No Match",
+    ]
+
+    copper = client.get("/uno/schedules-v2/toast/match-suggestions")
+    assert copper.status_code == 200, copper.get_data(as_text=True)
+    assert [row["name"] for row in copper.get_json()["unmatched_cena"]] == [
+        "Abby Copper",
+        "Zane Copper",
+    ]
+
+
+def test_confirmed_links_are_ordered_by_cena_profile_first_name(link_app):
+    flask_app, db = link_app
+    client = _client(flask_app)
+    _employee(db, 51, "Zoe Linked", "tomball")
+    _employee(db, 52, "Amy Linked", "tomball")
+    db.add(CenaToastLink(
+        cena_employee_id=51,
+        store_key="tomball",
+        toast_id="toast-b",
+        toast_name="Deylin Garza",
+        confirmed_by=1,
+    ))
+    db.add(CenaToastLink(
+        cena_employee_id=52,
+        store_key="tomball",
+        toast_id="toast-a",
+        toast_name="Austin Markham",
+        confirmed_by=1,
+    ))
+    db.commit()
+
+    response = client.get("/dos/schedules-v2/toast/match-suggestions")
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert [row["cena_name"] for row in response.get_json()["confirmed_links"]] == [
+        "Amy Linked",
+        "Zoe Linked",
+    ]
+
+
 def test_relink_updates_employee_and_moves_duplicate_toast_link(link_app):
     flask_app, db = link_app
     client = _client(flask_app)

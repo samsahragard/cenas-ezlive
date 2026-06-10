@@ -212,11 +212,11 @@
   .sv2-row.former .sv2-emp-name { opacity: .6; }   /* Sam #2872: former staff, struck-through (<s>) + muted */
   .sv2-cell {
     padding: 5px; min-width: 88px; height: 62px; cursor: pointer;
-    background: rgba(126, 120, 113, 0.18);
+    background: rgba(145, 190, 225, 0.14);
     transition: background .12s;
   }
-  .sv2-cell:hover { background: rgba(154, 145, 134, .24); }
-  .sv2-cell.is-today { background: rgba(149, 127, 78, .22); }
+  .sv2-cell:hover { background: rgba(165, 205, 238, .22); }
+  .sv2-cell.is-today { background: rgba(154, 201, 242, .24); }
   .sv2-addhint { color: var(--sk-cream-meta); font-size: 18px; text-align: center;
     line-height: 52px; opacity: 0; transition: opacity .12s; }
   .sv2-cell:hover .sv2-addhint { opacity: 1; }
@@ -404,14 +404,14 @@
       <div class="sv2-weeklabel"><small>Week of</small><span id="sv2-weeklabel">&hellip;</span></div>
       <button class="sv2-arrow" id="sv2-next" title="Next week" aria-label="Next week">&rsaquo;</button>
     </div>
-    <span class="sv2-pill none" id="sv2-status">No schedule</span>
     <button class="sv2-btn warn sv2-hidden" id="sv2-declined" title="Show only declined shifts that need reassigning" aria-pressed="false"></button>
-    <div class="sv2-spacer"></div>
     <div class="sv2-posfilter" id="sv2-posfilter-wrap">
       <button type="button" class="sv2-filter" id="sv2-posfilter-btn" aria-haspopup="true" aria-expanded="false">All positions</button>
       <div class="sv2-posfilter-pop sv2-hidden" id="sv2-posfilter-pop" role="group" aria-label="Filter by position"></div>
     </div>
     <button class="sv2-btn" id="sv2-today">This week</button>
+    <div class="sv2-spacer"></div>
+    <span class="sv2-pill none" id="sv2-status">No schedule</span>
     <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
     <button class="sv2-btn primary sv2-hidden" id="sv2-publish">Publish</button>
   </div>
@@ -851,23 +851,22 @@
       ? roster.filter(empHoldsFilteredPos)
       : roster;
     var rows = "";
-    // Sam #2889: float everyone who ACTUALLY WORKED this week to the top, so a
-    // historical/imported week shows its schedule immediately instead of being
-    // buried under empty current-roster rows. The bench (no shift this week) sinks
-    // to the bottom (still present to assign on a live week).
-    function empHasShifts(emp) {
-      for (var d = 0; d < 7; d++) { if (shiftsFor(emp, isoDate(addDays(state.weekStart, d))).length) return true; }
-      return false;
+    function firstNameKey(emp) {
+      var name = String((emp && (emp.full_name || emp.former)) || emp || "").trim();
+      return (name.split(/\s+/)[0] || "").toLowerCase();
     }
-    var withShifts = [], bench = [];
-    people.forEach(function (emp) { (empHasShifts(emp) ? withShifts : bench).push(emp); });
-    // Open row, then everyone-with-shifts (current + former), then the empty bench.
-    rows += rowHtml({ id: null, full_name: "Open shifts" }, "open");
-    withShifts.forEach(function (emp) { rows += rowHtml(emp, "current"); });
+    function firstNameSort(a, b) {
+      var an = String((a && (a.full_name || a.former)) || a || "");
+      var bn = String((b && (b.full_name || b.former)) || b || "");
+      return firstNameKey(a).localeCompare(firstNameKey(b)) || an.localeCompare(bn);
+    }
+    var staffRows = people.map(function (emp) { return { emp: emp, kind: "current" }; });
     formerNamesInWeek().forEach(function (nm) {
-      rows += rowHtml({ id: null, former: nm, full_name: nm }, "former");
+      staffRows.push({ emp: { id: null, former: nm, full_name: nm }, kind: "former" });
     });
-    bench.forEach(function (emp) { rows += rowHtml(emp, "current"); });
+    staffRows.sort(function (a, b) { return firstNameSort(a.emp, b.emp); });
+    rows += rowHtml({ id: null, full_name: "Open shifts" }, "open");
+    staffRows.forEach(function (row) { rows += rowHtml(row.emp, row.kind); });
     elBody.innerHTML = rows;
     renderFilterHint(people, roster.length);
     updateSelToolbar();  // Phase 2d: keep the bulk-action bar in sync after a (re)render
@@ -881,7 +880,11 @@
         seen[s.display_name] = 1; out.push(s.display_name);
       }
     });
-    out.sort();
+    out.sort(function (a, b) {
+      var af = String(a || "").trim().split(/\s+/)[0].toLowerCase();
+      var bf = String(b || "").trim().split(/\s+/)[0].toLowerCase();
+      return af.localeCompare(bf) || String(a || "").localeCompare(String(b || ""));
+    });
     return out;
   }
 

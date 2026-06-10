@@ -261,7 +261,11 @@ _ACT_SYS = (
     "unqualified; raw tables are schema-qualified like ordersdc.dm_order). Prefer "
     "the pre-aggregated analytics tables. Never invent numbers - every figure in "
     "your answer must come from query rows you observed. If the data window does "
-    "not cover the question, say so honestly rather than guessing."
+    "not cover the question, say so honestly rather than guessing.\n"
+    "ANSWER PROMPTLY: you have a HARD budget of 6 queries. As soon as the "
+    "observations support a conclusion, emit the answer action - do NOT keep "
+    "cross-checking a simple lookup. A single analytics-table row is often the "
+    "whole answer; the loop will still cross-check your headline numbers afterward."
 )
 
 
@@ -372,10 +376,15 @@ def investigate(
                           "note": f"wall-clock budget {time_budget_s}s reached after "
                                   f"{executed} queries"})
             break
+        last_call = executed >= max_queries - 1
+        nudge = ("\n\nThis is your LAST available query - after it you MUST answer. If "
+                 "the observations already support a conclusion, emit the ANSWER action "
+                 "NOW instead of querying." if last_call else "")
         act_prompt = (
             f"SCHEMA:\n{schema}\n\nQUESTION: {question}\nCLASS: {qclass}\n"
             f"PLAN: {plan_steps}\n\nOBSERVATIONS SO FAR:\n{_scratch_text(scratchpad)}\n\n"
             f"Queries used: {executed}/{max_queries}. Emit the next action as JSON."
+            + nudge
         )
         try:
             action = _ask_json(llm, act_sys, act_prompt, _llm_timeout_s) or {}
@@ -435,13 +444,15 @@ def investigate(
             scratchpad.append({"purpose": purpose, "sql": sql, "error": reason})
         executed += 1
 
-    # ---- forced honest answer if we never settled ----
+    # ---- budget wall: synthesize a final answer from what we already pulled ----
     forced = False
     if answer_obj is None:
         forced = True
-        answer_obj = _forced_answer(scratchpad, executed, max_queries)
+        answer_obj = _final_synthesis(llm, question, scratchpad, _llm_timeout_s, llm_errs) \
+            or _forced_answer(scratchpad, executed, max_queries)
         trace.append({"step": step, "type": "limit",
-                      "note": "answered from partial evidence at the query budget"})
+                      "note": "reached the query budget - concluded from the observations "
+                              "already gathered"})
 
     answer_text = str(answer_obj.get("answer", "")).strip()
     confidence = str(answer_obj.get("confidence", "medium")).lower().strip() or "medium"
@@ -535,7 +546,11 @@ def investigate(
             confidence_reason = (confidence_reason + " " if confidence_reason else "") + \
                 "no independent cross-check was available"
     if forced and confidence == "high":
-        confidence = "low"
+        # a budget-wall synthesis can be solid but was not allowed a fresh
+        # cross-check pass - cap at medium, never claim high
+        confidence = "medium"
+        confidence_reason = (confidence_reason + " " if confidence_reason else "") + \
+            "concluded at the query budget"
 
     # ---- D4 proactive synthesis: ONE unasked-for anomaly, if budget remains ----
     if not over_budget() and step < _MAX_STEP_GUARD:
@@ -578,6 +593,33 @@ def _honest_failure(question, trace, queries, why: str) -> dict:
         "trace": trace,
         "queries": queries,
     }
+
+
+def _final_synthesis(llm, question, scratchpad, timeout, llm_errs) -> Optional[dict]:
+    """At the query budget, ask the model to conclude from the observations it
+    ALREADY gathered (no new SQL). Recovers cases where the answer was in hand but
+    the loop kept over-investigating. Never invents a number."""
+    if not scratchpad:
+        return None
+    sys = (
+        "You are OUT of query budget. Using ONLY the observations below, give your "
+        "best answer now - no more SQL. Respond with STRICT JSON {\"answer\":\"...\","
+        "\"confidence\":\"medium|low\",\"confidence_reason\":\"...\",\"headline_numbers\":"
+        "[{\"label\":\"...\",\"value\":\"...\"}],\"discarded\":[...]}. If the observations "
+        "support a conclusion, state it; if they do not, say what you could and could "
+        "not determine. NEVER invent a number that isn't in the observations."
+    )
+    prompt = (f"QUESTION: {question}\n\nOBSERVATIONS:\n{_scratch_text(scratchpad)}\n\n"
+              "Answer now from these observations.")
+    try:
+        obj = _ask_json(llm, sys, prompt, timeout)
+    except llm_errs:
+        return None
+    except Exception:
+        return None
+    if obj and str(obj.get("answer", "")).strip():
+        return obj
+    return None
 
 
 def _forced_answer(scratchpad: list[dict], executed: int, max_queries: int) -> dict:

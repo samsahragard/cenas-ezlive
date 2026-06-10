@@ -149,15 +149,16 @@
     background: var(--sk-bg-input); border: 1px solid var(--sk-border-subtle);
     border-radius: var(--sk-radius-sm); padding: 7px 10px; min-width: 150px;
   }
-  .sv2-posfilter { position: relative; display: inline-block; }
-  #sv2-posfilter-btn { cursor: pointer; text-align: left; }
-  #sv2-posfilter-btn::after { content: "\25BE"; margin-left: 8px; opacity: .6; font-size: 11px; }
+  .sv2-posfilter, .sv2-tagfilter { position: relative; display: inline-block; }
+  #sv2-posfilter-btn, #sv2-tagfilter-btn { cursor: pointer; text-align: left; }
+  #sv2-posfilter-btn::after, #sv2-tagfilter-btn::after { content: "\25BE"; margin-left: 8px; opacity: .6; font-size: 11px; }
   .sv2-posfilter-pop {
     position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
     min-width: 200px; max-height: 300px; overflow-y: auto;
     background: var(--sk-bg-card); border: 1px solid var(--sk-border-subtle);
     border-radius: var(--sk-radius-sm); padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
   }
+  .sv2-tagfilter .sv2-posfilter-pop { min-width: 240px; }
   .sv2-posfilter-opt {
     display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
     font-size: 13px; color: var(--sk-cream); cursor: pointer; white-space: nowrap;
@@ -165,6 +166,19 @@
   .sv2-posfilter-opt:hover { background: var(--sk-bg-card-hi); }
   .sv2-posfilter-opt input { accent-color: var(--sk-red); margin: 0; }
   .sv2-posfilter-sep { height: 1px; background: var(--sk-border-subtle); margin: 4px 2px; }
+  .sv2-filter-create {
+    display: grid; grid-template-columns: 1fr auto; gap: 6px; padding: 6px 2px 2px;
+  }
+  .sv2-filter-create input {
+    min-width: 0; background: var(--sk-bg-input); border: 1px solid var(--sk-border-subtle);
+    border-radius: 6px; color: var(--sk-cream); padding: 7px 8px; font-size: 12.5px;
+  }
+  .sv2-filter-create button {
+    border: 1px solid var(--sk-border-active); background: rgba(228,179,64,.12);
+    color: var(--sk-gold-bright); border-radius: 6px; font-weight: 800; cursor: pointer;
+    padding: 0 10px;
+  }
+  .sv2-filter-create button:hover { background: rgba(228,179,64,.2); }
   /* position-filter people hint + holder list (Sam #2589) */
   .sv2-pos-hint { font-size: 12.5px; color: var(--sk-gold-bright); margin: -4px 2px 10px;
     line-height: 1.4; }
@@ -243,6 +257,13 @@
     color: var(--sk-cream-faint); font-weight:700; margin-top:2px; }
   .sv2-chip-time { font-family:'JetBrains Mono',monospace; font-size: 11.5px; font-weight: 600; color: var(--sk-cream); }
   .sv2-chip-pos { font-size: 11px; color: var(--sk-cream-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sv2-chip-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+  .sv2-chip-tag {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 9.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+    border-radius: 999px; padding: 1px 6px; color: var(--sk-gold-bright);
+    background: rgba(228,179,64,.12); border: 1px solid rgba(228,179,64,.22);
+  }
   .sv2-chip-open-tag { font-size: 10px; letter-spacing:.1em; text-transform:uppercase; color: var(--open); font-weight:700; }
   /* B5 acceptance state on a manager chip (lights up once the board JSON carries `response`). */
   .sv2-chip.declined { border-left-color: var(--sk-red-bright) !important; background: rgba(232,88,82,.14); box-shadow: inset 0 0 0 1px rgba(232,88,82,.45); }
@@ -376,12 +397,23 @@
   .sv2-row2 { display: flex; gap: 10px; }
   .sv2-row2 > * { flex: 1; }
   .sv2-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sv2-tags-empty { font-size: 12px; color: var(--sk-cream-faint); padding: 4px 0; }
   .sv2-tag {
     font-size: 12px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
     border: 1px solid var(--sk-border-subtle); background: var(--sk-bg-input); color: var(--sk-cream-dim);
     user-select: none;
   }
   .sv2-tag.on { background: rgba(228,179,64,.16); border-color: var(--sk-border-active); color: var(--sk-gold-bright); }
+  .sv2-tag-create { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+  .sv2-tag-create input {
+    min-width: 0; background: var(--sk-bg-input); border: 1px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-sm); color: var(--sk-cream); padding: 8px 10px; font-size: 13px;
+  }
+  .sv2-tag-create button {
+    border: 1px solid var(--sk-border-active); background: rgba(228,179,64,.12);
+    color: var(--sk-gold-bright); border-radius: var(--sk-radius-sm); font-weight: 800;
+    padding: 0 12px; cursor: pointer;
+  }
   .sv2-modal-actions { display: flex; gap: 10px; margin-top: 18px; }
   .sv2-modal-actions .sv2-spacer { flex: 1; }
   .sv2-err { color: var(--sk-red-bright); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
@@ -408,6 +440,10 @@
     <div class="sv2-posfilter" id="sv2-posfilter-wrap">
       <button type="button" class="sv2-filter" id="sv2-posfilter-btn" aria-haspopup="true" aria-expanded="false">All positions</button>
       <div class="sv2-posfilter-pop sv2-hidden" id="sv2-posfilter-pop" role="group" aria-label="Filter by position"></div>
+    </div>
+    <div class="sv2-tagfilter" id="sv2-tagfilter-wrap">
+      <button type="button" class="sv2-filter" id="sv2-tagfilter-btn" aria-haspopup="true" aria-expanded="false">All tags</button>
+      <div class="sv2-posfilter-pop sv2-hidden" id="sv2-tagfilter-pop" role="group" aria-label="Filter by tag"></div>
     </div>
     <button class="sv2-btn" id="sv2-today">This week</button>
     <div class="sv2-spacer"></div>
@@ -524,6 +560,10 @@
       <div class="sv2-field" id="sv2-tagfield">
         <label>Tags</label>
         <div class="sv2-tags" id="sv2-m-tags"></div>
+        <div class="sv2-tag-create">
+          <input class="sv2-input" id="sv2-m-tag-new" type="text" maxlength="120" placeholder="Add a tag">
+          <button type="button" id="sv2-m-tag-add">Add</button>
+        </div>
       </div>
 
       <div class="sv2-field">
@@ -553,7 +593,7 @@
 (function () {
   "use strict";
   var CFG = JSON.parse(document.getElementById("sv2-config").textContent);
-  // CFG: { storeLabel, boardUrl, scheduleNewUrl, scheduleUrlBase, shiftNewUrl, shiftUrlBase }
+  // CFG: { storeLabel, boardUrl, scheduleNewUrl, scheduleUrlBase, shiftNewUrl, shiftUrlBase, tagCreateUrl }
   // B5 publish URL = CFG.scheduleUrlBase + "/" + <schedule_id> + "/publish"
 
   var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -565,6 +605,7 @@
     weekStart: weekStartOf(new Date()),  // Date (local midnight, week-start day)
     board: null,
     posFilter: [],
+    tagFilter: [],
     editing: null,        // shift object when editing, else null
     cellEmp: null,        // employee_id (or null=open) for a new shift
     cellDate: null,       // ISO date string for a new shift
@@ -602,6 +643,7 @@
       elNoDraft = $("sv2-nodraft"), elAccess = $("sv2-access"),
       elStatus = $("sv2-status"), elWeekLabel = $("sv2-weeklabel"),
       elPosBtn = $("sv2-posfilter-btn"), elPosPop = $("sv2-posfilter-pop"), elCreate = $("sv2-createdraft"),
+      elTagBtn = $("sv2-tagfilter-btn"), elTagPop = $("sv2-tagfilter-pop"),
       elPublish = $("sv2-publish"), elDeclined = $("sv2-declined"), elToast = $("sv2-toast");
 
   // ---- weekly board load ----
@@ -698,6 +740,7 @@
         state.selected = {};  // Phase 2d: a fresh board (week nav / refresh) clears multi-select
         hide(elLoading);
         buildPosFilter();
+        buildTagFilter();
         setStatus();
         if (!data.schedule) { renderGrid(); show(elNoDraft); }
         else { renderGrid(); show(elGrid); }
@@ -713,7 +756,7 @@
         } else {
           // backend not ready yet / transient: show the empty grid shell
           state.board = state.board || { schedule: null, shifts: [], roster: [], positions: [], tags: [] };
-          setStatus(); renderGrid();
+          buildTagFilter(); setStatus(); renderGrid();
           $("sv2-access-msg").textContent = "Could not load this week (the schedule service may still be deploying). Try again shortly.";
           show(elAccess);
         }
@@ -743,6 +786,39 @@
     updatePosFilterLabel();
   }
 
+  function buildTagFilter() {
+    var tags = (state.board && state.board.tags) || [];
+    var valid = {}; tags.forEach(function (t) { valid[String(t.id)] = true; });
+    state.tagFilter = state.tagFilter.filter(function (id) { return valid[id]; });
+    elTagPop.innerHTML = "";
+    var allLab = document.createElement("label"); allLab.className = "sv2-posfilter-opt";
+    var allCk = document.createElement("input"); allCk.type = "checkbox"; allCk.id = "sv2-tf-all";
+    allCk.checked = (state.tagFilter.length === 0);
+    allLab.appendChild(allCk); allLab.appendChild(document.createTextNode(" All tags"));
+    elTagPop.appendChild(allLab);
+    var sep = document.createElement("div"); sep.className = "sv2-posfilter-sep"; elTagPop.appendChild(sep);
+    if (tags.length) {
+      tags.forEach(function (t) {
+        var id = String(t.id);
+        var lab = document.createElement("label"); lab.className = "sv2-posfilter-opt";
+        var ck = document.createElement("input"); ck.type = "checkbox"; ck.className = "sv2-tf-tag"; ck.value = id;
+        ck.checked = (state.tagFilter.indexOf(id) !== -1);
+        lab.appendChild(ck); lab.appendChild(document.createTextNode(" " + (t.name || ("#" + id))));
+        elTagPop.appendChild(lab);
+      });
+    } else {
+      var empty = document.createElement("div");
+      empty.className = "sv2-posfilter-opt";
+      empty.textContent = "No tags yet";
+      elTagPop.appendChild(empty);
+    }
+    var sep2 = document.createElement("div"); sep2.className = "sv2-posfilter-sep"; elTagPop.appendChild(sep2);
+    var create = document.createElement("div"); create.className = "sv2-filter-create";
+    create.innerHTML = '<input type="text" id="sv2-tag-create-name" maxlength="120" placeholder="New tag"><button type="button" id="sv2-tag-create-btn">Add</button>';
+    elTagPop.appendChild(create);
+    updateTagFilterLabel();
+  }
+
   function updatePosFilterLabel() {
     var n = state.posFilter.length, label = "All positions";
     if (n === 1) { var p = posById(state.posFilter[0]); label = p ? p.name : "1 position"; }
@@ -750,11 +826,31 @@
     elPosBtn.textContent = label;
   }
 
+  function updateTagFilterLabel() {
+    var n = state.tagFilter.length, label = "All tags";
+    if (n === 1) { var t = tagById(state.tagFilter[0]); label = t ? t.name : "1 tag"; }
+    else if (n > 1) { label = n + " tags"; }
+    elTagBtn.textContent = label;
+  }
+
   // ---- grid render ----
   function posById(id) {
     var ps = (state.board.positions || []);
     for (var i = 0; i < ps.length; i++) if (String(ps[i].id) === String(id)) return ps[i];
     return null;
+  }
+  function tagById(id) {
+    var ts = (state.board && state.board.tags) || [];
+    for (var i = 0; i < ts.length; i++) if (String(ts[i].id) === String(id)) return ts[i];
+    return null;
+  }
+  function shiftTags(s) {
+    var out = [], ids = (s && s.tag_ids) || [];
+    for (var i = 0; i < ids.length; i++) {
+      var t = tagById(ids[i]);
+      if (t) out.push(t);
+    }
+    return out;
   }
   // Positions carry no kitchen-area field (the board returns {id,name,store_key}),
   // so colour each chip by a stable hash of its position name: same position ->
@@ -796,6 +892,14 @@
       }
       if (!matchEmp) continue;
       if (state.posFilter.length && state.posFilter.indexOf(String(s.position_id)) === -1) continue;
+      if (state.tagFilter.length) {
+        var tagIds = (s.tag_ids || []).map(function (x) { return String(x); });
+        var tagMatch = false;
+        for (var ti = 0; ti < state.tagFilter.length; ti++) {
+          if (tagIds.indexOf(String(state.tagFilter[ti])) !== -1) { tagMatch = true; break; }
+        }
+        if (!tagMatch) continue;
+      }
       if (state.declinedOnly && String(s.response || "") !== "declined") continue;
       var sd = parseISO(s.start_at);
       if (!sd) continue;
@@ -819,6 +923,13 @@
     var style = open ? "" : ' style="border-left-color:' + posColor(s.position_id) + '"';
     var posLine = open ? '<div class="sv2-chip-open-tag">Open</div>'
                        : '<div class="sv2-chip-pos">' + (p ? esc(p.name) : "&mdash;") + '</div>';
+    var tagLine = "";
+    var stags = shiftTags(s);
+    if (stags.length) {
+      tagLine = '<div class="sv2-chip-tags">' + stags.map(function (t) {
+        return '<span class="sv2-chip-tag">' + esc(t.name || "") + '</span>';
+      }).join("") + '</div>';
+    }
     var respTag = resp === "declined" ? '<div class="sv2-chip-resp-tag declined">Declined</div>'
                 : resp === "accepted" ? '<div class="sv2-chip-resp-tag accepted">&#10003; Accepted</div>'
                 : "";
@@ -826,7 +937,7 @@
     if (state.selected[s.id]) cls += " selected";
     return '<div class="' + cls + '" data-shift="' + s.id + '" draggable="true"' + style + '>' +
              '<div class="sv2-chip-check" data-check="' + s.id + '"></div>' +
-             '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + unpubTag + '</div>';
+             '<div class="sv2-chip-time">' + t + '</div>' + posLine + tagLine + respTag + unpubTag + '</div>';
   }
 
   // Does this employee HOLD one of the filtered positions? (Sam #2589: a position
@@ -1012,8 +1123,15 @@
       });
     }
     fillSelect(emp, assignable, "id", "full_name", "Open shift (unassigned)");
-    fillSelect(pos, state.board.positions || [], "id", "name", "No position");
     fillTags(state.board.tags || []);
+    $("sv2-m-tag-new").value = "";
+    emp.onchange = function () {
+      var keep = pos.value;
+      var allowed = fillPositionSelectForEmployee(emp.value, null);
+      if (keep && selectHasValue(pos, keep)) pos.value = keep;
+      else if (emp.value && allowed.length === 1) pos.value = String(allowed[0].id);
+      else pos.value = "";
+    };
 
     if (state.editing) {
       var s = state.editing;
@@ -1023,6 +1141,7 @@
       state.cellEmp = s.employee_id != null ? s.employee_id : null;
       state.cellDate = sd ? isoDate(new Date(sd.getFullYear(), sd.getMonth(), sd.getDate())) : null;
       emp.value = s.employee_id != null ? String(s.employee_id) : "";
+      fillPositionSelectForEmployee(emp.value, s.position_id);
       pos.value = s.position_id != null ? String(s.position_id) : "";
       start.value = sd ? hhmm(sd) : "";
       var ed = parseISO(s.end_at); end.value = ed ? hhmm(ed) : "";
@@ -1037,9 +1156,16 @@
       state.cellDate = opts.dateISO;
       sub.textContent = dayLabel(new Date(opts.dateISO + "T00:00:00"));
       emp.value = state.cellEmp != null ? String(state.cellEmp) : "";
+      var allowedPos = fillPositionSelectForEmployee(emp.value, null);
       // If exactly one position is being filtered, default the new shift to it
       // (Sam #2589: you filtered to Busser, so a new shift here is a Busser shift).
-      pos.value = (state.posFilter.length === 1) ? String(state.posFilter[0]) : "";
+      if (state.posFilter.length === 1 && selectHasValue(pos, state.posFilter[0])) {
+        pos.value = String(state.posFilter[0]);
+      } else if (emp.value && allowedPos.length === 1) {
+        pos.value = String(allowedPos[0].id);
+      } else {
+        pos.value = "";
+      }
       start.value = "09:00"; end.value = "17:00"; brk.value = 0; notes.value = "";
       hide(del);
     }
@@ -1064,11 +1190,42 @@
     });
     sel.value = cur;
   }
+  function empById(id) {
+    var roster = (state.board && state.board.roster) || [];
+    for (var i = 0; i < roster.length; i++) if (String(roster[i].id) === String(id)) return roster[i];
+    return null;
+  }
+  function positionChoicesForEmployee(empId, keepPosId) {
+    var positions = (state.board && state.board.positions) || [];
+    if (!empId) return positions.slice();
+    var emp = empById(empId);
+    if (!emp) return [];
+    var held = (emp.position_ids || []).map(function (x) { return String(x); });
+    var out = positions.filter(function (p) { return held.indexOf(String(p.id)) !== -1; });
+    if (keepPosId && !out.some(function (p) { return String(p.id) === String(keepPosId); })) {
+      var keep = posById(keepPosId);
+      if (keep) out.push(keep);
+    }
+    return out;
+  }
+  function fillPositionSelectForEmployee(empId, keepPosId) {
+    var choices = positionChoicesForEmployee(empId, keepPosId);
+    fillSelect($("sv2-m-pos"), choices, "id", "name", "No position");
+    return choices;
+  }
+  function selectHasValue(sel, value) {
+    var val = String(value);
+    for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === val) return true;
+    return false;
+  }
   function fillTags(tags) {
     var wrap = $("sv2-m-tags"), tf = $("sv2-tagfield");
-    if (!tags.length) { tf.classList.add("sv2-hidden"); wrap.innerHTML = ""; return; }
     tf.classList.remove("sv2-hidden");
     wrap.innerHTML = "";
+    if (!tags.length) {
+      wrap.innerHTML = '<span class="sv2-tags-empty">No tags yet.</span>';
+      return;
+    }
     tags.forEach(function (t) {
       var b = document.createElement("span");
       b.className = "sv2-tag"; b.setAttribute("data-tag", t.id); b.textContent = t.name;
@@ -1084,6 +1241,45 @@
     nodes.forEach(function (n) {
       var id = n.getAttribute("data-tag");
       if (state.selTags[id]) n.classList.add("on"); else n.classList.remove("on");
+    });
+  }
+  function sortTags() {
+    if (!state.board) return;
+    state.board.tags = (state.board.tags || []).slice().sort(function (a, b) {
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+  }
+  function addTagToBoard(tag) {
+    if (!state.board) state.board = { schedule: null, shifts: [], roster: [], positions: [], tags: [] };
+    var tags = state.board.tags || [];
+    var found = false;
+    for (var i = 0; i < tags.length; i++) {
+      if (String(tags[i].id) === String(tag.id)) { tags[i] = tag; found = true; break; }
+    }
+    if (!found) tags.push(tag);
+    state.board.tags = tags;
+    sortTags();
+  }
+  function createTagFromInput(input, selectInModal, selectInFilter) {
+    var name = (input && input.value || "").trim();
+    if (!name) return;
+    fetch(CFG.tagCreateUrl, {
+      method: "POST", headers: jsonHeaders(), credentials: "same-origin",
+      body: JSON.stringify({ name: name })
+    }).then(parseJsonOrThrow).then(function (data) {
+      var tag = data.tag;
+      if (!tag) throw { error: "Could not create tag." };
+      addTagToBoard(tag);
+      var id = String(tag.id);
+      if (selectInModal) state.selTags[id] = true;
+      if (selectInFilter && state.tagFilter.indexOf(id) === -1) state.tagFilter.push(id);
+      buildTagFilter();
+      fillTags(state.board.tags || []);
+      paintTags();
+      if (input) input.value = "";
+      if (selectInFilter) renderGrid();
+    }).catch(function (e) {
+      toast((e && e.error) ? e.error : "Could not create tag.", true);
     });
   }
 
@@ -1230,9 +1426,44 @@
     }
     if (state.board) renderGrid();
   });
+  elTagBtn.onclick = function (e) {
+    e.stopPropagation();
+    var willOpen = elTagPop.classList.contains("sv2-hidden");
+    elTagPop.classList.toggle("sv2-hidden", !willOpen);
+    elTagBtn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  };
+  elTagPop.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (e.target && e.target.id === "sv2-tag-create-btn") {
+      createTagFromInput($("sv2-tag-create-name"), false, true);
+    }
+  });
+  elTagPop.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && e.target && e.target.id === "sv2-tag-create-name") {
+      e.preventDefault();
+      createTagFromInput(e.target, false, true);
+    }
+  });
+  elTagPop.addEventListener("change", function (e) {
+    var t = e.target;
+    if (t.id === "sv2-tf-all") {
+      state.tagFilter = [];
+      buildTagFilter();
+    } else if (t.classList && t.classList.contains("sv2-tf-tag")) {
+      var id = t.value, i = state.tagFilter.indexOf(id);
+      if (t.checked && i === -1) state.tagFilter.push(id);
+      else if (!t.checked && i !== -1) state.tagFilter.splice(i, 1);
+      var allCk = $("sv2-tf-all"); if (allCk) allCk.checked = (state.tagFilter.length === 0);
+      updateTagFilterLabel();
+    }
+    if (state.board) renderGrid();
+  });
   document.addEventListener("click", function () {
     if (elPosPop && !elPosPop.classList.contains("sv2-hidden")) {
       elPosPop.classList.add("sv2-hidden"); elPosBtn.setAttribute("aria-expanded", "false");
+    }
+    if (elTagPop && !elTagPop.classList.contains("sv2-hidden")) {
+      elTagPop.classList.add("sv2-hidden"); elTagBtn.setAttribute("aria-expanded", "false");
     }
   });
   $("sv2-createdraft").onclick = createDraft;
@@ -1247,6 +1478,13 @@
   $("sv2-m-save").onclick = function () { saveShift(false); };
   $("sv2-m-publish").onclick = function () { saveShift(true); };
   $("sv2-m-delete").onclick = deleteShift;
+  $("sv2-m-tag-add").onclick = function () { createTagFromInput($("sv2-m-tag-new"), true, false); };
+  $("sv2-m-tag-new").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      createTagFromInput(e.target, true, false);
+    }
+  });
   mb.onclick = function (e) { if (e.target === mb) closeModal(); };
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && mb.classList.contains("show")) closeModal(); });
 

@@ -49,6 +49,7 @@ def sv2_week_page():
         "scheduleUrlBase": f"{base}/schedule",   # B5: <base>/schedule/<id>/publish (aick's publish endpoint)
         "shiftNewUrl": f"{base}/shifts/new",
         "shiftUrlBase": f"{base}/shifts",
+        "tagCreateUrl": f"{base}/tags",
     }
     return render_template(
         "schedules_v2_week.html",

@@ -70,6 +70,34 @@ def _schedule_for_week(db, store: str | None, week_start: _date) -> Schedule | N
     return db.query(Schedule).filter_by(store_key=store, week_start=legacy).first()
 
 
+def _tag_payload(tag: Tag) -> dict:
+    return {"id": tag.id, "name": tag.name, "color": tag.color}
+
+
+def _sync_shift_tags(db, shift_id: int, tag_ids, now: datetime) -> None:
+    clean_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in tag_ids or []:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid in seen:
+            continue
+        seen.add(tid)
+        clean_ids.append(tid)
+    if clean_ids:
+        valid_ids = {
+            tid for (tid,) in db.query(Tag.id).filter(Tag.id.in_(clean_ids)).all()
+        }
+    else:
+        valid_ids = set()
+    db.query(ShiftTag).filter_by(shift_id=shift_id).delete()
+    for tid in clean_ids:
+        if tid in valid_ids:
+            db.add(ShiftTag(shift_id=shift_id, tag_id=tid, created_at=now))
+
+
 def _store() -> str | None:
     """The store_key stored on schedules/shifts is the LOCATION
     ('tomball'/'copperfield'), NOT the URL slug ('dos'/'uno') - so it joins with
@@ -600,7 +628,7 @@ def sv2_board():
                     "display_name": sh.display_name,  # Sam #2872: former-staff name (employee_id NULL) -> struck-through
                     "published_at": sh.published_at.isoformat() if sh.published_at else None,  # per-shift publish: null = hollow/unpublished
                 })
-        tags = [{"id": t.id, "name": t.name} for t in db.query(Tag).order_by(Tag.name).all()]
+        tags = [_tag_payload(t) for t in db.query(Tag).order_by(Tag.name).all()]
         return jsonify({
             "ok": True, "store": store,
             "schedule": ({"id": sched.id, "week_start": sched.week_start.isoformat(),
@@ -645,8 +673,7 @@ def sv2_shift_new():
                    created_at=now, updated_at=now)
         db.add(sh)
         db.flush()
-        for tid in (data.get("tag_ids") or []):
-            db.add(ShiftTag(shift_id=sh.id, tag_id=tid, created_at=now))
+        _sync_shift_tags(db, sh.id, data.get("tag_ids") or [], now)
         db.commit()
         return jsonify({"ok": True, "id": sh.id, "status": status, "warning": warn}), 201
     finally:
@@ -706,9 +733,36 @@ def sv2_shift_update(shift_id):
         now = datetime.utcnow()
         if "publish" in data:
             sh.published_at = now if data["publish"] else None
+        if "tag_ids" in data:
+            _sync_shift_tags(db, sh.id, data.get("tag_ids") or [], now)
         sh.updated_at = now
         db.commit()
         return jsonify({"ok": True, "id": sh.id, "status": sh.status, "warning": warn}), 200
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/tags", methods=["POST"])
+@require_level(_MGR)
+def sv2_tag_create():
+    data = request.get_json(silent=True) or {}
+    name = " ".join(str(data.get("name") or "").strip().split())
+    color = str(data.get("color") or "").strip()[:20] or None
+    if not name:
+        return jsonify({"ok": False, "error": "Tag name required"}), 400
+    if len(name) > 120:
+        return jsonify({"ok": False, "error": "Tag name must be 120 characters or less"}), 400
+    db = SessionLocal()
+    try:
+        key = name.casefold()
+        for tag in db.query(Tag).all():
+            if (tag.name or "").strip().casefold() == key:
+                return jsonify({"ok": True, "tag": _tag_payload(tag), "existing": True}), 200
+        tag = Tag(name=name, color=color, created_at=datetime.utcnow())
+        db.add(tag)
+        db.commit()
+        db.refresh(tag)
+        return jsonify({"ok": True, "tag": _tag_payload(tag), "existing": False}), 201
     finally:
         db.close()
 
@@ -758,10 +812,14 @@ def sv2_shift_bulk_copy():
             if emp_id and scheduling_timeoff.conflict(emp_id, new_start.date()):
                 emp_id, status = None, "open"
                 opened_for_timeoff += 1
-            db.add(Shift(schedule_id=dst.id, employee_id=emp_id, position_id=sh.position_id,
-                         start_at=new_start, end_at=sh.end_at + offset,
-                         break_minutes=sh.break_minutes, status=status, notes=sh.notes,
-                         created_at=now, updated_at=now))
+            nsh = Shift(schedule_id=dst.id, employee_id=emp_id, position_id=sh.position_id,
+                        start_at=new_start, end_at=sh.end_at + offset,
+                        break_minutes=sh.break_minutes, status=status, notes=sh.notes,
+                        created_at=now, updated_at=now)
+            db.add(nsh)
+            db.flush()
+            for st in db.query(ShiftTag).filter_by(shift_id=sh.id).all():
+                db.add(ShiftTag(shift_id=nsh.id, tag_id=st.tag_id, created_at=now))
             n += 1
         db.commit()
         return jsonify({"ok": True, "copied": n, "to_schedule_id": dst_id,

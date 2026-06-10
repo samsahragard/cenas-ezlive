@@ -345,11 +345,35 @@ def run_readonly_sql(
     stmt = _check_select(sql)  # raises CenaSqlError before any connection is opened
     sql_to_run = _clamp_limit(stmt, _row_cap)
 
-    conn = _open_connection(_data_dir)
+    # EXC-02: a corrupt/replaced snapshot makes _open_connection raise a raw
+    # sqlite3.DatabaseError; translate to the contracted CenaSqlError so callers
+    # that only catch CenaSqlError get the documented error surface. The helper
+    # closes its own connection on ATTACH failure, so this is type-only.
+    try:
+        conn = _open_connection(_data_dir)
+    except (sqlite3.Error, OSError) as e:
+        raise CenaSqlError(
+            "snapshot unavailable or corrupt - run refresh_snapshots()"
+        ) from e
     t0 = time.perf_counter()
 
     def _progress() -> int:
         return 1 if (time.perf_counter() - t0) > _timeout_s else 0
+
+    def _row_size(r: tuple) -> int:
+        # O(1) for str/bytes cells (len, no copy) so a multi-MB cell is measured
+        # without being re-serialized; str() only for small scalar types.
+        n = 0
+        for c in r:
+            if isinstance(c, str):
+                n += len(c)
+            elif isinstance(c, (bytes, bytearray, memoryview)):
+                n += len(c)
+            elif c is None:
+                n += 4
+            else:
+                n += len(str(c))
+        return n
 
     conn.set_progress_handler(_progress, PROGRESS_HANDLER_N)
     try:
@@ -359,21 +383,22 @@ def run_readonly_sql(
             rows: list[tuple] = []
             truncated = False
             total_size = 0
+            # EXC-01: fetch ONE row at a time (bounds transient memory to a single
+            # row) and check the projected size BEFORE appending, so a single
+            # oversized row cannot carry an unbounded payload past the 2 MB cap.
             while True:
-                batch = cur.fetchmany(256)
-                if not batch:
+                row = cur.fetchone()
+                if row is None:
                     break
-                for row in batch:
-                    if len(rows) >= _row_cap:
-                        truncated = True  # the LIMIT row_cap+1 sentinel row arrived
-                        break
-                    rows.append(row)
-                    total_size += len(str(row))
-                    if total_size > _size_cap:
-                        truncated = True
-                        break
-                if truncated:
+                if len(rows) >= _row_cap:
+                    truncated = True  # the LIMIT row_cap+1 sentinel row arrived
                     break
+                projected = total_size + _row_size(row)
+                if projected > _size_cap:
+                    truncated = True  # do NOT append the over-cap row
+                    break
+                rows.append(row)
+                total_size = projected
         except sqlite3.OperationalError as e:
             if "interrupt" in str(e).lower():
                 raise CenaSqlError(f"query timeout after {_timeout_s:.1f}s") from e

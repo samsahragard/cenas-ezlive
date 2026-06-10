@@ -339,11 +339,12 @@ def validate_sql(sql: str) -> tuple[bool, str]:
             if len(cands) == 1:
                 continue
             if len(cands) == 0:
-                if has_opaque:
-                    continue  # may come from a CTE/subquery source
-                anc = sorted({k for k in global_tables.values() if name in allowlist[k]})
-                if len(anc) == 1:
-                    continue  # correlated unqualified reference, unambiguous
+                # SECURITY (VAL-001): an unqualified name that matches an EXCLUDED
+                # column of any real allowlisted table in scope must ALWAYS be
+                # rejected, before the has_opaque / correlated-ancestor allowances.
+                # Otherwise a no-op opaque source (a CTE, derived table, or
+                # json_each) in the FROM lets an excluded PII / pay / auth column
+                # be read unqualified and bypass the column gate entirely.
                 excl_hits = sorted(
                     k for k in real_local if name in excluded.get(k, frozenset())
                 )
@@ -353,6 +354,11 @@ def validate_sql(sql: str) -> tuple[bool, str]:
                         f"individual pay) on {', '.join(excl_hits)}. Allowed columns "
                         f"on {excl_hits[0]}: {_fmt_cols(allowlist[excl_hits[0]])}"
                     )
+                if has_opaque:
+                    continue  # may come from a CTE/subquery source
+                anc = sorted({k for k in global_tables.values() if name in allowlist[k]})
+                if len(anc) == 1:
+                    continue  # correlated unqualified reference, unambiguous
                 holders = sorted(k for k in allowlist if name in allowlist[k])[:4]
                 hint = (
                     f" It exists on: {', '.join(holders)}." if holders else ""

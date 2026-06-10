@@ -373,7 +373,7 @@ def get_excluded_columns() -> dict[str, frozenset[str]]:
 # ---------------------------------------------------------------------------
 # Schema context text
 # ---------------------------------------------------------------------------
-_ANALYTICS_DOC_BUDGET = 4500  # cap imported SCHEMA_DOC so total stays < 16k chars
+_ANALYTICS_DOC_BUDGET = 4800  # table-aware cap; column signatures always survive
 
 # Short, load-bearing notes per raw table (verified against live data 2026-06-09).
 _TABLE_NOTES: dict[str, str] = {
@@ -459,9 +459,28 @@ _FALLBACK_ANALYTICS_DOC = """- daily_sales_summary(store_key, business_date, net
   metric in ('net_sales','labor_pct','avg_check'); baseline = trailing 8 SAME-WEEKDAY values (min 4, std>0); flagged when |z|>2; direction 'high'|'low'."""
 
 
+def _split_signature(block: str) -> tuple[str, str]:
+    """Split a SCHEMA_DOC table block into (signature, prose). The signature is the
+    leading 'table(col, col, ...)' lines up to the paren that closes the column
+    list; everything after is prose. A block with no column list is all signature."""
+    lines = block.split("\n")
+    depth = 0
+    seen_paren = False
+    for i, ln in enumerate(lines):
+        if "(" in ln:
+            seen_paren = True
+        depth += ln.count("(") - ln.count(")")
+        if seen_paren and depth <= 0:
+            return "\n".join(lines[: i + 1]), "\n".join(lines[i + 1 :]).strip()
+    return "", block  # no column-list -> all prose (droppable / not a signature)
+
+
 def _analytics_doc() -> str:
     """Prefer cena_sql_analytics.SCHEMA_DOC at runtime; silently fall back to the
-    frozen section-4 summary. Truncated to a budget so context stays token-lean."""
+    frozen section-4 summary. CONF-1: trimming is TABLE-AWARE - every analytics
+    table keeps its full column signature (so the reasoner can always author a
+    valid query); only PROSE is dropped to meet the budget, longest prose first,
+    so the short low-traffic tables (same_day_lastweek, anomaly_flags) survive."""
     doc = None
     try:  # pragma: no cover - exercised via sys.modules injection in tests
         import importlib
@@ -473,9 +492,38 @@ def _analytics_doc() -> str:
     if not isinstance(doc, str) or not doc.strip():
         doc = _FALLBACK_ANALYTICS_DOC
     doc = doc.strip()
-    if len(doc) > _ANALYTICS_DOC_BUDGET:
-        doc = doc[:_ANALYTICS_DOC_BUDGET] + "\n  ...[truncated]"
-    return doc
+    if len(doc) <= _ANALYTICS_DOC_BUDGET:
+        return doc
+    blocks = [b for b in doc.split("\n\n") if b.strip()]
+    sigs: list[str] = []
+    proses: list[str] = []
+    for b in blocks:
+        s, p = _split_signature(b)
+        sigs.append(s)
+        proses.append(p)
+    included = {i for i, p in enumerate(proses) if p}
+    sep = 2 * (len(blocks) - 1) if blocks else 0
+
+    def _total() -> int:
+        return sep + sum(
+            len(sigs[i]) + (len(proses[i]) + 1 if i in included else 0)
+            for i in range(len(blocks))
+        )
+
+    for i in sorted(included, key=lambda j: len(proses[j]), reverse=True):
+        if _total() <= _ANALYTICS_DOC_BUDGET:
+            break
+        included.discard(i)
+    out = [
+        (sigs[i] + "\n" + proses[i]) if i in included else sigs[i]
+        for i in range(len(blocks))
+    ]
+    assembled = "\n\n".join(b for b in out if b).strip()
+    if assembled and len(assembled) <= _ANALYTICS_DOC_BUDGET:
+        return assembled
+    # malformed/degenerate doc (no table signatures, or signatures alone exceed
+    # the budget): hard head-truncate as a backstop so context stays bounded.
+    return doc[:_ANALYTICS_DOC_BUDGET] + "\n  ...[truncated]"
 
 
 def _render_context(ordered: dict[str, tuple[str, ...]]) -> str:
@@ -511,7 +559,10 @@ def _render_context(ordered: dict[str, tuple[str, ...]]) -> str:
         "- Labor: toast.time_entry is CANONICAL (2026-05-11 onward); "
         "toastdm.dm_time_entry reaches back to 2026-05-04 (cross-check source).\n"
         "- labor_pct in analytics = labor cost vs CATERING net sales (daily in-store "
-        "sales are not available); describe it as labor-vs-catering-net.\n"
+        "sales are not available); describe it as labor-vs-catering-net. DATA STATE: "
+        "the catering-sales and labor date windows currently DO NOT OVERLAP, so "
+        "labor_pct/splh are NULL on every row today - treat labor-vs-sales as "
+        "unavailable, not zero (see daily_labor_summary gotcha 4).\n"
         "- perf tables (toast.perf_period, toastdm.dm_perf_period, dm_attendance, "
         "driverdc.dm_pay) are period SNAPSHOTS ('today','week','month','last30'), NOT "
         "history - do not sum periods over time.\n"
@@ -532,8 +583,9 @@ def _render_context(ordered: dict[str, tuple[str, ...]]) -> str:
         "(names) and toastdm.* tables.\n"
         "- Analytics tables join each other on (store_key, business_date)."
     )
-    parts.append("## ANALYTICS TABLES (cena_analytics.db, unqualified; every table has "
-                 "built_at TEXT ISO-UTC)\n" + _analytics_doc())
+    parts.append("## ANALYTICS TABLES (cena_analytics.db, unqualified; every BASE table "
+                 "has built_at TEXT ISO-UTC; the same_day_lastweek VIEW has none)\n"
+                 + _analytics_doc())
     for alias in ("ordersdc", "appdb", "toast", "toastdm", "driverdc"):
         lines = [f"## {_SECTION_HEADERS[alias]}"]
         for tname in _CURATED_TABLES[alias]:

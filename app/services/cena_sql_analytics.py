@@ -158,7 +158,11 @@ daily_labor_summary(store_key, business_date, total_hours, reg_hours, ot_hours, 
   GOTCHAS: (1) labor covers the WHOLE store but net_sales is catering-only, so labor_pct is
   labor-vs-CATERING-net — describe it that way, it is NOT a true labor percentage. (2) shifts with
   missing hourly_rate (small minority) add hours but no cost -> labor_cost slightly understated on
-  those days. (3) splh shares gotcha (1): catering net over whole-store hours.
+  those days. (3) splh shares gotcha (1): catering net over whole-store hours. (4) DATA STATE: the
+  caterer_total_due actuals window (~2026-03-02..05-09) and the labor window (toast.time_entry,
+  2026-05-11+) currently DO NOT OVERLAP, so net_sales/labor_pct/splh are NULL on EVERY row today and
+  anomaly_flags emits no labor_pct metric. Treat any labor-vs-sales ratio as unavailable (not zero)
+  until newer sales ingest reaches the labor window; check build_meta for the live state.
 
 weekly_rollups(store_key, iso_week, week_start, net_sales, order_count, labor_cost, labor_pct,
   splh, total_hours, wow_net_sales_delta, wow_net_sales_pct, wow_labor_pct_delta, built_at)

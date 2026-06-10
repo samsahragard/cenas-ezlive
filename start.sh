@@ -64,4 +64,4 @@ exec gunicorn wsgi:app \
     --worker-class gthread \
     --workers "${WEB_WORKERS}" \
     --threads "${WEB_THREADS}" \
-    --timeout 120
+    --timeout 300

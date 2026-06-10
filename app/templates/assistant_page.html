@@ -367,14 +367,26 @@
     return date.toLocaleString([], {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
   }
 
-  function addMessage(kind, text, queued) {
+  function addMessage(kind, text, queued, label) {
     var msg = document.createElement("div");
     msg.className = "aiassist-msg " + kind + (queued ? " queued" : "");
-    msg.innerHTML = '<div class="aiassist-meta">' + esc(meta(kind === "user" ? "You" : "C.E.N.A")) + '</div>' + esc(text || "");
+    var who = label || (kind === "user" ? "You" : "C.E.N.A");
+    msg.innerHTML = '<div class="aiassist-meta">' + esc(meta(who)) + '</div>' + esc(text || "");
     thread.appendChild(msg);
     thread.scrollTop = thread.scrollHeight;
     return msg;
   }
+
+  function addCkDev(text) {
+    return addMessage("assistant ckdev", text, false, "C.E.N.A. DEVELOPER");
+  }
+
+  (function injectCkDevStyle() {
+    var st = document.createElement("style");
+    st.textContent = ".aiassist-msg.ckdev{border-left:3px solid #e0a93f;}" +
+      ".aiassist-msg.ckdev .aiassist-meta{color:#e0a93f;}";
+    document.head.appendChild(st);
+  })();
 
   function resizeInput() {
     input.style.height = "auto";
@@ -515,6 +527,31 @@
       loadReviewItems();
     });
 
+  // 48h thread: restore this user's active conversation (creates it, with the
+  // CK developer intro, on first open).
+  fetch("/assistant/thread", {
+    headers: {"X-Current-Path": window.location.pathname + window.location.search + window.location.hash}
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data || !data.ok || !data.messages || !data.messages.length) return;
+      var msgs = data.messages;
+      for (var i = 0; i < msgs.length; i++) {
+        var m = msgs[i];
+        if (m.sender === "user") {
+          addMessage("user", m.text);
+          lastUserQuestion = m.text;
+        } else if (m.sender === "ck-dev") {
+          addCkDev(m.text);
+          lastAssistantAnswer = m.text;
+        } else {
+          addMessage("assistant", m.text);
+          lastAssistantAnswer = m.text;
+        }
+      }
+    })
+    .catch(function () {});
+
   input.addEventListener("input", resizeInput);
   input.addEventListener("keydown", function (event) {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -589,20 +626,36 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var answer = data && data.answer ? data.answer : "I could not answer that yet.";
-        var html = '<div class="aiassist-meta">' + esc(meta("C.E.N.A")) + '</div>' + esc(answer);
-        if (data && data.confidence) {
-          html += '<div class="aiassist-confidence conf-' + esc(data.confidence) + '">'
-            + esc(String(data.confidence).toUpperCase()) + ' confidence'
-            + (data.confidence_reason ? ' - ' + esc(data.confidence_reason) : '') + '</div>';
+        // Dual-responder payload: ck_intro / cena_answer / ck_answer come from
+        // the CK supervisor lane; legacy single-answer responses still render.
+        if (data && data.ck_intro) {
+          var introMsg = addCkDev(data.ck_intro);
+          thread.insertBefore(introMsg, pending);
         }
-        if (data && data.show_work) {
-          html += '<details class="aiassist-showwork"><summary>Show work</summary>'
-            + '<pre class="aiassist-trace">' + esc(data.show_work) + '</pre></details>';
+        var hasSplit = data && Object.prototype.hasOwnProperty.call(data, "cena_answer");
+        var cenaText = hasSplit ? data.cena_answer : answer;
+        if (cenaText) {
+          var html = '<div class="aiassist-meta">' + esc(meta("C.E.N.A")) + '</div>' + esc(cenaText);
+          if (data && data.confidence) {
+            html += '<div class="aiassist-confidence conf-' + esc(data.confidence) + '">'
+              + esc(String(data.confidence).toUpperCase()) + ' confidence'
+              + (data.confidence_reason ? ' - ' + esc(data.confidence_reason) : '') + '</div>';
+          }
+          if (data && data.show_work) {
+            html += '<details class="aiassist-showwork"><summary>Show work</summary>'
+              + '<pre class="aiassist-trace">' + esc(data.show_work) + '</pre></details>';
+          }
+          pending.innerHTML = html;
+          if (data && data.queued) {
+            pending.classList.add("queued");
+            loadReviewItems();
+          }
+        } else {
+          pending.remove();
+          if (data && data.queued) loadReviewItems();
         }
-        pending.innerHTML = html;
-        if (data && data.queued) {
-          pending.classList.add("queued");
-          loadReviewItems();
+        if (data && data.ck_answer) {
+          addCkDev(data.ck_answer + (data.ck_followup ? "\n\n" + data.ck_followup : ""));
         }
         if (answer) lastAssistantAnswer = answer;
       })

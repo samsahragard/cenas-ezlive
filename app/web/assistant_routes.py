@@ -314,6 +314,21 @@ def _review_timeout_seconds() -> float:
     return max(1.0, min(value, 30.0))
 
 
+def _ask_timeout_seconds() -> float:
+    """Timeout for the /assistant/ask relay into the CK runtime. L3
+    investigations + CK supervisor rescues run 60-130s, so this must be far
+    above the short review-item timeout. Kept under the gunicorn worker
+    timeout (300s in start.sh)."""
+    raw = _env_first("AI_ASSISTANT_ASK_TIMEOUT_SECONDS", "ASSISTANT_ASK_TIMEOUT_SECONDS")
+    if not raw:
+        return 180.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return 180.0
+    return max(30.0, min(value, 280.0))
+
+
 def _ck_review_url(raw_url: str) -> str:
     return _normalize_service_url(raw_url, _CK_REVIEW_PATH)
 
@@ -1790,7 +1805,7 @@ def _post_to_ck_runtime(
 
         proxy = (os.getenv("CENA_PROXY") or "").strip() or None
         client_kwargs: dict[str, Any] = {
-            "timeout": httpx.Timeout(_review_timeout_seconds(), connect=min(3.0, _review_timeout_seconds())),
+            "timeout": httpx.Timeout(_ask_timeout_seconds(), connect=3.0),
         }
         if proxy:
             client_kwargs["proxy"] = proxy
@@ -1991,6 +2006,44 @@ def assistant_context():
             for tool in tools
         ],
     })
+
+
+@assistant_bp.route("/assistant/thread", methods=["GET"])
+def assistant_thread():
+    """The user's active 48h conversation thread, relayed from the CK runtime
+    (which owns conversation storage). Creates the thread - with the CK
+    developer intro - on first open."""
+    ctx = _principal_context()
+    if ctx["kind"] == "anonymous":
+        return jsonify({"ok": False, "error": "not_authenticated"}), 401
+    if not _assistant_enabled() or not _assistant_available_for_context(ctx):
+        return jsonify({"ok": False, "error": "assistant_unavailable"}), 503
+    base = _env_first("AI_ASSISTANT_CK_RUNTIME_URL", "ASSISTANT_RUNTIME_URL")
+    token = _env_first("AI_ASSISTANT_CK_RUNTIME_TOKEN", "ASSISTANT_RUNTIME_TOKEN")
+    answer_url = _ck_runtime_url(base)
+    if not answer_url or not token:
+        return jsonify({"ok": False, "error": "ck_runtime_unconfigured"}), 503
+    parts = urllib.parse.urlsplit(answer_url)
+    thread_url = urllib.parse.urlunsplit((parts.scheme, parts.netloc, "/assistant/thread", "", ""))
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-Ai-Assistant-Token": token,
+        "Content-Type": "application/json",
+    }
+    try:
+        import httpx
+
+        proxy = (os.getenv("CENA_PROXY") or "").strip() or None
+        client_kwargs: dict[str, Any] = {"timeout": httpx.Timeout(12.0, connect=3.0)}
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        with httpx.Client(**client_kwargs) as hx:
+            resp = hx.post(thread_url, json={"principal": _runtime_principal(ctx)}, headers=headers)
+        data = resp.json() if resp.content else {}
+        return jsonify(data), resp.status_code
+    except Exception:  # noqa: BLE001
+        log.exception("assistant: thread relay failed")
+        return jsonify({"ok": False, "error": "thread_unavailable"}), 503
 
 
 @assistant_bp.route("/assistant", methods=["GET"])

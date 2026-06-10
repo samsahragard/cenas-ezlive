@@ -326,6 +326,51 @@ def test_ck_runtime_does_not_infer_deterministic_route_from_tool_data(monkeypatc
     assert data is None, "CK runtime formats Render-routed tools; it does not select deterministic routes."
 
 
+def test_store_scoped_sales_question_routes_to_l3_not_aggregate_toast(monkeypatch):
+    monkeypatch.delenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", raising=False)
+    monkeypatch.setattr(
+        render_routes,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("store-scoped sales must not call classifier")),
+    )
+
+    route = render_routes._route_approved_tool_choice(
+        "What were net sales at Copperfield yesterday?",
+        _partner_ctx(),
+    )
+
+    assert route["route_path"] == "review"
+    assert route["tool_id"] is None
+
+
+def test_ck_runtime_rejects_stale_aggregate_toast_route_for_store_scoped_sales(monkeypatch):
+    monkeypatch.setattr(
+        ck_runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("stale route guard must not call model")),
+    )
+
+    data = ck_runtime._approved_tool_answer(
+        "What were net sales at Copperfield yesterday?",
+        "",
+        _runtime_principal(),
+        [_available_tool("toast.sales_summary")],
+        {
+            "toast.sales_summary": {
+                "ok": True,
+                "period": "yesterday",
+                "label": "Yesterday",
+                "scope_note": "2 locations included.",
+                "sales": {"orders": 234, "net": 10419.94},
+                "labor": {},
+            }
+        },
+        routed_tool_id="toast.sales_summary",
+    )
+
+    assert data is None
+
+
 def test_ck_runtime_forces_shared_safety_review_over_stale_route(tmp_path, monkeypatch):
     db_path = tmp_path / "assistant_review.sqlite"
     monkeypatch.setenv("ASSISTANT_REVIEW_DB", str(db_path))

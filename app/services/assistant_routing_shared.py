@@ -323,6 +323,7 @@ def wants_toast_sales_summary(question: str) -> bool:
     if (
         wants_toast_data_freshness(text)
         or has_unsupported_toast_sales_scope(text)
+        or requested_store(text)
         or TOAST_WEBHOOK_ACTIVITY_RE.search(text)
         or TOAST_EMPLOYEE_PROFILE_RE.search(text)
     ):

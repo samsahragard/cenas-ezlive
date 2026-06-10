@@ -1894,6 +1894,7 @@ def _approved_tool_answer(
     if routed_tool_id == "toast.sales_summary" and (
         _wants_toast_data_freshness(resolved_question)
         or _has_unsupported_toast_sales_scope(resolved_question)
+        or _requested_store(resolved_question)
     ):
         return None
     if routed_tool_id == "toast.employee_profiles" and _toast_employee_profiles_tool_authorized(principal, tools):

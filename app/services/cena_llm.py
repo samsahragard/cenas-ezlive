@@ -5,7 +5,7 @@ Providers are tried in order and a provider that fails auth/permission/quota is
 marked dead for the rest of the process so we don't keep paying its latency:
 
   1. Gemini   - google.genai, key via read_secret('GEMINI_API_KEY'),
-                model env AI_ASSISTANT_GEMINI_MODEL (default gemini-2.5-flash).
+                model env AI_ASSISTANT_GEMINI_MODEL (default gemini-3.5-flash).
   2. Anthropic - env ANTHROPIC_API_KEY or C:\\Users\\sam\\cena-secrets\\anthropic_api_key.txt,
                 model env CENA_L3_ANTHROPIC_MODEL (default claude-haiku-4-5-20251001).
 
@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 _ANTHROPIC_KEY_FILE = r"C:\Users\sam\cena-secrets\anthropic_api_key.txt"
 _TRANSIENT = ("timeout", "timed out", "503", "502", "529", "overloaded", "rate limit")

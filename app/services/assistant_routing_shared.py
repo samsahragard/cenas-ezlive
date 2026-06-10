@@ -22,7 +22,7 @@ from app.services.assistant_safety import (
 
 
 MAX_QUESTION_CHARS = 2000
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_PROVIDER_TIMEOUT_MS = 20_000
 REVIEW_STATUS = "needs_review"
 

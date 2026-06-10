@@ -22,6 +22,7 @@ from app.services.assistant_routing_shared import (
     STORE_ALIASES as _STORE_ALIASES,
     normalize_store_key as _normalize_store_key,
     requested_store as _requested_store,
+    wants_cena_l3_business_analytics as _wants_cena_l3_business_analytics,
 )
 
 
@@ -960,6 +961,8 @@ def _txt(question: str) -> str:
 def _order_context(question: str) -> bool:
     text = _txt(question)
     if "order of operations" in text:
+        return False
+    if _wants_cena_l3_business_analytics(question):
         return False
     return bool(re.search(r"\b(catering|caterings|ezcater|delivery|deliveries|orders?|quotes?|in[- ]house)\b", text))
 

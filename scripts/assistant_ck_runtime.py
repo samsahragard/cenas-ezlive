@@ -69,6 +69,7 @@ from app.services.assistant_routing_shared import (
     toast_period_from_question as _toast_period_from_question,
     toast_table_business_date_from_question as _toast_table_business_date_from_question,
     today_ct as _today_ct,
+    wants_cena_l3_business_analytics as _wants_cena_l3_business_analytics,
     wants_toast_data_freshness as _wants_toast_data_freshness,
     wants_toast_employee_profiles as _wants_toast_employee_profiles,
     wants_toast_sales_summary as _wants_toast_sales_summary,
@@ -1894,8 +1895,11 @@ def _approved_tool_answer(
     if routed_tool_id == "toast.sales_summary" and (
         _wants_toast_data_freshness(resolved_question)
         or _has_unsupported_toast_sales_scope(resolved_question)
+        or _wants_cena_l3_business_analytics(resolved_question)
         or _requested_store(resolved_question)
     ):
+        return None
+    if routed_tool_id == "orders.store_summary" and _wants_cena_l3_business_analytics(resolved_question):
         return None
     if routed_tool_id == "toast.employee_profiles" and _toast_employee_profiles_tool_authorized(principal, tools):
         employee_profiles = tool_data.get("toast.employee_profiles") if isinstance(tool_data, dict) else None

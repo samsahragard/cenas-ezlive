@@ -80,6 +80,7 @@ from app.services.assistant_routing_shared import (
     toast_period_from_question as _toast_period_from_question,
     toast_table_business_date_from_question as _toast_table_business_date_from_question,
     today_ct as _today_ct,
+    wants_cena_l3_business_analytics as _wants_cena_l3_business_analytics,
     wants_toast_data_freshness as _wants_toast_data_freshness,
     wants_toast_employee_profiles as _wants_toast_employee_profiles,
     wants_toast_sales_summary as _wants_toast_sales_summary,
@@ -1237,6 +1238,8 @@ def _toast_table_activity_tool_payload(
 def _wants_orders_store_summary(question: str) -> bool:
     text = str(question or "")
     if "order of operations" in text.casefold():
+        return False
+    if _wants_cena_l3_business_analytics(text):
         return False
     if any(
         matcher(text)

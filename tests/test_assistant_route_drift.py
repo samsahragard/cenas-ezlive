@@ -343,6 +343,27 @@ def test_store_scoped_sales_question_routes_to_l3_not_aggregate_toast(monkeypatc
     assert route["tool_id"] is None
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What were total net sales across both stores last week?",
+        "How many orders did Tomball ring up yesterday?",
+    ],
+)
+def test_l3_business_analytics_questions_route_to_l3_not_deterministic(question, monkeypatch):
+    monkeypatch.delenv("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED", raising=False)
+    monkeypatch.setattr(
+        render_routes,
+        "_gemini_generate",
+        lambda *_: (_ for _ in ()).throw(AssertionError("L3 analytics route must not call classifier")),
+    )
+
+    route = render_routes._route_approved_tool_choice(question, _partner_ctx())
+
+    assert route["route_path"] == "review"
+    assert route["tool_id"] is None
+
+
 def test_ck_runtime_rejects_stale_aggregate_toast_route_for_store_scoped_sales(monkeypatch):
     monkeypatch.setattr(
         ck_runtime,
@@ -366,6 +387,57 @@ def test_ck_runtime_rejects_stale_aggregate_toast_route_for_store_scoped_sales(m
             }
         },
         routed_tool_id="toast.sales_summary",
+    )
+
+    assert data is None
+
+
+@pytest.mark.parametrize(
+    ("question", "tool_id", "payload"),
+    [
+        (
+            "What were total net sales across both stores last week?",
+            "toast.sales_summary",
+            {
+                "ok": True,
+                "period": "last_week",
+                "label": "Last Week",
+                "scope_note": "2 locations included.",
+                "sales": {"orders": 52, "net": 86271.77},
+                "labor": {},
+            },
+        ),
+        (
+            "How many orders did Tomball ring up yesterday?",
+            "orders.store_summary",
+            {
+                "ok": True,
+                "today_orders": 8,
+                "tomorrow_orders": 4,
+                "store_counts": {"tomball": 4, "copperfield": 4},
+            },
+        ),
+    ],
+)
+def test_ck_runtime_rejects_stale_deterministic_routes_for_l3_business_analytics(
+    question,
+    tool_id,
+    payload,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        ck_runtime,
+        "_gemini_answer",
+        lambda *_: (_ for _ in ()).throw(AssertionError("stale route guard must not call model")),
+    )
+
+    data = ck_runtime._approved_tool_answer(
+        question,
+        "",
+        _runtime_principal(),
+        [_available_tool(tool_id)],
+        {tool_id: payload},
+        routed_tool_id=tool_id,
     )
 
     assert data is None

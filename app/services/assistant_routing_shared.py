@@ -151,6 +151,41 @@ TOAST_SALES_UNSUPPORTED_SCOPE_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+CENA_L3_BUSINESS_DATE_SCOPE_RE = re.compile(
+    r"\b("
+    r"yesterday|last\s+week|previous\s+week|last\s+month|previous\s+month|"
+    r"month[-\s]+to[-\s]+date|mtd|week[-\s]+to[-\s]+date|wtd|"
+    r"last\s+(?:sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|"
+    r"thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)|"
+    r"past\s+\d+\s+days?|last\s+\d+\s+days?|between|from\s+\d{1,4}[-/]\d{1,2}|"
+    r"\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?"
+    r")\b",
+    re.IGNORECASE,
+)
+CENA_L3_BUSINESS_METRIC_RE = re.compile(
+    r"\b("
+    r"net\s+sales|gross\s+sales|total\s+sales|combined\s+sales|sales\s+total|"
+    r"revenue|avg(?:erage)?\s+(?:check|ticket|order)|check\s+average|"
+    r"covers?|checks?|tickets?|daypart|lunch|dinner|breakfast|"
+    r"busiest|slowest|sales\s+day|labor\s+(?:percent|percentage|ratio|cost)|"
+    r"splh|sales\s+per\s+labor"
+    r")\b",
+    re.IGNORECASE,
+)
+CENA_L3_BUSINESS_SCOPE_RE = re.compile(
+    r"\b("
+    r"both\s+stores|across\s+both|combined|all\s+stores|each\s+store|"
+    r"by\s+store|compare|comparison|vs\.?|versus|which\s+store|trend"
+    r")\b",
+    re.IGNORECASE,
+)
+CENA_L3_ORDER_HISTORY_RE = re.compile(
+    r"\b("
+    r"orders?|checks?|tickets?|ring\s+up|rang\s+up|rung\s+up|rang|rung|served|"
+    r"catering|caterings|ezcater"
+    r")\b",
+    re.IGNORECASE,
+)
 TOAST_EMPLOYEE_PROFILE_RE = re.compile(
     r"\b("
     r"toast\s+employee|employee\s+toast|employee\s+profile|profile\s+db|"
@@ -318,11 +353,35 @@ def has_unsupported_toast_sales_scope(question: str) -> bool:
     return bool(TOAST_SALES_UNSUPPORTED_SCOPE_RE.search(text))
 
 
+def wants_cena_l3_business_analytics(question: str) -> bool:
+    text = str(question or "")
+    if not text.strip() or wants_toast_data_freshness(text):
+        return False
+    has_date_scope = bool(CENA_L3_BUSINESS_DATE_SCOPE_RE.search(text))
+    has_metric = bool(CENA_L3_BUSINESS_METRIC_RE.search(text))
+    has_cross_store_scope = bool(CENA_L3_BUSINESS_SCOPE_RE.search(text))
+
+    if has_date_scope and has_metric:
+        return True
+    if has_date_scope and has_cross_store_scope and re.search(r"\b(sales|revenue)\b", text, re.IGNORECASE):
+        return True
+    if re.search(r"\b(month[-\s]+to[-\s]+date|mtd)\b", text, re.IGNORECASE) and re.search(
+        r"\b(sales|revenue|check|checks?|covers?|orders?)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return True
+    if has_date_scope and CENA_L3_ORDER_HISTORY_RE.search(text):
+        return True
+    return False
+
+
 def wants_toast_sales_summary(question: str) -> bool:
     text = str(question or "")
     if (
         wants_toast_data_freshness(text)
         or has_unsupported_toast_sales_scope(text)
+        or wants_cena_l3_business_analytics(text)
         or requested_store(text)
         or TOAST_WEBHOOK_ACTIVITY_RE.search(text)
         or TOAST_EMPLOYEE_PROFILE_RE.search(text)

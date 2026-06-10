@@ -5,19 +5,81 @@
 {% block head_extra %}
 <style>
   @media print {
-    aside.sidebar, .topbar, .order-view-actions, .tabs, .wordmark { display: none !important; }
+    @page { size: letter portrait; margin: 0.25in; }
+    aside.sidebar, .topbar, .order-view-actions, .tabs, .wordmark,
+    .order-view-header { display: none !important; }
     body::before, body::after { display: none !important; }
     body { background: #fff; color: #000; }
     .layout { grid-template-columns: 1fr; }
-    main.main { padding: 0; }
-    .grid-view { display: block !important; page-break-after: always;
-                 background: #fff; border: 1px solid #555; }
-    .order-view-header { background: #fff; border: 1px solid #555; color: #000; }
-    .order-view-header h2, .order-view-meta, .order-view-meta .label,
+    main.main { padding: 0 !important; }
+    .ck-page-body { padding: 0 !important; }
+    .grid-view { display: none !important; }
+    .grid-view.is-active {
+      display: block !important;
+      background: #fff !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      overflow: visible !important;
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .grid-view .table-wrap {
+      overflow: visible !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }
+    .grid-view table {
+      width: 100% !important;
+      table-layout: fixed;
+      border-collapse: collapse;
+      font-size: 8.2pt;
+      line-height: 1.12;
+    }
     .grid-view table tbody td, .grid-view table tbody tr td,
     .order-card, .order-card * { color: #000 !important; }
-    .grid-view table tr.section-row td { background: #eee; color: #000; }
-    .order-card { background: #fff !important; border-color: #555 !important; break-inside: avoid; }
+    .grid-view table tbody td {
+      padding: 1.8pt 4pt !important;
+      border: 0.5pt solid #bbb !important;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+    .grid-view table tbody td:first-child {
+      width: 31%;
+      font-weight: 700;
+    }
+    .grid-view table tr.section-row td {
+      padding: 2.3pt 4pt !important;
+      background: #eee !important;
+      color: #000 !important;
+      font-size: 7.4pt;
+      letter-spacing: 0.03em;
+    }
+    .grid-view table tr.print-empty-row { display: none !important; }
+    .grid-view table tr.bold-row td { font-size: 8.6pt; }
+    .order-card-grid {
+      display: block !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      min-height: 0 !important;
+    }
+    .order-card {
+      background: #fff !important;
+      border-color: #555 !important;
+      box-shadow: none !important;
+      break-inside: avoid;
+      margin: 0 0 6pt !important;
+    }
+    .order-card-head { padding: 4pt 6pt !important; background: #eee !important; }
+    .order-card h3 { font-size: 10pt !important; margin: 0 !important; }
+    .order-card-meta { font-size: 7.5pt !important; line-height: 1.15 !important; }
+    .order-card-section { padding: 2.3pt 6pt !important; font-size: 7.4pt !important; }
+    .order-card-row {
+      grid-template-columns: minmax(86px, 31%) minmax(0, 1fr) !important;
+      gap: 5pt !important;
+      padding: 2pt 6pt !important;
+    }
+    .order-card-label, .order-card-value { font-size: 8pt !important; line-height: 1.15 !important; }
   }
 </style>
 {% endblock %}
@@ -86,8 +148,9 @@
   {% endfor %}
 </div>
 
+{% set print_empty_values = ["", "-", "—", "0", "0.0", "0.00"] %}
 {% for view_name, grid in grids.items() %}
-  <div class="grid-view" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
+  <div class="grid-view{% if active_view == view_name %} is-active{% endif %}" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
     {% if mode == 'combined' and card_views %}
       <div class="order-card-grid">
         {% for card in card_views.get(view_name, []) %}
@@ -132,13 +195,31 @@
             {% for row in grid.rows %}
               {% if row.section != ns.last_section %}
                 {% if row.section != "Header" %}
-                <tr class="section-row">
+                  {% set section_ns = namespace(has_print_value=false) %}
+                  {% for section_row in grid.rows %}
+                    {% if section_row.section == row.section %}
+                      {% for col in grid.columns %}
+                        {% set section_value = ((col["values"].get(section_row.key, "") or "") | string | trim) %}
+                        {% if section_value not in print_empty_values %}
+                          {% set section_ns.has_print_value = true %}
+                        {% endif %}
+                      {% endfor %}
+                    {% endif %}
+                  {% endfor %}
+                <tr class="section-row{% if not section_ns.has_print_value %} print-empty-row{% endif %}">
                   <td colspan="{{ grid.columns|length + 1 }}">{{ row.section }}</td>
                 </tr>
                 {% endif %}
                 {% set ns.last_section = row.section %}
               {% endif %}
-              <tr{% if row.key == "meta.order_id" %} class="bold-row"{% endif %}>
+              {% set row_ns = namespace(has_print_value=false) %}
+              {% for col in grid.columns %}
+                {% set row_value = ((col["values"].get(row.key, "") or "") | string | trim) %}
+                {% if row_value not in print_empty_values %}
+                  {% set row_ns.has_print_value = true %}
+                {% endif %}
+              {% endfor %}
+              <tr class="{% if row.key == "meta.order_id" %}bold-row{% endif %}{% if not row_ns.has_print_value %} print-empty-row{% endif %}">
                 <td>{{ row.label }}</td>
                 {% for col in grid.columns %}
                   {% if col["order_id"] == "Total" %}
@@ -196,9 +277,15 @@
 {% endif %}
 <script>
   function showView(viewName) {
-    document.querySelectorAll(".grid-view").forEach(el => { el.style.display = "none"; });
+    document.querySelectorAll(".grid-view").forEach(el => {
+      el.style.display = "none";
+      el.classList.remove("is-active");
+    });
     const active = document.getElementById("view-" + viewName);
-    if (active) active.style.display = "block";
+    if (active) {
+      active.style.display = "block";
+      active.classList.add("is-active");
+    }
     document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
     const clicked = Array.from(document.querySelectorAll(".tab")).find(tab =>
       tab.textContent.trim().toLowerCase() === viewName.replace("_", " "));

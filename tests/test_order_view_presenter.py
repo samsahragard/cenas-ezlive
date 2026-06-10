@@ -1,4 +1,29 @@
 from app.services.order_view_presenter import build_combined_order_card_views
+from app.domain.master_sheet_map import MASTER_ROWS
+
+
+def test_master_print_header_rows_start_with_dispatch_timing_setup():
+    assert [row["key"] for row in MASTER_ROWS[:7]] == [
+        "meta.order_id",
+        "meta.date",
+        "meta.driver",
+        "meta.deliver_at",
+        "meta.kitchen_ready",
+        "meta.driver_depart",
+        "meta.setup_required",
+    ]
+
+
+def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
+    from pathlib import Path
+
+    html = Path("app/templates/order_view.html").read_text(encoding="utf-8")
+
+    assert ".grid-view { display: none !important; }" in html
+    assert ".grid-view.is-active" in html
+    assert ".order-view-header { display: none !important;" in html
+    assert "print-empty-row" in html
+    assert 'class="grid-view{% if active_view == view_name %} is-active{% endif %}"' in html
 
 
 def _row(key: str, label: str, section: str = "Header") -> dict[str, object]:

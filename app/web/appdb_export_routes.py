@@ -51,6 +51,13 @@ _SCRUB_COLUMNS = {
     "employees": ["email", "phone", "address", "passcode_hash"],
     "access_request": ["temp_passcode_one_shot"],
     "legal_company_structure": ["ein"],
+    # vendor_recent_orders is parsed from inbound vendor emails; the raw email
+    # body/sender/subject can carry arbitrary forwarded PII. Drop them at the
+    # source so they never reach the local reasoning mirror (sanitize-by-
+    # construction; the analytic columns vendor/store_scope/total_cents/
+    # placed_at/status/items_json stay).
+    "vendor_recent_orders": ["raw_body", "from_addr", "subject",
+                             "source_email_mid", "customer_or_caterer"],
 }
 # Whole-table row deletes (one-time secrets; useless in a mirror).
 _SCRUB_DROP_ROWS = ("employee_setup_tokens", "employee_sms_codes")

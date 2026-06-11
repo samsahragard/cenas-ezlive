@@ -33,6 +33,12 @@ def _make_source_db(path):
         CREATE TABLE orders (id INTEGER PRIMARY KEY, status TEXT,
             total_amount REAL);
         INSERT INTO orders VALUES (1, 'delivered', 123.45);
+        CREATE TABLE vendor_recent_orders (id INTEGER PRIMARY KEY, vendor TEXT,
+            total_cents INTEGER, raw_body TEXT, from_addr TEXT, subject TEXT,
+            customer_or_caterer TEXT);
+        INSERT INTO vendor_recent_orders VALUES
+            (1, 'webstaurant', 5000, 'RAW EMAIL BODY', 'orders@vendor.com',
+             'Your order', 'Cena Copperfield');
         """
     )
     con.commit()
@@ -120,5 +126,11 @@ def test_export_is_scrubbed_sqlite(client, tmp_path):
         status, total = con.execute(
             "SELECT status, total_amount FROM orders").fetchone()
         assert status == "delivered" and total == 123.45
+        # vendor email-content columns scrubbed; analytic columns survive.
+        vendor, cents, body, addr, subj, cust = con.execute(
+            "SELECT vendor, total_cents, raw_body, from_addr, subject, "
+            "customer_or_caterer FROM vendor_recent_orders").fetchone()
+        assert vendor == "webstaurant" and cents == 5000
+        assert body is None and addr is None and subj is None and cust is None
     finally:
         con.close()

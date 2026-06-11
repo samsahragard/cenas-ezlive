@@ -118,14 +118,22 @@ def appdb_export():
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     tmp_db = os.path.join(tempfile.gettempdir(),
                           f"appdb_export_{os.getpid()}_{ts}.sqlite")
+    stage = "init"
     try:
-        # Online-consistent snapshot; reads only, no lock held on writers.
-        src_con = sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=30)
+        # Online-consistent snapshot via the SQLite backup API - works on a
+        # live WAL database under writers (no VACUUM-in-transaction pitfall,
+        # no bound-param VACUUM INTO quirk). busy_timeout rides out brief locks.
+        stage = "snapshot"
+        src_con = sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=60)
+        dst_con = sqlite3.connect(tmp_db)
         try:
-            src_con.execute("VACUUM INTO ?", (tmp_db,))
+            src_con.execute("PRAGMA busy_timeout=60000")
+            src_con.backup(dst_con)
         finally:
+            dst_con.close()
             src_con.close()
 
+        stage = "scrub"
         con = sqlite3.connect(tmp_db)
         try:
             scrub_report = _scrub(con)
@@ -136,11 +144,16 @@ def appdb_export():
         finally:
             con.close()
 
+        stage = "gzip"
         buf = io.BytesIO()
         with open(tmp_db, "rb") as f, \
                 gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz:
             shutil.copyfileobj(f, gz)
         data = buf.getvalue()
+    except Exception as e:  # noqa: BLE001 - report the failing stage to the puller
+        return jsonify({"ok": False,
+                        "error": f"export failed at {stage}: "
+                                 f"{type(e).__name__}: {e}"}), 500
     finally:
         try:
             if os.path.exists(tmp_db):

@@ -75,9 +75,22 @@ def _expected_token():
     return (os.getenv("CENA_GATEWAY_TOKEN") or "").strip()
 
 
+def _blank_for(col_type, notnull):
+    """Scrub value: NULL when the column allows it, else a typed zero so a
+    NOT NULL constraint (e.g. drivers.failed_attempts INTEGER NOT NULL) can't
+    abort the scrub. Affinity by SQLite's type-name rules."""
+    if not notnull:
+        return "NULL"
+    t = (col_type or "").upper()
+    if "INT" in t or "REAL" in t or "FLOA" in t or "DOUB" in t or "NUM" in t \
+            or "DEC" in t:
+        return "0"
+    return "''"
+
+
 def _scrub(con):
-    """NULL credential/PII columns and drop one-time-secret rows in the COPY.
-    Returns {table: what_was_scrubbed} for the response header."""
+    """Neutralize credential/PII columns and drop one-time-secret rows in the
+    COPY. Returns {table: what_was_scrubbed} for the response header."""
     tables = {r[0] for r in con.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     report = {}
@@ -88,12 +101,15 @@ def _scrub(con):
     for t in sorted(tables):
         if t.startswith("sqlite_"):
             continue
-        cols = [r[1] for r in con.execute(f'PRAGMA table_info("{t}")')]
+        info = list(con.execute(f'PRAGMA table_info("{t}")'))  # cid,name,type,notnull,...
         want = set(_SCRUB_COLUMNS.get(t, ())) | _SCRUB_ANYWHERE
-        hit = [c for c in cols if c in want]
-        if hit:
-            con.execute(f'UPDATE "{t}" SET '
-                        + ", ".join(f'"{c}"=NULL' for c in hit))
+        sets, hit = [], []
+        for _cid, name, col_type, notnull, *_ in info:
+            if name in want:
+                sets.append(f'"{name}"={_blank_for(col_type, notnull)}')
+                hit.append(name)
+        if sets:
+            con.execute(f'UPDATE "{t}" SET ' + ", ".join(sets))
             report.setdefault(t, []).extend(hit)
     con.commit()
     return report

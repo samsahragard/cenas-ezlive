@@ -22,9 +22,10 @@ def _make_source_db(path):
     con.executescript(
         """
         CREATE TABLE users (id INTEGER PRIMARY KEY, full_name TEXT,
-            email TEXT, phone TEXT, passcode_hash TEXT, password_hash TEXT);
+            email TEXT, phone TEXT, passcode_hash TEXT, password_hash TEXT,
+            failed_attempts INTEGER NOT NULL DEFAULT 0);
         INSERT INTO users VALUES
-            (1, 'Test User', 'u@example.com', '555-1111', 'HASH-A', 'HASH-B');
+            (1, 'Test User', 'u@example.com', '555-1111', 'HASH-A', 'HASH-B', 3);
         CREATE TABLE employee_setup_tokens (id INTEGER PRIMARY KEY, token TEXT);
         INSERT INTO employee_setup_tokens VALUES (1, 'one-time-secret');
         CREATE TABLE legal_company_structure (id INTEGER PRIMARY KEY, ein TEXT);
@@ -105,12 +106,13 @@ def test_export_is_scrubbed_sqlite(client, tmp_path):
     assert int(r.headers["X-Appdb-Tables"]) >= 4
     con = _open_payload(r, tmp_path)
     try:
-        email, phone, ph, pw, name = con.execute(
-            "SELECT email, phone, passcode_hash, password_hash, full_name "
-            "FROM users").fetchone()
+        email, phone, ph, pw, name, fa = con.execute(
+            "SELECT email, phone, passcode_hash, password_hash, full_name, "
+            "failed_attempts FROM users").fetchone()
         assert email is None and phone is None
         assert ph is None and pw is None
         assert name == "Test User"  # non-sensitive survives
+        assert fa == 0  # NOT NULL column scrubbed to typed-zero, not NULL
         assert con.execute(
             "SELECT COUNT(*) FROM employee_setup_tokens").fetchone()[0] == 0
         assert con.execute(

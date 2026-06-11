@@ -1,0 +1,120 @@
+{
+  "_comment": "Gate-0 frozen mock fixture (docs/floor_contract.md section 9). Keys mirror /floor/api/* responses 1:1. Static snapshot of one Copperfield dinner shift on 2026-06-11; all datetimes UTC Z.",
+  "floor": {
+    "ok": true,
+    "location": { "slug": "uno", "key": "copperfield", "guid": "mock-loc-uno", "label": "Copperfield" },
+    "service_areas": [
+      { "guid": "mock-sa-dining", "name": "Dining Room" },
+      { "guid": "mock-sa-patio", "name": "Patio" }
+    ],
+    "tables": [
+      { "guid": "mock-t01", "name": "1", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 60, "y": 60, "w": 80, "h": 80, "shape": "square", "rotation": 0 },
+      { "guid": "mock-t02", "name": "2", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 180, "y": 60, "w": 80, "h": 80, "shape": "square", "rotation": 0 },
+      { "guid": "mock-t03", "name": "3", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 300, "y": 60, "w": 80, "h": 80, "shape": "circle", "rotation": 0 },
+      { "guid": "mock-t04", "name": "4", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 420, "y": 60, "w": 80, "h": 80, "shape": "diamond", "rotation": 45 },
+      { "guid": "mock-t05", "name": "5", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 60, "y": 200, "w": 140, "h": 80, "shape": "rect", "rotation": 0 },
+      { "guid": "mock-t06", "name": "6", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 240, "y": 200, "w": 140, "h": 80, "shape": "rect", "rotation": 0 },
+      { "guid": "mock-t07", "name": "7", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 420, "y": 200, "w": 80, "h": 80, "shape": "circle", "rotation": 0 },
+      { "guid": "mock-t08", "name": "8", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 60, "y": 340, "w": 80, "h": 80, "shape": "square", "rotation": 0 },
+      { "guid": "mock-t09", "name": "9", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 180, "y": 340, "w": 80, "h": 80, "shape": "square", "rotation": 0 },
+      { "guid": "mock-t10", "name": "10", "service_area_guid": "mock-sa-dining", "revenue_center_guid": "mock-rc-main", "x": 300, "y": 340, "w": 80, "h": 80, "shape": "circle", "rotation": 0 },
+      { "guid": "mock-t11", "name": "P1", "service_area_guid": "mock-sa-patio", "revenue_center_guid": "mock-rc-patio", "x": 700, "y": 200, "w": 80, "h": 80, "shape": "square", "rotation": 0 },
+      { "guid": "mock-t12", "name": "P2", "service_area_guid": "mock-sa-patio", "revenue_center_guid": "mock-rc-patio", "x": 820, "y": 200, "w": 80, "h": 80, "shape": "square", "rotation": 0 },
+      { "guid": "mock-t13", "name": "P3", "service_area_guid": "mock-sa-patio", "revenue_center_guid": "mock-rc-patio", "x": 700, "y": 340, "w": 80, "h": 80, "shape": "circle", "rotation": 0 }
+    ],
+    "unplaced": [
+      { "guid": "mock-t14", "name": "P4", "service_area_guid": "mock-sa-patio" }
+    ],
+    "fixtures": [
+      { "id": 1, "type": "wall", "x": 20, "y": 20, "w": 620, "h": 12, "rotation": 0, "label": null },
+      { "id": 2, "type": "wall", "x": 20, "y": 20, "w": 12, "h": 580, "rotation": 0, "label": null },
+      { "id": 3, "type": "label", "x": 660, "y": 40, "w": 240, "h": 70, "rotation": 0, "label": "BAR" },
+      { "id": 4, "type": "label", "x": 420, "y": 540, "w": 140, "h": 60, "rotation": 0, "label": "HOST" },
+      { "id": 5, "type": "label", "x": 40, "y": 540, "w": 200, "h": 60, "rotation": 0, "label": "KITCHEN" }
+    ]
+  },
+  "employees": {
+    "ok": true,
+    "employees": [
+      { "employee_guid": "mock-e-kayla", "name": "Kayla Gomez", "initials": "KG" },
+      { "employee_guid": "mock-e-marcus", "name": "Marcus Lee", "initials": "ML" },
+      { "employee_guid": "mock-e-ana", "name": "Ana Reyes", "initials": "AR" },
+      { "employee_guid": "mock-e-jordan", "name": "Jordan Pratt", "initials": "JP" },
+      { "employee_guid": "mock-e-bree", "name": "Bree Walton", "initials": "BW" },
+      { "employee_guid": "mock-e-omar", "name": "Omar Diaz", "initials": "OD" }
+    ]
+  },
+  "employees_on_shift": {
+    "ok": true,
+    "source": "shifts",
+    "servers": [
+      { "employee_guid": "mock-e-kayla", "name": "Kayla Gomez", "initials": "KG", "color": "#14B8A6" },
+      { "employee_guid": "mock-e-marcus", "name": "Marcus Lee", "initials": "ML", "color": "#8B5CF6" },
+      { "employee_guid": "mock-e-ana", "name": "Ana Reyes", "initials": "AR", "color": "#3B82F6" },
+      { "employee_guid": "mock-e-jordan", "name": "Jordan Pratt", "initials": "JP", "color": "#EC4899" }
+    ]
+  },
+  "sections": {
+    "ok": true,
+    "date": "2026-06-11",
+    "sections": [
+      { "id": 1, "server_employee_guid": "mock-e-kayla", "server_name": "Kayla Gomez", "initials": "KG", "color": "#14B8A6", "table_guids": ["mock-t01", "mock-t02", "mock-t03", "mock-t04"] },
+      { "id": 2, "server_employee_guid": "mock-e-marcus", "server_name": "Marcus Lee", "initials": "ML", "color": "#8B5CF6", "table_guids": ["mock-t05", "mock-t06", "mock-t07"] },
+      { "id": 3, "server_employee_guid": "mock-e-ana", "server_name": "Ana Reyes", "initials": "AR", "color": "#3B82F6", "table_guids": ["mock-t08", "mock-t09", "mock-t10"] },
+      { "id": 4, "server_employee_guid": "mock-e-jordan", "server_name": "Jordan Pratt", "initials": "JP", "color": "#EC4899", "table_guids": ["mock-t11", "mock-t12", "mock-t13"] }
+    ]
+  },
+  "live": {
+    "ok": true,
+    "attention_minutes": 90,
+    "open": [
+      { "seating_id": 1, "table_guid": "mock-t02", "party_size": 4, "seated_at": "2026-06-11T22:46:00Z", "minutes": 32, "server_employee_guid": "mock-e-kayla", "reservation_id": null, "waitlist_id": null },
+      { "seating_id": 2, "table_guid": "mock-t03", "party_size": 2, "seated_at": "2026-06-11T21:43:00Z", "minutes": 95, "server_employee_guid": "mock-e-kayla", "reservation_id": null, "waitlist_id": null },
+      { "seating_id": 3, "table_guid": "mock-t06", "party_size": 5, "seated_at": "2026-06-11T23:00:00Z", "minutes": 18, "server_employee_guid": "mock-e-marcus", "reservation_id": null, "waitlist_id": null },
+      { "seating_id": 4, "table_guid": "mock-t09", "party_size": 3, "seated_at": "2026-06-11T22:27:00Z", "minutes": 51, "server_employee_guid": "mock-e-ana", "reservation_id": null, "waitlist_id": null },
+      { "seating_id": 5, "table_guid": "mock-t11", "party_size": 6, "seated_at": "2026-06-11T23:06:00Z", "minutes": 12, "server_employee_guid": "mock-e-jordan", "reservation_id": 4, "waitlist_id": null },
+      { "seating_id": 6, "table_guid": "mock-t05", "party_size": 2, "seated_at": "2026-06-11T23:10:00Z", "minutes": 8, "server_employee_guid": "mock-e-marcus", "reservation_id": null, "waitlist_id": 3 }
+    ],
+    "covers": {
+      "mock-e-kayla": { "live": 6, "today": 18 },
+      "mock-e-marcus": { "live": 7, "today": 21 },
+      "mock-e-ana": { "live": 3, "today": 9 },
+      "mock-e-jordan": { "live": 6, "today": 14 }
+    }
+  },
+  "reservations": {
+    "ok": true,
+    "date": "2026-06-11",
+    "reservations": [
+      { "id": 5, "guest_name": "Greg Olsen", "phone": "555-0118", "party_size": 3, "reserved_for": "2026-06-11T21:30:00Z", "status": "no_show", "notes": "", "seating_id": null },
+      { "id": 4, "guest_name": "The Hartmans", "phone": "555-0190", "party_size": 6, "reserved_for": "2026-06-11T22:45:00Z", "status": "seated", "notes": "patio preferred", "seating_id": 5 },
+      { "id": 1, "guest_name": "Dana Whitfield", "phone": "555-0142", "party_size": 4, "reserved_for": "2026-06-11T22:30:00Z", "status": "upcoming", "notes": "", "seating_id": null },
+      { "id": 2, "guest_name": "Robert Chen", "phone": "555-0177", "party_size": 2, "reserved_for": "2026-06-11T23:00:00Z", "status": "confirmed", "notes": "anniversary", "seating_id": null },
+      { "id": 3, "guest_name": "Maria Solis", "phone": "555-0163", "party_size": 6, "reserved_for": "2026-06-11T23:15:00Z", "status": "arrived", "notes": "", "seating_id": null }
+    ]
+  },
+  "waitlist": {
+    "ok": true,
+    "waitlist": [
+      { "id": 1, "guest_name": "Tina Park", "phone": "555-0129", "party_size": 2, "quoted_minutes": 15, "joined_at": "2026-06-11T22:58:00Z", "status": "waiting", "seating_id": null },
+      { "id": 2, "guest_name": "Sam Field", "phone": "555-0136", "party_size": 4, "quoted_minutes": 25, "joined_at": "2026-06-11T22:51:00Z", "status": "notified", "seating_id": null },
+      { "id": 3, "guest_name": "Leo Marsh", "phone": "555-0107", "party_size": 2, "quoted_minutes": 10, "joined_at": "2026-06-11T22:40:00Z", "status": "seated", "seating_id": 6 }
+    ]
+  },
+  "history": {
+    "ok": true,
+    "date": "2026-06-11",
+    "seatings": [
+      { "seating_id": 7, "table_guid": "mock-t01", "table_name": "1", "party_size": 2, "seated_at": "2026-06-11T20:40:00Z", "cleared_at": "2026-06-11T21:35:00Z", "server_employee_guid": "mock-e-kayla", "server_name": "Kayla Gomez", "reservation_id": null, "waitlist_id": null },
+      { "seating_id": 8, "table_guid": "mock-t08", "table_name": "8", "party_size": 4, "seated_at": "2026-06-11T20:55:00Z", "cleared_at": "2026-06-11T22:02:00Z", "server_employee_guid": "mock-e-ana", "server_name": "Ana Reyes", "reservation_id": null, "waitlist_id": null },
+      { "seating_id": 1, "table_guid": "mock-t02", "table_name": "2", "party_size": 4, "seated_at": "2026-06-11T22:46:00Z", "cleared_at": null, "server_employee_guid": "mock-e-kayla", "server_name": "Kayla Gomez", "reservation_id": null, "waitlist_id": null }
+    ],
+    "reservations": [
+      { "id": 4, "guest_name": "The Hartmans", "phone": "555-0190", "party_size": 6, "reserved_for": "2026-06-11T22:45:00Z", "status": "seated", "seating_id": 5 },
+      { "id": 5, "guest_name": "Greg Olsen", "phone": "555-0118", "party_size": 3, "reserved_for": "2026-06-11T21:30:00Z", "status": "no_show", "seating_id": null }
+    ],
+    "waitlist": [
+      { "id": 3, "guest_name": "Leo Marsh", "phone": "555-0107", "party_size": 2, "quoted_minutes": 10, "joined_at": "2026-06-11T22:40:00Z", "status": "seated", "seating_id": 6 }
+    ]
+  }
+}

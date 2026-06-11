@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Choose your role - Cenas Kitchen</title>
+  <style>
+    :root {
+      --cc-backdrop: #05060a;
+      --cc-ink: #0a0c12;
+      --cc-chit: #141925;
+      --cc-heat: #ff6a3d;
+      --cc-text: #f2f3f7;
+      --cc-dim: #9aa3b5;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--cc-backdrop);
+      color: var(--cc-text);
+      font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .pos-card {
+      background: var(--cc-ink);
+      border: 1px solid #1d2330;
+      border-radius: 18px;
+      padding: 28px 22px;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+    .pos-eyebrow {
+      color: var(--cc-heat);
+      font-size: 12px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    h1 { font-size: 22px; margin-bottom: 6px; }
+    .pos-sub { color: var(--cc-dim); font-size: 14px; margin-bottom: 22px; }
+    .pos-btn {
+      display: block;
+      width: 100%;
+      background: var(--cc-chit);
+      border: 1px solid #232b3d;
+      color: var(--cc-text);
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: border-color .15s, transform .05s;
+    }
+    .pos-btn:hover { border-color: var(--cc-heat); }
+    .pos-btn:active { transform: scale(.99); }
+    .pos-logout {
+      display: inline-block;
+      margin-top: 10px;
+      color: var(--cc-dim);
+      font-size: 13px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <main class="pos-card">
+    <div class="pos-eyebrow">Cenas Kitchen</div>
+    <h1>{% if first_name %}Hi {{ first_name }} -{% else %}Hi -{% endif %} what are you working as today?</h1>
+    <p class="pos-sub">Your profile will match the role you pick.</p>
+    {% for p in positions %}
+    <form method="POST" action="{{ select_url }}">
+      <input type="hidden" name="position_id" value="{{ p.id }}">
+      <button class="pos-btn" type="submit">{{ p.name }}</button>
+    </form>
+    {% endfor %}
+    <form method="POST" action="{{ logout_url }}" onsubmit="fetch('{{ logout_url }}', {method: 'POST'}).then(function(){ window.location='/employee/login'; }); return false;">
+      <button class="pos-logout" type="submit">Not you? Log out</button>
+    </form>
+  </main>
+</body>
+</html>

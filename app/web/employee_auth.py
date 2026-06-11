@@ -117,7 +117,7 @@ def _establish_employee_session(emp) -> list[str]:
     for k in ("user_id", "user_session_version",
               "driver_id", "driver_name", "driver_location",
               "driver_session_version", "partner_auth_ok", "active_store",
-              "employee_name"):
+              "employee_name", "active_position_id", "active_position_name"):
         session.pop(k, None)
     session.permanent = True
     session["employee_id"] = emp.id
@@ -178,6 +178,39 @@ def _employee_store_keys(emp_id) -> list[str]:
             seen.add(sk)
             out.append(sk)
     return out
+
+
+def _employee_positions_for(emp_id, store_key: str | None = None) -> list[dict]:
+    """Distinct positions this employee holds (optionally scoped to the active
+    store; NULL-store position rows count everywhere). De-duped by name - the
+    data has duplicate rows (e.g. 'Prep, Prep') from repeated imports. Source
+    for the position-profile chooser (Sam 2026-06-10: a position change must
+    reflect in the portal; 2+ positions -> the login asks which role)."""
+    db = SessionLocal()
+    try:
+        q = (db.query(Position.id, Position.name)
+               .join(EmployeePosition, EmployeePosition.position_id == Position.id)
+               .filter(EmployeePosition.employee_id == emp_id))
+        if store_key:
+            q = q.filter((EmployeePosition.store_key == store_key)
+                         | (EmployeePosition.store_key.is_(None)))
+        rows = q.distinct().order_by(Position.name.asc()).all()
+    finally:
+        db.close()
+    seen: set[str] = set()
+    out: list[dict] = []
+    for pid, name in rows:
+        nm = (name or "").strip()
+        if nm and nm.lower() not in seen:
+            seen.add(nm.lower())
+            out.append({"id": pid, "name": nm})
+    return out
+
+
+def _chooser_store_scope() -> str | None:
+    """The store to scope the position chooser to ('__both__' = no scoping)."""
+    sk = (session.get("active_store") or "").strip().lower()
+    return sk if sk and sk != "__both__" else None
 
 
 def _central_today_parts() -> tuple[str, str]:
@@ -288,7 +321,8 @@ def logout():
     sets for a LINKED team member - else a linked manager logging out of the employee
     app would keep their management session. Other principals were cleared on login."""
     for k in ("employee_id", "employee_name", "employee_session_version", "auth_ok",
-              "active_store", "user_id", "user_session_version"):
+              "active_store", "user_id", "user_session_version",
+              "active_position_id", "active_position_name"):
         session.pop(k, None)
     return jsonify({"ok": True}), 200
 
@@ -314,6 +348,34 @@ def select_store():
     elif store_key not in member:
         return jsonify({"ok": False, "error": "You aren't assigned to that store."}), 403
     session["active_store"] = store_key
+    return jsonify({"ok": True, "next": "/employee/dashboard"}), 200
+
+
+@employee_auth.route("/employee/select-position", methods=["POST"])
+def select_position():
+    """Position-profile pick (Sam 2026-06-10, the Sofia expo/busser case): an
+    employee holding 2+ positions chooses which role this login works as. Sets
+    session['active_position_id'/'active_position_name'] - the dashboard header
+    + profile view key off it - but ONLY after verifying the employee actually
+    HOLDS that position (mirrors select-store's membership check). Re-asked on
+    every fresh login (_establish_employee_session pops the keys). Accepts a
+    plain form POST (the chooser page) or JSON."""
+    emp_id = session.get("employee_id")
+    if not emp_id:
+        return jsonify({"ok": False, "error": "Not logged in."}), 401
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        pos_id = int(data.get("position_id") or 0)
+    except (TypeError, ValueError):
+        pos_id = 0
+    positions = _employee_positions_for(emp_id, store_key=_chooser_store_scope())
+    match = next((p for p in positions if p["id"] == pos_id), None)
+    if match is None:
+        return jsonify({"ok": False, "error": "That isn't one of your positions."}), 403
+    session["active_position_id"] = match["id"]
+    session["active_position_name"] = match["name"]
+    if not request.is_json:
+        return redirect("/employee/dashboard")
     return jsonify({"ok": True, "next": "/employee/dashboard"}), 200
 
 
@@ -397,22 +459,39 @@ def dashboard_page():
         # No demo fixture, no re-derived pay math here.
         from datetime import date as _date
 
-        # Primary position label for the header (own positions only).
-        role_label = None
+        # Position-profile chooser (Sam 2026-06-10): a position change must
+        # reflect here. 2+ distinct positions and no pick this login -> ask
+        # ("Expo or Busser?") before showing the dashboard; the pick sets the
+        # role the header + profile render as. One position -> auto-set.
         try:
-            from app.models import EmployeePosition, Position
-            pos = (db.query(Position.name)
-                     .join(EmployeePosition, EmployeePosition.position_id == Position.id)
-                     .filter(EmployeePosition.employee_id == emp.id)
-                     .order_by(Position.name.asc())
-                     .first())
-            role_label = (pos[0] or "").strip() if pos else None
+            positions = _employee_positions_for(emp.id, store_key=_chooser_store_scope())
         except Exception:
-            role_label = None
+            positions = []
+        chosen_id = session.get("active_position_id")
+        chosen = next((p for p in positions if p["id"] == chosen_id), None)
+        if chosen is None and len(positions) >= 2:
+            return render_template(
+                "employee_position_choice.html",
+                first_name=first_name,
+                positions=positions,
+                select_url="/employee/select-position",
+                logout_url="/employee/logout",
+            )
+        if chosen is None and positions:
+            chosen = positions[0]
+        if chosen is not None:
+            session["active_position_id"] = chosen["id"]
+            session["active_position_name"] = chosen["name"]
 
-        range_key = (request.args.get("range") or "today").lower()
+        # Header role = the chosen position (falls back to first/only position).
+        role_label = (chosen or {}).get("name") or None
+
+        # Land on WEEK by default (Sam 2026-06-10): the Today tab opens all-zero
+        # for anyone who hasn't clocked in yet today, which reads as broken.
+        # Week shows their current hours immediately; Today stays one tap away.
+        range_key = (request.args.get("range") or "week").lower()
         if range_key not in ("today", "week", "month", "last30"):
-            range_key = "today"
+            range_key = "week"
         today_label = _date.today().strftime("%a, %b ") + str(_date.today().day)
 
         initials = "".join(w[0] for w in (full_name or "").split()[:2]).upper() or "--"

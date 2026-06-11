@@ -277,3 +277,45 @@ def test_reserve_css_is_floor_reserve_scoped():
             assert part.startswith(".floor-reserve"), (
                 f"selector not scoped under .floor-reserve: {part!r}"
             )
+
+
+# --------------------------------------------------------------------------
+# Gate 4 (ck): duplicate-confirm flow, history days toggle, host badge wiring
+# (contract section 12)
+# --------------------------------------------------------------------------
+
+HOST_JS = SECTIONS_STATIC / "host.js"
+
+
+def test_reserve_js_duplicate_confirm_flow():
+    src = RESERVE_JS.read_text(encoding="utf-8")
+    # the 409 envelope code is recognized
+    assert '"duplicate"' in src
+    # confirm-step copy + its action button markup
+    assert "Looks like a duplicate booking - add anyway?" in src
+    assert 'data-action="confirm-duplicate"' in src
+    # the resend path flips confirm:true on the held payload
+    assert re.search(r"confirm\s*=\s*true", src), "resend must set confirm:true"
+    # the held payload is dropped once consumed or the sheet closes
+    assert "pendingReservation" in src
+
+
+def test_reserve_js_history_days_toggle():
+    src = RESERVE_JS.read_text(encoding="utf-8")
+    # toggle button present in the History sub-tab rendering
+    assert 'data-action="toggle-history-days"' in src
+    assert 'data-role="history-days-toggle"' in src
+    assert "Last 7 days" in src
+    # fetch carries days=N only in multi-day mode; toggle flips 1 <-> 7
+    assert re.search(r"&days=", src), "history fetch must pass days=N"
+    assert re.search(r"historyDays\s*>\s*1\s*\?\s*1\s*:\s*7", src)
+    # bucketed {ok, days:[...]} payload shape is handled
+    assert re.search(r"\.days\b", src), "renderer must handle the days buckets"
+
+
+def test_host_js_wires_reservation_badge():
+    # Gate 4 surface check: host.js consumes shell.setBadge('host', n) from
+    # the live payload's reservation_badge on every poll (n=0 hides).
+    src = HOST_JS.read_text(encoding="utf-8")
+    assert re.search(r"setBadge\(\s*[\"']host[\"']\s*,", src)
+    assert "reservation_badge" in src

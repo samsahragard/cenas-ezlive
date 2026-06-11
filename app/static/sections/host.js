@@ -433,6 +433,11 @@
       return { guid: sv.guid, name: sv.name, initials: sv.initials,
                color: sv.color, live: c.live || 0, today: c.today || 0 };
     }));
+
+    /* Gate 4 (ck): host tab badge from the live payload's reservation_badge
+       (today's upcoming/confirmed/arrived count). setBadge is consumed
+       READ-ONLY from the SA-3 shell; 0/absent hides the badge. */
+    shell.setBadge("host", live.reservation_badge || 0);
   }
 
   /* --------------------------------------------------------------- sheets */

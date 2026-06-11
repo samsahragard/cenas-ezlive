@@ -337,6 +337,34 @@ def _attention_minutes() -> int:
         return 90
 
 
+# Gate 4 (ck): no-show grace window (contract sections 2 + 12).
+def _noshow_grace_minutes() -> int:
+    try:
+        return int(os.getenv("FLOOR_NOSHOW_GRACE_MINUTES", "20"))
+    except ValueError:
+        return 20
+
+
+def _apply_noshow_flags(db, loc: dict) -> None:
+    """Gate 4 (ck): lazy no-show auto-flag (contract section 12). Any
+    reservation at this location still upcoming/confirmed whose
+    reserved_for + grace < now flips to no_show, persisted on read inside
+    GET reservations / history / live. No cron, no in-memory state: a plain
+    idempotent UPDATE, safe when several gunicorn workers race it."""
+    cutoff = _utcnow() - timedelta(minutes=_noshow_grace_minutes())
+    flipped = (
+        db.query(FloorReservation)
+        .filter(FloorReservation.location_guid == loc["guid"],
+                FloorReservation.status.in_(["upcoming", "confirmed"]),
+                FloorReservation.reserved_for < cutoff)
+        .update({"status": "no_show"}, synchronize_session=False)
+    )
+    if flipped:
+        db.commit()
+        # Drop any stale identity-map copies of the rows we just flipped.
+        db.expire_all()
+
+
 def _serialize_reservation(r: FloorReservation, *, with_notes: bool = True) -> dict:
     out = {
         "id": r.id,
@@ -855,6 +883,8 @@ def api_live():
         return err
     db = _open_db()
     try:
+        # Gate 4 (ck): lazy no-show flag runs on every live read.
+        _apply_noshow_flags(db, loc)
         now = datetime.utcnow()
         open_rows = (
             db.query(FloorSeating)
@@ -895,11 +925,23 @@ def api_live():
             }
             for r in open_rows
         ]
+        # Gate 4 (ck): host-tab badge = today's reservations still in play
+        # (upcoming/confirmed/arrived) for this location (contract section 12).
+        reservation_badge = (
+            db.query(FloorReservation.id)
+            .filter(FloorReservation.location_guid == loc["guid"],
+                    FloorReservation.reserved_for >= start,
+                    FloorReservation.reserved_for < end,
+                    FloorReservation.status.in_(
+                        ["upcoming", "confirmed", "arrived"]))
+            .count()
+        )
         return jsonify({
             "ok": True,
             "attention_minutes": _attention_minutes(),
             "open": open_out,
             "covers": covers,
+            "reservation_badge": reservation_badge,
         })
     finally:
         db.close()
@@ -1072,6 +1114,8 @@ def api_reservations_get():
     start, end = _utc_window_for_business_date(d)
     db = _open_db()
     try:
+        # Gate 4 (ck): lazy no-show flag runs on every book read.
+        _apply_noshow_flags(db, loc)
         rows = (
             db.query(FloorReservation)
             .filter(FloorReservation.location_guid == loc["guid"],
@@ -1116,6 +1160,25 @@ def api_reservations_post():
         return jsonify({"ok": False, "error": "bad_notes"}), 400
     db = _open_db()
     try:
+        # Gate 4 (ck): duplicate-guest guard (contract section 12). Same loc
+        # + same non-empty phone + reserved_for within +/-90 min of an
+        # existing NON-cancelled reservation -> 409 unless confirm:true.
+        phone_clean = (phone or "").strip()[:40]
+        if phone_clean and not bool(body.get("confirm")):
+            dup = (
+                db.query(FloorReservation.id)
+                .filter(FloorReservation.location_guid == loc["guid"],
+                        FloorReservation.phone == phone_clean,
+                        FloorReservation.status != "cancelled",
+                        FloorReservation.reserved_for
+                        >= reserved_for - timedelta(minutes=90),
+                        FloorReservation.reserved_for
+                        <= reserved_for + timedelta(minutes=90))
+                .first()
+            )
+            if dup is not None:
+                return jsonify({"ok": False, "error": "duplicate",
+                                "duplicate": True}), 409
         r = FloorReservation(
             location_guid=loc["guid"],
             guest_name=guest_name[:120],
@@ -1324,6 +1387,65 @@ def api_waitlist_patch(wl_id: int):
 
 # --- 17. GET /floor/api/history -------------------------------------------------------------
 
+HISTORY_DAYS_MAX = 30  # Gate 4 (ck): days=N clamp (contract section 12)
+
+
+def _history_groups(db, loc: dict, d: date, table_names: dict[str, str],
+                    name_map: dict[str, str]) -> dict:
+    """One business date's history groups (the frozen single-day shapes)."""
+    start, end = _utc_window_for_business_date(d)
+    seatings = (
+        db.query(FloorSeating)
+        .filter(FloorSeating.location_guid == loc["guid"],
+                FloorSeating.seated_at >= start,
+                FloorSeating.seated_at < end)
+        .order_by(FloorSeating.seated_at, FloorSeating.id)
+        .all()
+    )
+    seatings_out = [
+        {
+            "seating_id": s.id,
+            "table_guid": s.table_guid,
+            "table_name": table_names.get(s.table_guid, s.table_guid[:8]),
+            "party_size": s.party_size,
+            "seated_at": _iso_z(s.seated_at),
+            "cleared_at": _iso_z(s.cleared_at),
+            "server_employee_guid": s.server_employee_guid_at_seat,
+            "server_name": _name_or_guid(
+                name_map, s.server_employee_guid_at_seat),
+            "reservation_id": s.reservation_id,
+            "waitlist_id": s.waitlist_id,
+        }
+        for s in seatings
+    ]
+    res_rows = (
+        db.query(FloorReservation)
+        .filter(FloorReservation.location_guid == loc["guid"],
+                FloorReservation.reserved_for >= start,
+                FloorReservation.reserved_for < end,
+                FloorReservation.status.in_(
+                    ["seated", "no_show", "cancelled"]))
+        .order_by(FloorReservation.reserved_for, FloorReservation.id)
+        .all()
+    )
+    wl_rows = (
+        db.query(FloorWaitlistEntry)
+        .filter(FloorWaitlistEntry.location_guid == loc["guid"],
+                FloorWaitlistEntry.joined_at >= start,
+                FloorWaitlistEntry.joined_at < end,
+                FloorWaitlistEntry.status.in_(["seated", "left"]))
+        .order_by(FloorWaitlistEntry.joined_at, FloorWaitlistEntry.id)
+        .all()
+    )
+    return {
+        "seatings": seatings_out,
+        "reservations": [
+            _serialize_reservation(r, with_notes=False) for r in res_rows
+        ],
+        "waitlist": [_serialize_waitlist(w) for w in wl_rows],
+    }
+
+
 @floor_bp.route("/api/history", methods=["GET"])
 def api_history():
     loc, err = _loc_or_400()
@@ -1332,17 +1454,22 @@ def api_history():
     d, err = _date_param_or_today()
     if err:
         return err
-    start, end = _utc_window_for_business_date(d)
+    # Gate 4 (ck): backfill view - days=N (default 1, max 30). Absent or
+    # days<=1 keeps the frozen single-day shape; days>1 returns per-day
+    # buckets {ok, days:[{date, seatings, reservations, waitlist}]} ending
+    # at the anchor date, most recent day first.
+    raw_days = request.args.get("days")
+    days = 1
+    if raw_days is not None:
+        try:
+            days = int(raw_days.strip())
+        except (ValueError, AttributeError):
+            return jsonify({"ok": False, "error": "bad_days"}), 400
+        days = max(1, min(days, HISTORY_DAYS_MAX))
     db = _open_db()
     try:
-        seatings = (
-            db.query(FloorSeating)
-            .filter(FloorSeating.location_guid == loc["guid"],
-                    FloorSeating.seated_at >= start,
-                    FloorSeating.seated_at < end)
-            .order_by(FloorSeating.seated_at, FloorSeating.id)
-            .all()
-        )
+        # Gate 4 (ck): lazy no-show flag runs on every history read.
+        _apply_noshow_flags(db, loc)
         # Table names: include soft-deleted rows - historical seatings join
         # on old GUIDs (contract section 3).
         table_names = {
@@ -1351,50 +1478,15 @@ def api_history():
             .filter(ToastTableCfg.location_guid == loc["guid"]).all()
         }
         name_map = _employee_name_map(loc)
-        seatings_out = [
-            {
-                "seating_id": s.id,
-                "table_guid": s.table_guid,
-                "table_name": table_names.get(s.table_guid, s.table_guid[:8]),
-                "party_size": s.party_size,
-                "seated_at": _iso_z(s.seated_at),
-                "cleared_at": _iso_z(s.cleared_at),
-                "server_employee_guid": s.server_employee_guid_at_seat,
-                "server_name": _name_or_guid(
-                    name_map, s.server_employee_guid_at_seat),
-                "reservation_id": s.reservation_id,
-                "waitlist_id": s.waitlist_id,
-            }
-            for s in seatings
-        ]
-        res_rows = (
-            db.query(FloorReservation)
-            .filter(FloorReservation.location_guid == loc["guid"],
-                    FloorReservation.reserved_for >= start,
-                    FloorReservation.reserved_for < end,
-                    FloorReservation.status.in_(
-                        ["seated", "no_show", "cancelled"]))
-            .order_by(FloorReservation.reserved_for, FloorReservation.id)
-            .all()
-        )
-        wl_rows = (
-            db.query(FloorWaitlistEntry)
-            .filter(FloorWaitlistEntry.location_guid == loc["guid"],
-                    FloorWaitlistEntry.joined_at >= start,
-                    FloorWaitlistEntry.joined_at < end,
-                    FloorWaitlistEntry.status.in_(["seated", "left"]))
-            .order_by(FloorWaitlistEntry.joined_at, FloorWaitlistEntry.id)
-            .all()
-        )
-        return jsonify({
-            "ok": True,
-            "date": d.isoformat(),
-            "seatings": seatings_out,
-            "reservations": [
-                _serialize_reservation(r, with_notes=False) for r in res_rows
-            ],
-            "waitlist": [_serialize_waitlist(w) for w in wl_rows],
-        })
+        if days > 1:
+            buckets = []
+            for off in range(days):
+                day = d - timedelta(days=off)
+                groups = _history_groups(db, loc, day, table_names, name_map)
+                buckets.append({"date": day.isoformat(), **groups})
+            return jsonify({"ok": True, "days": buckets})
+        groups = _history_groups(db, loc, d, table_names, name_map)
+        return jsonify({"ok": True, "date": d.isoformat(), **groups})
     finally:
         db.close()
 

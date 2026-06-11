@@ -20,7 +20,9 @@ from datetime import datetime, timedelta
 
 from app.floor_models import (
     FLOOR_PALETTE,
+    FloorReservation,
     FloorSeating,
+    FloorWaitlistEntry,
     ToastServiceArea,
     ToastTableCfg,
     ensure_floor_tables,
@@ -816,3 +818,277 @@ def test_page_route_403_without_user(floor_app, page_render):
     resp = client.get("/floor/uno/sections")
     assert resp.status_code == 403
     assert page_render == []
+
+
+# ---------------------------------------------------------------------------
+# Gate 4 (ck): lazy no-show flag, duplicate-guest guard, reservation_badge,
+# history days=N buckets (contract section 12)
+# ---------------------------------------------------------------------------
+
+def _seed_reservation(db, guest, *, minutes=None, reserved_at=None,
+                      status="upcoming", phone="", loc_guid=UNO_GUID):
+    """Direct row insert so reserved_for can sit anywhere relative to now."""
+    if reserved_at is None:
+        reserved_at = (datetime.utcnow().replace(microsecond=0)
+                       + timedelta(minutes=minutes or 0))
+    r = FloorReservation(
+        location_guid=loc_guid,
+        guest_name=guest,
+        phone=phone,
+        party_size=2,
+        reserved_for=reserved_at,
+        status=status,
+        notes="",
+        created_by="test",
+        created_at=datetime.utcnow(),
+    )
+    db.add(r)
+    db.commit()
+    return r
+
+
+def _status(db, rid: int) -> str:
+    db.expire_all()
+    return db.get(FloorReservation, rid).status
+
+
+def _business_date_of(dt_utc):
+    """Which business date a naive-UTC datetime belongs to (deterministic
+    regardless of when in the day the test runs)."""
+    from app.web.floor_routes import _utc_window_for_business_date
+    base = _local_today()
+    for cand in (base, base - timedelta(days=1), base + timedelta(days=1)):
+        s, e = _utc_window_for_business_date(cand)
+        if s <= dt_utc < e:
+            return cand
+    raise AssertionError(f"no business date found for {dt_utc}")
+
+
+def test_noshow_flag_on_reservations_get(floor_app):
+    app, db = floor_app
+    client = _partner_client(app, db)
+    # default grace = 20: -22 is just past the boundary, -18 just inside
+    overdue = _seed_reservation(db, "Overdue Upcoming", minutes=-22)
+    conf_over = _seed_reservation(db, "Overdue Confirmed", minutes=-40,
+                                  status="confirmed")
+    in_grace = _seed_reservation(db, "Inside Grace", minutes=-18)
+    future = _seed_reservation(db, "Future Guest", minutes=90)
+    arrived = _seed_reservation(db, "Arrived Guest", minutes=-180,
+                                status="arrived")
+    seated = _seed_reservation(db, "Seated Guest", minutes=-180,
+                               status="seated")
+    cancelled = _seed_reservation(db, "Cancelled Guest", minutes=-180,
+                                  status="cancelled")
+
+    d = _business_date_of(overdue.reserved_for)
+    book = client.get(
+        f"/floor/api/reservations?loc=uno&date={d.isoformat()}").get_json()
+    by_name = {r["guest_name"]: r["status"] for r in book["reservations"]}
+    # the read itself serves the flipped status
+    assert by_name["Overdue Upcoming"] == "no_show"
+
+    # persisted on read: upcoming/confirmed past grace flip, nothing else
+    assert _status(db, overdue.id) == "no_show"
+    assert _status(db, conf_over.id) == "no_show"
+    assert _status(db, in_grace.id) == "upcoming"
+    assert _status(db, future.id) == "upcoming"
+    assert _status(db, arrived.id) == "arrived"
+    assert _status(db, seated.id) == "seated"
+    assert _status(db, cancelled.id) == "cancelled"
+
+    # idempotent: a second read changes nothing
+    client.get(f"/floor/api/reservations?loc=uno&date={d.isoformat()}")
+    assert _status(db, overdue.id) == "no_show"
+    assert _status(db, in_grace.id) == "upcoming"
+
+
+def test_noshow_grace_env_boundary(floor_app, monkeypatch):
+    app, db = floor_app
+    client = _partner_client(app, db)
+    monkeypatch.setenv("FLOOR_NOSHOW_GRACE_MINUTES", "60")
+    inside = _seed_reservation(db, "Fifty Nine", minutes=-59)
+    past = _seed_reservation(db, "Sixty One", minutes=-61)
+    assert client.get("/floor/api/reservations?loc=uno").status_code == 200
+    assert _status(db, inside.id) == "upcoming"
+    assert _status(db, past.id) == "no_show"
+
+
+def test_noshow_flag_on_history_get(floor_app):
+    app, db = floor_app
+    client = _partner_client(app, db)
+    overdue = _seed_reservation(db, "Hist Overdue", minutes=-30)
+    arrived = _seed_reservation(db, "Hist Arrived", minutes=-30,
+                                status="arrived")
+    d = _business_date_of(overdue.reserved_for)
+    hist = client.get(
+        f"/floor/api/history?loc=uno&date={d.isoformat()}").get_json()
+    # flipped on this very read -> already in the terminal bucket
+    assert {r["guest_name"]: r["status"] for r in hist["reservations"]} == {
+        "Hist Overdue": "no_show"}
+    assert _status(db, overdue.id) == "no_show"
+    assert _status(db, arrived.id) == "arrived"
+
+
+def test_noshow_flag_on_live_get_and_reservation_badge(floor_app):
+    app, db = floor_app
+    client = _partner_client(app, db)
+    from app.web.floor_routes import _utc_window_for_business_date
+    now = datetime.utcnow().replace(microsecond=0)
+    start, end = _utc_window_for_business_date(_local_today())
+    future_today = now + (end - now) / 2   # today's window, in the future
+    past_today = start + (now - start) / 2  # today's window, already past
+
+    overdue = _seed_reservation(db, "Live Overdue", minutes=-30)
+    _seed_reservation(db, "Live Upcoming", reserved_at=future_today)
+    _seed_reservation(db, "Live Confirmed", reserved_at=future_today,
+                      status="confirmed")
+    _seed_reservation(db, "Live Arrived", reserved_at=past_today,
+                      status="arrived")
+    _seed_reservation(db, "Live Seated", reserved_at=past_today,
+                      status="seated")
+    _seed_reservation(db, "Live Cancelled", reserved_at=future_today,
+                      status="cancelled")
+    _seed_reservation(db, "Live Tomorrow",
+                      reserved_at=end + timedelta(hours=2))
+    _seed_reservation(db, "Other Store", reserved_at=future_today,
+                      loc_guid=DOS_GUID)
+
+    live = client.get("/floor/api/live?loc=uno").get_json()
+    assert live["ok"] is True
+    # the live read flips the overdue booking...
+    assert _status(db, overdue.id) == "no_show"
+    # ...and the badge counts only TODAY's upcoming/confirmed/arrived at uno
+    assert live["reservation_badge"] == 3
+    # next poll: flag is idempotent, badge stable
+    again = client.get("/floor/api/live?loc=uno").get_json()
+    assert again["reservation_badge"] == 3
+
+
+def test_reservation_duplicate_guard(floor_app):
+    app, db = floor_app
+    client = _partner_client(app, db)
+    d = _local_today().isoformat()
+    base = {"loc": "uno", "guest_name": "Pat Original", "party_size": 2,
+            "reserved_for": f"{d}T18:00:00", "phone": "555-777-0001"}
+    assert client.post("/floor/api/reservations", json=base).status_code == 200
+
+    # same loc + phone within +/-90 min -> 409 duplicate envelope
+    dup = dict(base, guest_name="Pat Again",
+               reserved_for=f"{d}T19:00:00")
+    resp = client.post("/floor/api/reservations", json=dup)
+    assert resp.status_code == 409
+    assert resp.get_json() == {"ok": False, "error": "duplicate",
+                               "duplicate": True}
+
+    # confirm:true overrides the guard
+    resp = client.post("/floor/api/reservations", json=dict(dup, confirm=True))
+    assert resp.status_code == 200
+    assert resp.get_json()["reservation"]["guest_name"] == "Pat Again"
+
+    # different phone in the same slot passes
+    assert client.post("/floor/api/reservations", json=dict(
+        base, guest_name="Someone Else",
+        phone="555-777-0002")).status_code == 200
+
+    # same phone outside the window passes (21:00 is 120+ min from both rows)
+    assert client.post("/floor/api/reservations", json=dict(
+        base, guest_name="Pat Later",
+        reserved_for=f"{d}T21:00:00")).status_code == 200
+
+    # exactly 90 minutes apart is still "within" -> 409
+    p3 = {"loc": "uno", "guest_name": "Boundary One", "party_size": 2,
+          "reserved_for": f"{d}T10:00:00", "phone": "555-777-0003"}
+    assert client.post("/floor/api/reservations", json=p3).status_code == 200
+    assert client.post("/floor/api/reservations", json=dict(
+        p3, guest_name="Boundary Two",
+        reserved_for=f"{d}T11:30:00")).status_code == 409
+
+    # empty phone is never guarded
+    walkin = {"loc": "uno", "guest_name": "No Phone", "party_size": 2,
+              "reserved_for": f"{d}T12:00:00", "phone": ""}
+    assert client.post("/floor/api/reservations", json=walkin).status_code == 200
+    assert client.post("/floor/api/reservations", json=dict(
+        walkin, guest_name="No Phone Two")).status_code == 200
+
+    # cancelled rows do not trigger the guard
+    c1 = client.post("/floor/api/reservations", json={
+        "loc": "uno", "guest_name": "Cancel Me", "party_size": 2,
+        "reserved_for": f"{d}T08:00:00", "phone": "555-777-0004"})
+    assert c1.status_code == 200
+    cid = c1.get_json()["reservation"]["id"]
+    assert client.patch(f"/floor/api/reservations/{cid}",
+                        json={"status": "cancelled"}).status_code == 200
+    assert client.post("/floor/api/reservations", json={
+        "loc": "uno", "guest_name": "Cancel Replacement", "party_size": 2,
+        "reserved_for": f"{d}T08:30:00",
+        "phone": "555-777-0004"}).status_code == 200
+
+
+def test_history_days_buckets_clamp_and_legacy_shape(floor_app):
+    app, db = floor_app
+    client = _partner_client(app, db)
+    from app.web.floor_routes import _utc_window_for_business_date
+    d = _local_today()
+
+    # one seating + one terminal reservation on each of 3 business days
+    for off in range(3):
+        day = d - timedelta(days=off)
+        s, e = _utc_window_for_business_date(day)
+        mid = s + (e - s) / 2
+        db.add(FloorSeating(
+            location_guid=UNO_GUID, table_guid=f"tbl-d{off}",
+            party_size=2 + off, seated_at=mid, seated_by="test",
+            cleared_at=mid + timedelta(hours=1)))
+        db.add(FloorReservation(
+            location_guid=UNO_GUID, guest_name=f"Guest D{off}", phone="",
+            party_size=2, reserved_for=mid, status="cancelled", notes="",
+            created_by="test", created_at=mid))
+    # one terminal waitlist row on day 1 only
+    s1, e1 = _utc_window_for_business_date(d - timedelta(days=1))
+    db.add(FloorWaitlistEntry(
+        location_guid=UNO_GUID, guest_name="WL D1", phone="", party_size=2,
+        quoted_minutes=10, joined_at=s1 + (e1 - s1) / 2, status="left"))
+    db.commit()
+
+    # days param absent -> UNCHANGED legacy single-day shape
+    legacy = client.get(
+        f"/floor/api/history?loc=uno&date={d.isoformat()}").get_json()
+    assert legacy["ok"] is True
+    assert "days" not in legacy
+    assert legacy["date"] == d.isoformat()
+    assert [s["table_guid"] for s in legacy["seatings"]] == ["tbl-d0"]
+    assert [r["guest_name"] for r in legacy["reservations"]] == ["Guest D0"]
+
+    # days=1 explicitly also keeps the legacy shape
+    one = client.get(
+        f"/floor/api/history?loc=uno&date={d.isoformat()}&days=1").get_json()
+    assert "days" not in one and one["date"] == d.isoformat()
+
+    # days=3 -> per-day buckets, anchor date first (most recent first)
+    multi = client.get(
+        f"/floor/api/history?loc=uno&date={d.isoformat()}&days=3").get_json()
+    assert multi["ok"] is True
+    assert "date" not in multi and "seatings" not in multi
+    assert [b["date"] for b in multi["days"]] == [
+        (d - timedelta(days=off)).isoformat() for off in range(3)]
+    for off, bucket in enumerate(multi["days"]):
+        assert [s["table_guid"] for s in bucket["seatings"]] == [f"tbl-d{off}"]
+        assert [r["guest_name"] for r in bucket["reservations"]] == [
+            f"Guest D{off}"]
+    assert [w["guest_name"] for w in multi["days"][1]["waitlist"]] == ["WL D1"]
+    assert multi["days"][0]["waitlist"] == []
+
+    # max clamp: days=99 -> 30 buckets
+    clamped = client.get(
+        f"/floor/api/history?loc=uno&date={d.isoformat()}&days=99").get_json()
+    assert len(clamped["days"]) == 30
+
+    # days<=0 clamps to the single-day default; junk -> 400
+    zero = client.get(
+        f"/floor/api/history?loc=uno&date={d.isoformat()}&days=0").get_json()
+    assert "days" not in zero
+    neg = client.get(
+        f"/floor/api/history?loc=uno&date={d.isoformat()}&days=-5").get_json()
+    assert "days" not in neg
+    assert client.get(
+        "/floor/api/history?loc=uno&days=abc").status_code == 400

@@ -188,6 +188,8 @@
       date: localDateStr(),
       search: "",
       pick: null, // {kind:'reservation'|'waitlist', entry} while picking a table
+      historyDays: 1, // Gate 4 (ck): 1 = single day, 7 = "Last 7 days" toggle
+      pendingReservation: null, // Gate 4 (ck): payload held across the duplicate confirm step
       data: { reservations: [], waitlist: [], history: null },
       timer: null,
       keyHandler: null,
@@ -331,9 +333,12 @@
   }
 
   function refreshHistory(state) {
+    // Gate 4 (ck): days=N backfill view; param omitted for the single-day
+    // default so the legacy response shape keeps flowing.
     return apiGet(
       state,
-      "/floor/api/history?loc=" + encodeURIComponent(state.ctx.loc())
+      "/floor/api/history?loc=" + encodeURIComponent(state.ctx.loc()) +
+        (state.historyDays > 1 ? "&days=" + state.historyDays : "")
     )
       .then(function (json) {
         if (state.dead) return;
@@ -454,9 +459,40 @@
       .join("");
   }
 
+  /* Gate 4 (ck): "Last 7 days" toggle markup (reuses existing classes). */
+  function historyDaysToggle(state) {
+    return (
+      '<div class="floor-reserve__actions">' +
+      '<button type="button" class="floor-btn floor-btn--ghost" data-action="toggle-history-days" data-role="history-days-toggle">' +
+      (state.historyDays > 1 ? "Today only" : "Last 7 days") +
+      "</button></div>"
+    );
+  }
+
   function renderHistory(state) {
     var h = state.data.history;
-    if (!h) return emptyState("Loading history...");
+    if (!h) return historyDaysToggle(state) + emptyState("Loading history...");
+    /* Gate 4 (ck): days>1 payload = {ok, days:[{date, ...groups}]}; render
+       one dated section per bucket. Single-day payload keeps the old path. */
+    if (h.days) {
+      return (
+        historyDaysToggle(state) +
+        h.days
+          .map(function (bucket) {
+            return (
+              '<div class="floor-reserve__group-title">' +
+              esc(fmtDateLabel(bucket.date)) +
+              "</div>" +
+              renderHistoryGroups(state, bucket)
+            );
+          })
+          .join("")
+      );
+    }
+    return historyDaysToggle(state) + renderHistoryGroups(state, h);
+  }
+
+  function renderHistoryGroups(state, h) {
     var q = state.search;
     var seatings = (h.seatings || []).filter(function (s) {
       if (!q) return true;
@@ -567,6 +603,7 @@
   }
 
   function closeSheet(state) {
+    state.pendingReservation = null; // Gate 4 (ck): drop any held duplicate payload
     $(state, "[data-role=overlay]").hidden = true;
     $(state, "[data-role=sheet]").innerHTML = "";
   }
@@ -705,6 +742,22 @@
     } else if (action === "start-seat") {
       var seatEntry = findEntry(state, kind, id);
       if (seatEntry) enterPickMode(state, kind, seatEntry);
+    } else if (action === "confirm-duplicate") {
+      // Gate 4 (ck): resend the held payload with confirm:true.
+      var dupPayload = state.pendingReservation;
+      state.pendingReservation = null;
+      if (dupPayload) {
+        dupPayload.confirm = true;
+        sendReservation(state, dupPayload);
+      } else {
+        closeSheet(state);
+      }
+    } else if (action === "toggle-history-days") {
+      // Gate 4 (ck): flip History between today-only and last 7 days.
+      state.historyDays = state.historyDays > 1 ? 1 : 7;
+      state.data.history = null;
+      renderList(state);
+      refreshHistory(state);
     }
   }
 
@@ -721,29 +774,54 @@
     }
     // Local-naive ISO datetime; the server interprets it in APP_TZ (contract sec 6 #12).
     var reservedFor = date + "T" + time + ":00";
-    apiSend(state, "/floor/api/reservations", "POST", {
+    sendReservation(state, {
       loc: state.ctx.loc(),
       guest_name: guest,
       phone: phone,
       party_size: party,
       reserved_for: reservedFor,
       notes: notes
-    })
+    });
+  }
+
+  /* Gate 4 (ck): shared POST path for new reservations. The first pass may
+     bounce 409 {"error":"duplicate"} (same phone within +/-90 min); the
+     confirm step resends the SAME payload with confirm:true. */
+  function sendReservation(state, payload) {
+    apiSend(state, "/floor/api/reservations", "POST", payload)
       .then(function (json) {
         if (state.dead) return;
         if (json && json.ok === false) {
+          if (json.duplicate || json.error === "duplicate") {
+            openDuplicateConfirmSheet(state, payload);
+            return;
+          }
           showError(state, "Could not add reservation", json);
           return;
         }
         closeSheet(state);
-        showNotice(state, "Reservation added for " + guest + ".");
-        state.date = date;
+        showNotice(state, "Reservation added for " + payload.guest_name + ".");
+        state.date = (payload.reserved_for || "").slice(0, 10) || state.date;
         refreshReservations(state);
         setTab(state, "reservations");
       })
       .catch(function (err) {
         showError(state, "Could not add reservation", err);
       });
+  }
+
+  /* Gate 4 (ck): duplicate-guest confirm step (contract section 12). */
+  function openDuplicateConfirmSheet(state, payload) {
+    state.pendingReservation = payload;
+    openSheet(
+      state,
+      '<div class="floor-reserve__sheet-title">Duplicate booking?</div>' +
+        '<div class="floor-reserve__sheet-meta">Looks like a duplicate booking - add anyway?</div>' +
+        '<div class="floor-reserve__sheet-actions">' +
+        '<button type="button" class="floor-btn floor-btn--ghost" data-action="sheet-cancel">Cancel</button>' +
+        '<button type="button" class="floor-btn" data-action="confirm-duplicate">Add anyway</button>' +
+        "</div>"
+    );
   }
 
   function submitNewWaitlist(state) {

@@ -16,6 +16,7 @@ operational tail.
 """
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -102,6 +103,29 @@ def _require_gateway_token():
     got = request.headers.get("X-Cena-Token", "")
     if got != want:
         return jsonify({"ok": False, "error": "unauthorized"}), 403
+    return None
+
+
+def _require_sam_ops_token():
+    """Second factor for the WRITE db-probe endpoints (Sam 2026-06-10
+    directive: prod writes are Sam-only - "only from SAM permission, and
+    no one else").
+
+    FAIL-CLOSED: until SAM_OPS_TOKEN is set in the Render env, every write
+    403s; reads are untouched. The value lives ONLY in the Render env and
+    wherever Sam keeps his copy - it is never written to any agent-readable
+    secrets file, so X-Cena-Token alone can no longer mutate prod. Callers
+    Sam authorizes send it as X-Sam-Ops-Token alongside X-Cena-Token."""
+    want = (os.getenv("SAM_OPS_TOKEN") or "").strip()
+    if not want:
+        return jsonify({"ok": False,
+                        "error": "writes disabled - SAM_OPS_TOKEN not set "
+                                 "(Sam-only write gate, 2026-06-10)"}), 403
+    got = (request.headers.get("X-Sam-Ops-Token") or "").strip()
+    if not got or not hmac.compare_digest(got, want):
+        return jsonify({"ok": False,
+                        "error": "sam approval required "
+                                 "(X-Sam-Ops-Token)"}), 403
     return None
 
 
@@ -645,8 +669,12 @@ def cena_db_probe_deactivate_users():
     gate = _require_gateway_token()
     if gate is not None:
         return gate
+    sam_gate = _require_sam_ops_token()
+    if sam_gate is not None:
+        return sam_gate
 
     body = request.get_json(silent=True) or {}
+    audit_reason = body.get("audit_reason") or ""
     raw_ids = body.get("ids") or []
     if not isinstance(raw_ids, list):
         return jsonify({"ok": False, "error": "ids must be a list"}), 400
@@ -705,7 +733,8 @@ def cena_db_probe_deactivate_users():
                 after_value=after,
                 details="Issue 4 cleanup (samai #1511 spec); "
                         "permission_level=driver on users table is a leak; "
-                        "drivers belong in the drivers table.",
+                        "drivers belong in the drivers table."
+                        + (f" reason: {audit_reason}" if audit_reason else ""),
                 ip=(request.remote_addr or None) if request else None,
             ))
             deactivated_ids.append(uid)
@@ -829,6 +858,9 @@ def cena_db_probe_deactivate_drivers():
     gate = _require_gateway_token()
     if gate is not None:
         return gate
+    sam_gate = _require_sam_ops_token()
+    if sam_gate is not None:
+        return sam_gate
 
     body = request.get_json(silent=True) or {}
     all_active = bool(body.get("all_active", False))
@@ -1094,6 +1126,9 @@ def cena_db_probe_set_order_status():
     gate = _require_gateway_token()
     if gate is not None:
         return gate
+    sam_gate = _require_sam_ops_token()
+    if sam_gate is not None:
+        return sam_gate
 
     body = request.get_json(silent=True) or {}
     raw_id = body.get("id")

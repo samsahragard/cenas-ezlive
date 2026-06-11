@@ -185,6 +185,14 @@ def create_app():
     # SELECT-only; customer_hash + gps-summary computed APP-SIDE (raw GPS/cleartext NEVER served).
     from app.web.driverdc_export_routes import driverdc_export_bp
     app.register_blueprint(driverdc_export_bp)
+    # Isolated READ-ONLY full app-DB snapshot export (Sam 2026-06-10, appdb
+    # live-mirror lane): one gzipped VACUUM-INTO sqlite copy, credential/PII
+    # scrubbed server-side before the bytes leave the box; fail-closed
+    # APPDB_EXPORT_TOKEN (falls back to CENA_GATEWAY_TOKEN); imports only
+    # app.db, never models/driver_system. Feeds CK's CENA_L3_SRC_APPDB so
+    # Cena's L3 reasons over LIVE app data instead of dev_local.db.
+    from app.web.appdb_export_routes import appdb_export_bp
+    app.register_blueprint(appdb_export_bp)
     app.register_blueprint(scheduling_cron_bp)  # B6: POST /internal/scheduling/cron/process-shift-alarms (ckai)
     app.register_blueprint(briefs_bp)
     # Phase 2 / Block 1A — task create + reassign routes

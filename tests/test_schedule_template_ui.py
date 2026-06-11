@@ -23,6 +23,7 @@ def test_schedule_grid_uses_lighter_blue_cells_and_swapped_toolbar_controls():
     spacer = controls.index('<div class="sv2-spacer"></div>')
     assert controls.index('id="sv2-posfilter-wrap"') < spacer
     assert controls.index('id="sv2-tagfilter-wrap"') < spacer
+    assert controls.index('id="sv2-viewfilter-wrap"') < spacer
     assert controls.index('id="sv2-today"') < spacer
     assert controls.index('id="sv2-status"') > spacer
 
@@ -33,7 +34,7 @@ def test_schedule_grid_sorts_visible_people_rows_by_first_name():
     assert "function firstNameSort(a, b)" in template
     assert 'staffRows.sort(function (a, b) { return firstNameSort(a.emp, b.emp); });' in template
     assert template.index("staffRows.sort") < template.index(
-        'rows += rowHtml({ id: null, full_name: "Open shifts" }, "open");'
+        'rows += rowHtml(openEmp, "open");'
     )
 
 
@@ -62,6 +63,24 @@ def test_schedule_template_has_visible_shift_bulk_select_and_inline_position_tag
     assert "function positionNamesForEmployee(emp)" in template
     assert "sv2-chip-pos-name" in template
     assert template.index('id="sv2-selcount"') < template.index('id="sv2-sel-edit"')
+
+
+def test_schedule_template_has_view_options_for_empty_unpublished_hours_and_conflicts():
+    template = _read("schedules_v2_week.html")
+
+    assert 'id="sv2-viewfilter-btn"' in template
+    assert 'id="sv2-viewfilter-pop"' in template
+    assert 'data-view-option="emptyRows"' in template
+    assert 'data-view-option="unpublished"' in template
+    assert 'data-view-option="hours"' in template
+    assert 'data-view-option="conflicts"' in template
+    assert "function buildViewFilter()" in template
+    assert "function conflictShiftsFor(emp, isoDay)" in template
+    assert "function hasVisibleShifts(emp)" in template
+    assert "function shiftHours(s)" in template
+    assert "function hoursForWeek(emp)" in template
+    assert "sv2-chip-conflict" in template
+    assert "state.viewOptions" in template
 
 
 def test_shift_modal_position_choices_follow_selected_employee_positions():

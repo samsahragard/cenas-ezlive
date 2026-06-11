@@ -20,6 +20,26 @@ from app.domain.grid_builder import build_all_view_grids
 _catalog = MenuCatalog(MENU_CATALOG)
 
 
+def _clock_minutes(raw: object) -> tuple[int, int, str]:
+    """Return a sortable clock-time key, with unparseable values last."""
+    value = str(raw or "").strip()
+    if not value:
+        return (1, 0, "")
+
+    for fmt in ("%I:%M %p", "%I %p", "%H:%M", "%H:%M:%S"):
+        try:
+            parsed = datetime.strptime(value.upper(), fmt)
+            return (0, parsed.hour * 60 + parsed.minute, value)
+        except ValueError:
+            pass
+
+    try:
+        parsed_dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return (0, parsed_dt.hour * 60 + parsed_dt.minute, value)
+    except ValueError:
+        return (1, 0, value)
+
+
 def _normalized_item_from_row(item: OrderItem) -> dict[str, Any]:
     """Reverse the OrderItem -> NormalizedItem persistence mapping."""
     return {
@@ -191,8 +211,14 @@ def build_grids_for_orders(db: Session, orders: list[Order],
     def _sort_key(b: dict) -> tuple:
         d = b.get("dispatch") or {}
         n = b.get("normalized_order") or {}
+        k = b.get("kitchen_result") or {}
+        kitchen_time = (
+            d.get("kitchen_ready_time")
+            or k.get("kitchen_ready_time")
+            or n.get("deliver_at")
+        )
         return (
-            d.get("kitchen_ready_time") or n.get("deliver_at") or "~",
+            _clock_minutes(kitchen_time),
             d.get("assigned_driver") or "",
             d.get("route_stop_index") or 0,
         )

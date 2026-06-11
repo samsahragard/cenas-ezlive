@@ -6,8 +6,8 @@
 <style>
   @media print {
     @page {
-      size: letter {{ 'landscape' if mode == 'combined' and combined_count|default(0) >= 4 else 'portrait' }};
-      margin: 0.22in;
+      size: letter landscape;
+      margin: 0.18in;
     }
     aside.sidebar, .topbar, .order-view-actions, .tabs, .wordmark,
     .order-view-header { display: none !important; }
@@ -67,11 +67,14 @@
     }
     .order-card-grid {
       display: grid !important;
-      grid-template-columns: repeat(auto-fit, minmax(2.4in, 1fr)) !important;
-      gap: 5pt !important;
+      grid-auto-flow: row !important;
+      grid-auto-columns: auto !important;
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+      gap: 4pt !important;
       padding: 0 !important;
       overflow: visible !important;
       min-height: 0 !important;
+      align-items: start !important;
     }
     .order-print-count-1 .order-card-grid { grid-template-columns: 1fr !important; }
     .order-print-count-2 .order-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
@@ -85,30 +88,34 @@
       margin: 0 !important;
     }
     .order-card-head {
-      padding: 4pt 5pt !important;
+      align-items: center !important;
+      gap: 4pt !important;
+      padding: 3.5pt 4.5pt !important;
       background: #eee !important;
       border-bottom: 0.5pt solid #888 !important;
     }
-    .order-card h3 { font-size: 9pt !important; margin: 0 !important; }
-    .order-card-meta { font-size: 6.8pt !important; line-height: 1.12 !important; }
+    .order-card-eyebrow { display: none !important; }
+    .order-card h3 { font-size: 18pt !important; line-height: 0.95 !important; margin: 0 !important; }
+    .order-card-meta { font-size: 7pt !important; line-height: 1.08 !important; }
+    .order-card-meta span:first-child { font-size: 8pt !important; font-weight: 800 !important; }
     .order-card-section {
-      padding: 2.2pt 5pt !important;
+      padding: 1.8pt 4.5pt !important;
       background: #eee !important;
       border-top: 0.5pt solid #aaa !important;
       border-bottom: 0.5pt solid #aaa !important;
       color: #000 !important;
-      font-size: 6.8pt !important;
+      font-size: 6.2pt !important;
       font-weight: 800 !important;
       letter-spacing: 0.03em !important;
     }
     .order-card-row {
-      grid-template-columns: minmax(58pt, 38%) minmax(0, 1fr) !important;
-      gap: 4pt !important;
-      padding: 1.9pt 5pt !important;
+      grid-template-columns: minmax(50pt, 37%) minmax(0, 1fr) !important;
+      gap: 3pt !important;
+      padding: 1.35pt 4.5pt !important;
     }
-    .order-card-label, .order-card-value { font-size: 6.9pt !important; line-height: 1.12 !important; }
+    .order-card-label, .order-card-value { font-size: 6.15pt !important; line-height: 1.08 !important; }
     .order-print-landscape .order-card-label,
-    .order-print-landscape .order-card-value { font-size: 6.5pt !important; }
+    .order-print-landscape .order-card-value { font-size: 5.95pt !important; }
   }
 </style>
 {% endblock %}
@@ -122,7 +129,13 @@
 {% block content %}
 {% if mode == 'single' and order %}
 <div class="order-view-header">
-  <h2>Order {{ order.external_order_id }}</h2>
+  <div class="order-view-title-row">
+    <h2>{{ order.external_order_id }}</h2>
+    <div class="order-view-headline-meta">
+      <span>{{ order.kitchen_ready_time or '—' }}</span>
+      <span>{{ order.ezcater_driver_name or 'no driver' }}</span>
+    </div>
+  </div>
   <div class="order-view-meta">
     <div><span class="label">Date</span>{{ order.delivery_date or '—' }}</div>
     <div><span class="label">Deliver at</span>{{ order.deliver_at or '—' }}</div>
@@ -187,12 +200,11 @@
           <article class="order-card">
             <header class="order-card-head">
               <div>
-                <div class="order-card-eyebrow">Order</div>
                 <h3>{{ card.order_id }}</h3>
               </div>
               {% if card.header_fields %}
               <div class="order-card-meta">
-                {% for item in card.header_fields[:3] %}
+                {% for item in card.header_fields %}
                   <span>{{ item }}</span>
                 {% endfor %}
               </div>

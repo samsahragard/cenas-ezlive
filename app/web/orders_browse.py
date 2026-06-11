@@ -245,6 +245,14 @@ def _active_drivers_by_prefix(db) -> dict[int, list[str]]:
     return {1: sorted(out[1], key=str.lower), 2: sorted(out[2], key=str.lower)}
 
 
+def _print_header_driver_by_order(orders: list[Order]) -> dict[str, str]:
+    return {
+        str(o.external_order_id): ((o.ezcater_driver_name or "").strip() or "no driver")
+        for o in orders
+        if o.external_order_id
+    }
+
+
 @browse.route("/orders/view/<external_order_id>")
 def view_order(external_order_id: str):
     db = next(get_db())
@@ -309,7 +317,10 @@ def combined_day(location: str, date: str):
             abort(404, f"No orders for {LOCATION_LABELS[location]} on {date}")
         collapse = request.args.get("collapse_empty_rows") == "1"
         result = build_grids_for_orders(db, orders, collapse_empty_rows=collapse)
-        card_views = build_combined_order_card_views(result["grids"])
+        card_views = build_combined_order_card_views(
+            result["grids"],
+            header_driver_by_order=_print_header_driver_by_order(orders),
+        )
         return render_template(
             "order_view.html",
             order=None,
@@ -355,7 +366,10 @@ def combined_day_both(date: str):
             abort(404, f"No orders for both locations on {date}")
         collapse = request.args.get("collapse_empty_rows") == "1"
         result = build_grids_for_orders(db, orders, collapse_empty_rows=collapse)
-        card_views = build_combined_order_card_views(result["grids"])
+        card_views = build_combined_order_card_views(
+            result["grids"],
+            header_driver_by_order=_print_header_driver_by_order(orders),
+        )
         return render_template(
             "order_view.html",
             order=None,

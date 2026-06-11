@@ -14,16 +14,34 @@ def _has_display_value(raw: object) -> bool:
     return _display_value(raw) not in _EMPTY_DISPLAY_VALUES
 
 
-def _card_header_fields(values: dict[str, object]) -> list[str]:
+def _dropdown_driver_label(
+    order_id: str,
+    values: dict[str, object],
+    header_driver_by_order: dict[str, object] | None,
+) -> str:
+    if header_driver_by_order is not None and order_id in header_driver_by_order:
+        return _display_value(header_driver_by_order.get(order_id)) or "no driver"
+    return _display_value(values.get("meta.ezcater_driver", "")) or "no driver"
+
+
+def _card_header_fields(
+    values: dict[str, object],
+    order_id: str,
+    header_driver_by_order: dict[str, object] | None = None,
+) -> list[str]:
     fields = []
-    for key in ("meta.deliver_at", "meta.client", "meta.kitchen_ready", "meta.driver"):
-        value = _display_value(values.get(key, ""))
-        if value and value not in fields:
-            fields.append(value)
+    kitchen_ready = _display_value(values.get("meta.kitchen_ready", ""))
+    if _has_display_value(kitchen_ready):
+        fields.append(kitchen_ready)
+    fields.append(_dropdown_driver_label(order_id, values, header_driver_by_order))
     return fields
 
 
-def build_combined_order_card_views(grids: dict[str, object]) -> dict[str, list[dict[str, object]]]:
+def build_combined_order_card_views(
+    grids: dict[str, object],
+    *,
+    header_driver_by_order: dict[str, object] | None = None,
+) -> dict[str, list[dict[str, object]]]:
     """Convert combined day grids into sparse per-order cards for the web view.
 
     The XLSX export keeps the dense matrix. The browser page is easier to read
@@ -56,7 +74,7 @@ def build_combined_order_card_views(grids: dict[str, object]) -> dict[str, list[
                 })
             cards.append({
                 "order_id": order_id,
-                "header_fields": _card_header_fields(values),
+                "header_fields": _card_header_fields(values, order_id, header_driver_by_order),
                 "fields": fields,
             })
         views[view_name] = cards

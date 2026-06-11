@@ -149,9 +149,9 @@
     background: var(--sk-bg-input); border: 1px solid var(--sk-border-subtle);
     border-radius: var(--sk-radius-sm); padding: 7px 10px; min-width: 150px;
   }
-  .sv2-posfilter, .sv2-tagfilter { position: relative; display: inline-block; }
-  #sv2-posfilter-btn, #sv2-tagfilter-btn { cursor: pointer; text-align: left; }
-  #sv2-posfilter-btn::after, #sv2-tagfilter-btn::after { content: "\25BE"; margin-left: 8px; opacity: .6; font-size: 11px; }
+  .sv2-posfilter, .sv2-tagfilter, .sv2-viewfilter { position: relative; display: inline-block; }
+  #sv2-posfilter-btn, #sv2-tagfilter-btn, #sv2-viewfilter-btn { cursor: pointer; text-align: left; }
+  #sv2-posfilter-btn::after, #sv2-tagfilter-btn::after, #sv2-viewfilter-btn::after { content: "\25BE"; margin-left: 8px; opacity: .6; font-size: 11px; }
   .sv2-posfilter-pop {
     position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
     min-width: 200px; max-height: 300px; overflow-y: auto;
@@ -159,6 +159,7 @@
     border-radius: var(--sk-radius-sm); padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
   }
   .sv2-tagfilter .sv2-posfilter-pop { min-width: 240px; }
+  .sv2-viewfilter .sv2-posfilter-pop { min-width: 220px; }
   .sv2-posfilter-opt {
     display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
     font-size: 13px; color: var(--sk-cream); cursor: pointer; white-space: nowrap;
@@ -229,6 +230,10 @@
   .sv2-grid thead th.sv2-namecol { z-index: 4; }
   .sv2-emp-name { font-weight: 700; font-size: 13.5px; color: var(--sk-cream); }
   .sv2-emp-sub { font-size: 11px; color: var(--sk-cream-meta); margin-top: 2px; }
+  .sv2-emp-hours {
+    margin-top: 4px; font-family:'JetBrains Mono',monospace; font-size: 11px;
+    color: var(--sk-gold-bright); font-weight: 700;
+  }
   .sv2-emp-positions {
     margin-top: 3px; font-size: 10.5px; line-height: 1.25;
     color: var(--sk-cream-meta); font-weight: 600;
@@ -265,8 +270,18 @@
     border-top: 1px dashed var(--sk-cream-faint); border-right: 1px dashed var(--sk-cream-faint);
     border-bottom: 1px dashed var(--sk-cream-faint); border-left-style: dashed;
     box-shadow: inset 0 0 0 1px rgba(250,246,236,.05); }
+  .sv2-chip.conflict {
+    cursor: default; background: rgba(91, 202, 197, .13);
+    border-top: 1px solid rgba(91,202,197,.34); border-right: 1px solid rgba(91,202,197,.34);
+    border-bottom: 1px solid rgba(91,202,197,.34);
+    box-shadow: inset 0 0 0 1px rgba(250,246,236,.04);
+  }
+  .sv2-chip.conflict:hover { background: rgba(91, 202, 197, .18); }
+  .sv2-chip.conflict:active { transform: none; }
   .sv2-chip-unpub { font-size: 9px; letter-spacing:.09em; text-transform:uppercase;
     color: var(--sk-cream-faint); font-weight:700; margin-top:2px; }
+  .sv2-chip-conflict { font-size: 9px; letter-spacing:.09em; text-transform:uppercase;
+    color: var(--sk-teal-bright); font-weight:800; margin-top:2px; }
   .sv2-chip-time { font-family:'JetBrains Mono',monospace; font-size: 11.5px; font-weight: 600; color: var(--sk-cream); }
   .sv2-chip-pos {
     display: flex; align-items: center; flex-wrap: wrap; gap: 3px 5px;
@@ -465,6 +480,15 @@
       <button type="button" class="sv2-filter" id="sv2-tagfilter-btn" aria-haspopup="true" aria-expanded="false">All tags</button>
       <div class="sv2-posfilter-pop sv2-hidden" id="sv2-tagfilter-pop" role="group" aria-label="Filter by tag"></div>
     </div>
+    <div class="sv2-viewfilter" id="sv2-viewfilter-wrap">
+      <button type="button" class="sv2-filter" id="sv2-viewfilter-btn" aria-haspopup="true" aria-expanded="false">View options</button>
+      <div class="sv2-posfilter-pop sv2-hidden" id="sv2-viewfilter-pop" role="group" aria-label="Schedule view options">
+        <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="emptyRows" checked> Empty rows</label>
+        <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="unpublished" checked> Unpublished shifts</label>
+        <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="hours" checked> Count of hours</label>
+        <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="conflicts" checked> Conflicts</label>
+      </div>
+    </div>
     <button class="sv2-btn" id="sv2-today">This week</button>
     <label class="sv2-select-visible" title="Select every shift currently visible after filters">
       <input type="checkbox" id="sv2-select-visible">
@@ -635,12 +659,29 @@
   var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   // Schedule week begins on this weekday (0=Sun..6=Sat), so the columns run Sun..Sat.
   var WEEK_START_DOW = 0;
+  var VIEW_OPTIONS_KEY = "sv2-week-view-options-v1";
+
+  function defaultViewOptions() {
+    return { emptyRows: true, unpublished: true, hours: true, conflicts: true };
+  }
+  function loadViewOptions() {
+    var opts = defaultViewOptions(), saved = {};
+    try { saved = JSON.parse(window.localStorage.getItem(VIEW_OPTIONS_KEY) || "{}") || {}; } catch (e) { saved = {}; }
+    Object.keys(opts).forEach(function (k) {
+      if (typeof saved[k] === "boolean") opts[k] = saved[k];
+    });
+    return opts;
+  }
+  function saveViewOptions() {
+    try { window.localStorage.setItem(VIEW_OPTIONS_KEY, JSON.stringify(state.viewOptions)); } catch (e) {}
+  }
 
   var state = {
     weekStart: weekStartOf(new Date()),  // Date (local midnight, week-start day)
     board: null,
     posFilter: [],
     tagFilter: [],
+    viewOptions: loadViewOptions(),
     editing: null,        // shift object when editing, else null
     cellEmp: null,        // employee_id (or null=open) for a new shift
     cellDate: null,       // ISO date string for a new shift
@@ -683,6 +724,7 @@
       elStatus = $("sv2-status"), elWeekLabel = $("sv2-weeklabel"),
       elPosBtn = $("sv2-posfilter-btn"), elPosPop = $("sv2-posfilter-pop"), elCreate = $("sv2-createdraft"),
       elTagBtn = $("sv2-tagfilter-btn"), elTagPop = $("sv2-tagfilter-pop"),
+      elViewBtn = $("sv2-viewfilter-btn"), elViewPop = $("sv2-viewfilter-pop"),
       elPublish = $("sv2-publish"), elDeclined = $("sv2-declined"), elToast = $("sv2-toast"),
       elSelectVisible = $("sv2-select-visible");
 
@@ -859,6 +901,14 @@
     updateTagFilterLabel();
   }
 
+  function buildViewFilter() {
+    if (!elViewPop) return;
+    elViewPop.querySelectorAll("input[data-view-option]").forEach(function (ck) {
+      ck.checked = !!state.viewOptions[ck.getAttribute("data-view-option")];
+    });
+    updateViewFilterLabel();
+  }
+
   function updatePosFilterLabel() {
     var n = state.posFilter.length, label = "All positions";
     if (n === 1) { var p = posById(state.posFilter[0]); label = p ? p.name : "1 position"; }
@@ -871,6 +921,13 @@
     if (n === 1) { var t = tagById(state.tagFilter[0]); label = t ? t.name : "1 tag"; }
     else if (n > 1) { label = n + " tags"; }
     elTagBtn.textContent = label;
+  }
+
+  function updateViewFilterLabel() {
+    if (!elViewBtn) return;
+    var opts = state.viewOptions || defaultViewOptions(), n = 0;
+    Object.keys(defaultViewOptions()).forEach(function (k) { if (opts[k]) n++; });
+    elViewBtn.textContent = n === 4 ? "View options" : "View (" + n + ")";
   }
 
   // ---- grid render ----
@@ -917,39 +974,113 @@
     elHead.innerHTML = html;
   }
 
+  function shiftMatchesEmp(s, emp) {
+    if (emp && emp.former) {              // former-staff row (Sam #2872): match by display_name
+      return (s.employee_id == null && s.display_name === emp.former);
+    }
+    if (emp && emp.id != null) {          // a current employee's row
+      return (String(s.employee_id) === String(emp.id));
+    }
+    return (s.employee_id == null && !s.display_name);  // Open-shifts row: truly unassigned only
+  }
+
+  function shiftOnDay(s, isoDay) {
+    var sd = parseISO(s.start_at);
+    if (!sd) return false;
+    return isoDate(new Date(sd.getFullYear(), sd.getMonth(), sd.getDate())) === isoDay;
+  }
+
+  function shiftPassesTags(s) {
+    if (!state.tagFilter.length) return true;
+    var tagIds = (s.tag_ids || []).map(function (x) { return String(x); });
+    for (var ti = 0; ti < state.tagFilter.length; ti++) {
+      if (tagIds.indexOf(String(state.tagFilter[ti])) !== -1) return true;
+    }
+    return false;
+  }
+
+  function shiftPassesBaseFilters(s, isoDay) {
+    if (!state.viewOptions.unpublished && s.published_at == null) return false;
+    if (!shiftPassesTags(s)) return false;
+    if (state.declinedOnly && String(s.response || "") !== "declined") return false;
+    return shiftOnDay(s, isoDay);
+  }
+
+  function shiftPassesSelectedPosition(s) {
+    return !state.posFilter.length || state.posFilter.indexOf(String(s.position_id)) !== -1;
+  }
+
+  function sortShifts(a, b) {
+    return (a.start_at || "").localeCompare(b.start_at || "");
+  }
+
   function shiftsFor(emp, isoDay) {
     var out = [];
     var shifts = (state.board.shifts || []);
     for (var i = 0; i < shifts.length; i++) {
       var s = shifts[i];
-      var matchEmp;
-      if (emp && emp.former) {              // former-staff row (Sam #2872): match by display_name
-        matchEmp = (s.employee_id == null && s.display_name === emp.former);
-      } else if (emp && emp.id != null) {   // a current employee's row
-        matchEmp = (String(s.employee_id) === String(emp.id));
-      } else {                              // the Open-shifts row: truly unassigned only (no display_name)
-        matchEmp = (s.employee_id == null && !s.display_name);
-      }
-      if (!matchEmp) continue;
-      if (state.posFilter.length && state.posFilter.indexOf(String(s.position_id)) === -1) continue;
-      if (state.tagFilter.length) {
-        var tagIds = (s.tag_ids || []).map(function (x) { return String(x); });
-        var tagMatch = false;
-        for (var ti = 0; ti < state.tagFilter.length; ti++) {
-          if (tagIds.indexOf(String(state.tagFilter[ti])) !== -1) { tagMatch = true; break; }
-        }
-        if (!tagMatch) continue;
-      }
-      if (state.declinedOnly && String(s.response || "") !== "declined") continue;
-      var sd = parseISO(s.start_at);
-      if (!sd) continue;
-      if (isoDate(new Date(sd.getFullYear(), sd.getMonth(), sd.getDate())) === isoDay) out.push(s);
+      if (!shiftMatchesEmp(s, emp)) continue;
+      if (!shiftPassesBaseFilters(s, isoDay)) continue;
+      if (!shiftPassesSelectedPosition(s)) continue;
+      out.push(s);
     }
-    out.sort(function (a, b) { return (a.start_at || "").localeCompare(b.start_at || ""); });
+    out.sort(sortShifts);
     return out;
   }
 
-  function chipHtml(s) {
+  function conflictShiftsFor(emp, isoDay) {
+    if (!state.viewOptions.conflicts || !state.posFilter.length || !emp || emp.id == null || emp.former) return [];
+    var out = [];
+    var shifts = (state.board.shifts || []);
+    for (var i = 0; i < shifts.length; i++) {
+      var s = shifts[i];
+      if (String(s.employee_id) !== String(emp.id)) continue;
+      if (!shiftPassesBaseFilters(s, isoDay)) continue;
+      if (shiftPassesSelectedPosition(s)) continue;
+      out.push(s);
+    }
+    out.sort(sortShifts);
+    return out;
+  }
+
+  function visibleShiftsFor(emp, isoDay) {
+    return shiftsFor(emp, isoDay).concat(conflictShiftsFor(emp, isoDay)).sort(sortShifts);
+  }
+
+  function hasVisibleShifts(emp) {
+    for (var i = 0; i < 7; i++) {
+      if (visibleShiftsFor(emp, isoDate(addDays(state.weekStart, i))).length) return true;
+    }
+    return false;
+  }
+
+  function shiftHours(s) {
+    var sd = parseISO(s.start_at), ed = parseISO(s.end_at);
+    if (!sd || !ed) return 0;
+    var mins = Math.round((ed.getTime() - sd.getTime()) / 60000);
+    if (mins < 0) mins += 24 * 60;
+    mins -= (+s.break_minutes || 0);
+    return Math.max(0, mins) / 60;
+  }
+
+  function hoursForWeek(emp) {
+    var total = 0;
+    for (var i = 0; i < 7; i++) {
+      visibleShiftsFor(emp, isoDate(addDays(state.weekStart, i))).forEach(function (s) {
+        total += shiftHours(s);
+      });
+    }
+    return total;
+  }
+
+  function fmtHours(n) {
+    var rounded = Math.round((+n || 0) * 100) / 100;
+    return (String(rounded).replace(/\.0$/, "")) + "h";
+  }
+
+  function chipHtml(s, opts) {
+    opts = opts || {};
+    var isConflict = !!opts.conflict;
     var sd = parseISO(s.start_at), ed = parseISO(s.end_at);
     var t = (sd ? fmtTime(sd) : "?") + " - " + (ed ? fmtTime(ed) : "?");
     var p = posById(s.position_id);
@@ -958,7 +1089,7 @@
     // `response` is absent until aick's board JSON includes it, so this is a no-op until then.
     var resp = open ? "" : String(s.response || "").toLowerCase();
     var unpub = (s.published_at == null);  // per-shift publish: null = NOT yet published -> hollow + hidden from the employee until published
-    var cls = "sv2-chip" + (open ? " open" : "") + (unpub ? " unpublished" : "") +
+    var cls = "sv2-chip" + (open ? " open" : "") + (unpub ? " unpublished" : "") + (isConflict ? " conflict" : "") +
               (resp === "declined" ? " declined" : (resp === "accepted" ? " accepted" : ""));
     var style = open ? "" : ' style="border-left-color:' + posColor(s.position_id) + '"';
     var stags = shiftTags(s);
@@ -974,11 +1105,13 @@
     var respTag = resp === "declined" ? '<div class="sv2-chip-resp-tag declined">Declined</div>'
                 : resp === "accepted" ? '<div class="sv2-chip-resp-tag accepted">&#10003; Accepted</div>'
                 : "";
+    var conflictTag = isConflict ? '<div class="sv2-chip-conflict">conflict</div>' : "";
     var unpubTag = unpub ? '<div class="sv2-chip-unpub">unpublished</div>' : "";
-    if (state.selected[s.id]) cls += " selected";
-    return '<div class="' + cls + '" data-shift="' + s.id + '" draggable="true"' + style + '>' +
-             '<div class="sv2-chip-check" data-check="' + s.id + '"></div>' +
-             '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + unpubTag + '</div>';
+    if (!isConflict && state.selected[s.id]) cls += " selected";
+    var attrs = isConflict ? ' data-conflict-shift="' + s.id + '"' : ' data-shift="' + s.id + '" draggable="true"';
+    var checkHtml = isConflict ? "" : '<div class="sv2-chip-check" data-check="' + s.id + '"></div>';
+    return '<div class="' + cls + '"' + attrs + style + '>' + checkHtml +
+             '<div class="sv2-chip-time">' + t + '</div>' + posLine + respTag + conflictTag + unpubTag + '</div>';
   }
 
   // Does this employee HOLD one of the filtered positions? (Sam #2589: a position
@@ -1027,7 +1160,13 @@
       staffRows.push({ emp: { id: null, former: nm, full_name: nm }, kind: "former" });
     });
     staffRows.sort(function (a, b) { return firstNameSort(a.emp, b.emp); });
-    rows += rowHtml({ id: null, full_name: "Open shifts" }, "open");
+    if (!state.viewOptions.emptyRows) {
+      staffRows = staffRows.filter(function (row) { return hasVisibleShifts(row.emp); });
+    }
+    var openEmp = { id: null, full_name: "Open shifts" };
+    if (state.viewOptions.emptyRows || hasVisibleShifts(openEmp)) {
+      rows += rowHtml(openEmp, "open");
+    }
     staffRows.forEach(function (row) { rows += rowHtml(row.emp, row.kind); });
     elBody.innerHTML = rows;
     renderFilterHint(people, roster.length);
@@ -1090,20 +1229,25 @@
     var isOpen = (kind === "open");
     var isFormer = (kind === "former");
     var empPositions = (!isOpen && !isFormer) ? positionNamesForEmployee(emp) : [];
+    var hoursLine = state.viewOptions.hours ? '<div class="sv2-emp-hours">' + fmtHours(hoursForWeek(emp)) + '</div>' : "";
     // Former-staff row (Sam #2872): person no longer employed -> name struck-through,
     // a "former" sub-label, and no "+" add hint (it's a historical record, not schedulable).
     var nameCell = isFormer
-      ? '<div class="sv2-emp-name former"><s>' + esc(emp.full_name || "") + '</s></div><div class="sv2-emp-sub">former</div>'
+      ? '<div class="sv2-emp-name former"><s>' + esc(emp.full_name || "") + '</s></div><div class="sv2-emp-sub">former</div>' + hoursLine
       : '<div class="sv2-emp-name">' + esc(emp.full_name || "Team member") + '</div>' +
         (isOpen ? '<div class="sv2-emp-sub">unassigned</div>' :
-          (empPositions.length ? '<div class="sv2-emp-positions">' + esc(empPositions.join(", ")) + '</div>' : ""));
+          (empPositions.length ? '<div class="sv2-emp-positions">' + esc(empPositions.join(", ")) + '</div>' : "")) +
+        hoursLine;
     var tds = '<td class="sv2-namecol">' + nameCell + '</td>';
     var hasDraft = !!(state.board && state.board.schedule);
     for (var i = 0; i < 7; i++) {
       var d = addDays(state.weekStart, i);
       var iso = isoDate(d);
       var isT = sameDay(d, today);
-      var chips = shiftsFor(emp, iso).map(chipHtml).join("");
+      var visible = shiftsFor(emp, iso).map(function (s) { return { shift: s, conflict: false }; });
+      conflictShiftsFor(emp, iso).forEach(function (s) { visible.push({ shift: s, conflict: true }); });
+      visible.sort(function (a, b) { return sortShifts(a.shift, b.shift); });
+      var chips = visible.map(function (item) { return chipHtml(item.shift, item.conflict ? { conflict: true } : null); }).join("");
       var addable = (hasDraft && !isFormer) ? '<div class="sv2-addhint">+</div>' : "";
       tds += '<td class="sv2-cell ' + (isT ? "is-today" : "") + '" data-emp="' +
              (emp.id == null ? "" : emp.id) + '" data-date="' + iso + '">' +
@@ -1512,12 +1656,32 @@
     }
     if (state.board) renderGrid();
   });
+  if (elViewBtn && elViewPop) {
+    elViewBtn.onclick = function (e) {
+      e.stopPropagation();
+      var willOpen = elViewPop.classList.contains("sv2-hidden");
+      elViewPop.classList.toggle("sv2-hidden", !willOpen);
+      elViewBtn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    };
+    elViewPop.addEventListener("click", function (e) { e.stopPropagation(); });
+    elViewPop.addEventListener("change", function (e) {
+      var t = e.target;
+      if (!t || !t.getAttribute || !t.getAttribute("data-view-option")) return;
+      state.viewOptions[t.getAttribute("data-view-option")] = !!t.checked;
+      saveViewOptions();
+      updateViewFilterLabel();
+      if (state.board) renderGrid();
+    });
+  }
   document.addEventListener("click", function () {
     if (elPosPop && !elPosPop.classList.contains("sv2-hidden")) {
       elPosPop.classList.add("sv2-hidden"); elPosBtn.setAttribute("aria-expanded", "false");
     }
     if (elTagPop && !elTagPop.classList.contains("sv2-hidden")) {
       elTagPop.classList.add("sv2-hidden"); elTagBtn.setAttribute("aria-expanded", "false");
+    }
+    if (elViewPop && !elViewPop.classList.contains("sv2-hidden")) {
+      elViewPop.classList.add("sv2-hidden"); elViewBtn.setAttribute("aria-expanded", "false");
     }
   });
   $("sv2-createdraft").onclick = createDraft;
@@ -1551,9 +1715,11 @@
     var chip = e.target.closest ? e.target.closest(".sv2-chip") : null;
     if (chip) {
       var sid = chip.getAttribute("data-shift");
-      var shifts = (state.board.shifts || []);
-      for (var i = 0; i < shifts.length; i++) if (String(shifts[i].id) === String(sid)) { openModal({ shift: shifts[i] }); return; }
-      return;
+      if (sid) {
+        var shifts = (state.board.shifts || []);
+        for (var i = 0; i < shifts.length; i++) if (String(shifts[i].id) === String(sid)) { openModal({ shift: shifts[i] }); return; }
+        return;
+      }
     }
     var cell = e.target.closest ? e.target.closest(".sv2-cell") : null;
     if (cell) {
@@ -1575,6 +1741,7 @@
     var chip = e.target.closest ? e.target.closest(".sv2-chip") : null;
     if (!chip) return;
     dragId = chip.getAttribute("data-shift");
+    if (!dragId) return;
     if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", dragId); } catch (_e) {} }
     chip.classList.add("sv2-dragging");
   });
@@ -1885,6 +2052,7 @@
   }
 
   // go
+  buildViewFilter();
   loadBoard();
 })();
 </script>

@@ -301,13 +301,7 @@
         {% endif %}
         <div class="order-card-row{% if view_name == 'master' and field.key in master_print_hidden_keys %} master-print-hidden-row{% endif %}">
           <div class="order-card-label">{{ field.label }}</div>
-          <div class="order-card-value{% if view_name == 'master' and field.key in master_print_compact_value_keys %} master-print-meta-value{% endif %}{% if view_name == 'master' and field.section != 'Header' %} master-print-detail-value{% endif %}{% if view_name == 'master' and field.section != 'Header' and field.is_numeric %} master-print-portion-value{% endif %}">
-            {% if view_name == 'master' and field.section != 'Header' and field.print_parts %}
-              {%- for part in field.print_parts -%}<span class="master-print-value-part-{{ part.kind }}">{{ part.text }}</span>{%- endfor -%}
-            {% else %}
-              {{ field.value }}
-            {% endif %}
-          </div>
+          <div class="order-card-value{% if view_name == 'master' and field.key in master_print_compact_value_keys %} master-print-meta-value{% endif %}{% if view_name == 'master' and field.section != 'Header' %} master-print-detail-value{% endif %}{% if view_name == 'master' and field.section != 'Header' and field.is_numeric %} master-print-portion-value{% endif %}">{%- if view_name == 'master' and field.section != 'Header' and field.print_parts -%}{%- for part in field.print_parts -%}<span class="master-print-value-part-{{ part.kind }}">{{ part.text }}</span>{%- endfor -%}{%- else -%}{{ field.value }}{%- endif -%}</div>
         </div>
       {% endfor %}
       {% if not card.fields %}

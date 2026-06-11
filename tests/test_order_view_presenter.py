@@ -39,6 +39,8 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert "order-print-single-card" not in html
     assert "master-print-meta-value" in html
     assert "master-print-value-part-text" in html
+    assert '<div class="order-card-value{% if view_name' in html
+    assert 'master-print-portion-value{% endif %}">{%- if view_name' in html
     assert "meta.store_origin" in html
     assert "route_map_url" in html
     assert "Route Map" in html

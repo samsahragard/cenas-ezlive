@@ -20,7 +20,7 @@ Everything is per-location. Two real stores:
 
 - All DB rows are keyed by `location_guid` = the Toast restaurant GUID. Slugs and keys are resolution/display only.
 - JSON APIs take `loc=<slug>` (uno|dos). `floor_routes.py` provides `resolve_loc(slug) -> {slug, key, guid, label}`; unknown slug -> 400.
-- The page is reachable at `/uno/sections`, `/dos/sections`, `/partner/sections`, `/corporate/sections`. For partner/corporate the default data location is `uno`; the in-page location switcher exposes every store the user can reach (same `accessible_store_slugs` logic as team_workspace).
+- The page is reachable at `/floor/uno/sections`, `/floor/dos/sections`, `/floor/partner/sections`, `/floor/corporate/sections`. For partner/corporate the default data location is `uno`; the in-page location switcher exposes every store the user can reach (same `accessible_store_slugs` logic as team_workspace).
 - Joins are on **table GUID + employee GUID** everywhere. Names are display only.
 
 ## 2. Time rules
@@ -115,9 +115,9 @@ Auth (uses existing helpers `require_dashboard_access` / `has_dashboard_access` 
 Serialization: dates `YYYY-MM-DD`; datetimes ISO-8601 UTC with `Z`. Employee/table
 objects always carry `*_guid` + display `name`.
 
-## 7. Page routes (attach to `store_bp` from inside floor_routes.py - the schedules_v2_pages pattern)
+## 7. Page routes (on the SAME `floor` blueprint - floor_bp is fully self-contained; orchestrator registers it in app/__init__.py at Gate 2)
 
-`GET /<store_slug>/sections?tab=assign|host|map[&mock=1]` - auth `require_dashboard_access("dash.operations")`.
+`GET /floor/<store_slug>/sections?tab=assign|host|map[&mock=1]` - auth `require_dashboard_access("dash.operations", store_slug)`.
 - `tab=assign` (default) -> renders `sections_assign.html`
 - `tab=host` -> `sections_host.html`
 - `tab=map` -> `sections_map.html`, **manager-only** (else 403)
@@ -209,4 +209,5 @@ Hard rules: never edit outside your territory (stop and report instead); never c
 
 ## 14. Deviation log
 
-- 2026-06-11 Gate 0: added `deleted` + `last_synced` to toast_service_areas (soft-delete consistency); added `floor_sync_state` table (SA-1 lastModified high-water); added routes beyond the mission list: GET employees, GET history, POST sync (operationally required); page routes attach to store_bp (matches existing schedules_v2_pages pattern); "Sections" nav lands as an Operations-dashboard tab adjacent to Performance (that tab strip IS where Performance lives in this app).
+- 2026-06-11 Gate 0: added `deleted` + `last_synced` to toast_service_areas (soft-delete consistency); added `floor_sync_state` table (SA-1 lastModified high-water); added routes beyond the mission list: GET employees, GET history, POST sync (operationally required); "Sections" nav lands as an Operations-dashboard tab adjacent to Performance (that tab strip IS where Performance lives in this app).
+- 2026-06-11 Gate 0 (amended pre-unlock): page routes live on floor_bp at `/floor/<store_slug>/sections` (NOT attached to store_bp) so floor_routes.py is fully self-contained and testable without touching app/__init__.py; the orchestrator registers floor_bp in __init__.py once, at Gate 2. For local verification: `from app import create_app; app = create_app(); app.register_blueprint(floor_bp)` then test_client / dev server.

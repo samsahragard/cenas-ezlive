@@ -5,6 +5,7 @@ import re
 
 _EMPTY_DISPLAY_VALUES = {"", "N/A", "-", "\u2014", "0", "0.0", "0.00"}
 _NUMERIC_DISPLAY_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
+_NUMBER_TOKEN_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 
 def _display_value(raw: object) -> str:
@@ -20,6 +21,45 @@ def _has_display_value(raw: object) -> bool:
 def _is_numeric_display_value(raw: object) -> bool:
     value = _display_value(raw).replace(",", "")
     return bool(_NUMERIC_DISPLAY_RE.fullmatch(value))
+
+
+def _print_value_parts(raw: object) -> list[dict[str, str]]:
+    value = _display_value(raw)
+    if not value:
+        return []
+    parts: list[dict[str, str]] = []
+    cursor = 0
+    for match in _NUMBER_TOKEN_RE.finditer(value):
+        if match.start() > cursor:
+            parts.append({"kind": "text", "text": value[cursor:match.start()]})
+        parts.append({"kind": "number", "text": match.group(0)})
+        cursor = match.end()
+    if cursor < len(value):
+        parts.append({"kind": "text", "text": value[cursor:]})
+    if not parts:
+        parts.append({"kind": "text", "text": value})
+    return parts
+
+
+def _print_density(fields: list[dict[str, object]]) -> str:
+    printable_rows = [field for field in fields if field["key"] not in {
+        "meta.store_origin",
+        "meta.client",
+        "meta.ask_for",
+        "meta.phone",
+        "meta.address",
+    }]
+    text_weight = sum(
+        max(0, len(_display_value(field.get("value"))) - 12) // 14
+        for field in printable_rows
+        if not bool(field.get("is_numeric"))
+    )
+    score = len(printable_rows) + text_weight
+    if score >= 30:
+        return "tight"
+    if score >= 22:
+        return "compact"
+    return "normal"
 
 
 def _dropdown_driver_label(
@@ -80,11 +120,13 @@ def build_combined_order_card_views(
                     "section": str(row["section"]),
                     "value": value,
                     "is_numeric": _is_numeric_display_value(value),
+                    "print_parts": _print_value_parts(value),
                 })
             cards.append({
                 "order_id": order_id,
                 "header_fields": _card_header_fields(values, order_id, header_driver_by_order),
                 "fields": fields,
+                "print_density": _print_density(fields),
             })
         views[view_name] = cards
     return views

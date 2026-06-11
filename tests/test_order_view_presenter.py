@@ -27,7 +27,7 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert 'class="grid-view{% if active_view == view_name %} is-active{% endif %}' in html
     assert "order-print-landscape" in html
     assert "size: letter landscape;" in html
-    assert "grid-auto-flow: row !important;" in html
+    assert "order-card-print-page" in html
     assert "grid-template-columns: repeat(4, minmax(0, 1fr)) !important;" in html
     assert '<div class="order-card-eyebrow">Order</div>' not in html
     assert "order-print-master" in html
@@ -35,9 +35,16 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert "master-print-portion-value" in html
     assert "master-print-value-cell" in html
     assert ".order-print-master .order-card-value" in html
+    assert "order-print-single-card" in html
+    assert "master-print-meta-value" in html
+    assert "master-print-value-part-text" in html
     assert "meta.store_origin" in html
     assert "route_map_url" in html
     assert "Route Map" in html
+
+    route_source = Path("app/web/orders_browse.py").read_text(encoding="utf-8")
+    assert "card_views=card_views" in route_source
+    assert "combined_count=1" in route_source
 
 
 def _row(key: str, label: str, section: str = "Header") -> dict[str, object]:
@@ -199,6 +206,47 @@ def test_combined_order_cards_mark_numeric_values_for_master_print_sizing():
     assert fields["hot.beef_lb"]["is_numeric"] is True
     assert fields["utensils.plates"]["is_numeric"] is True
     assert fields["hot.package"]["is_numeric"] is False
+    assert fields["hot.package"]["print_parts"] == [
+        {"kind": "number", "text": "12"},
+        {"kind": "text", "text": " Chicken; "},
+        {"kind": "number", "text": "8"},
+        {"kind": "text", "text": " Beef"},
+    ]
+
+
+def test_combined_order_cards_mark_large_master_cards_for_print_compaction():
+    rows = [
+        _row("meta.order_id", "Order #"),
+        _row("meta.date", "Date"),
+        _row("meta.driver", "Dispatch"),
+        _row("meta.deliver_at", "Deliver At"),
+        _row("meta.kitchen_ready", "Kitchen Ready"),
+        _row("meta.driver_depart", "Departure"),
+        _row("meta.headcount", "Headcount"),
+    ]
+    values = {
+        "meta.order_id": "1KP-QAJ",
+        "meta.date": "2026-06-11",
+        "meta.driver": "DRIVER B",
+        "meta.deliver_at": "11:15 AM",
+        "meta.kitchen_ready": "9:21 AM",
+        "meta.driver_depart": "10:21 AM",
+        "meta.headcount": "19",
+    }
+    for idx in range(24):
+        key = f"item.{idx}"
+        rows.append(_row(key, f"Item {idx}", "Hot Food"))
+        values[key] = str(idx + 1)
+
+    cards = build_combined_order_card_views({
+        "master": {
+            "view": "master",
+            "rows": rows,
+            "columns": [{"order_id": "1KP-QAJ", "values": values}],
+        },
+    })
+
+    assert cards["master"][0]["print_density"] == "tight"
 
 
 def test_clock_minutes_sorts_am_times_by_clock_not_string_order():

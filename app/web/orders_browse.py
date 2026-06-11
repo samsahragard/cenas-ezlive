@@ -309,13 +309,19 @@ def view_order(external_order_id: str):
         # for Cenas Fajitas etc. that aren't in _ORIGIN_STORE_ID_TO_SCOPE
         # — only partner + corporate pass the decorator for those).
         store_scope = _ORIGIN_STORE_ID_TO_SCOPE.get(order.origin_store_id) or "unknown"
+        card_views = build_combined_order_card_views(
+            result["grids"],
+            header_driver_by_order=_print_header_driver_by_order([order]),
+        )
         return render_template(
             "order_view.html",
             order=order,
             grids=result["grids"],
+            card_views=card_views,
             active_view="master",
             title=f"Order {order.external_order_id}",
             mode="single",
+            combined_count=1,
             external_order_id=external_order_id,
             unassign_store_scope=store_scope,
             route_map_url=url_for("orders_browse.single_order_route_map", external_order_id=external_order_id),

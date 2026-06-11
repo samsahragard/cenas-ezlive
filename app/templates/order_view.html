@@ -116,6 +116,13 @@
     .order-card-label, .order-card-value { font-size: 6.15pt !important; line-height: 1.08 !important; }
     .order-print-landscape .order-card-label,
     .order-print-landscape .order-card-value { font-size: 5.95pt !important; }
+    .order-print-master .master-print-hidden-row { display: none !important; }
+    .order-print-master .master-print-portion-value {
+      font-size: 12.3pt !important;
+      line-height: 1 !important;
+      font-weight: 900 !important;
+    }
+    .order-print-landscape.order-print-master .master-print-portion-value { font-size: 11.9pt !important; }
   }
 </style>
 {% endblock %}
@@ -191,9 +198,10 @@
 </div>
 
 {% set print_empty_values = ["", "-", "—", "0", "0.0", "0.00"] %}
+{% set master_print_hidden_keys = ["meta.store_origin", "meta.client", "meta.ask_for", "meta.phone", "meta.address"] %}
 {% set order_print_count = combined_count|default(0) %}
 {% for view_name, grid in grids.items() %}
-  <div class="grid-view{% if active_view == view_name %} is-active{% endif %}{% if mode == 'combined' %} order-print-combined order-print-count-{{ order_print_count if order_print_count <= 3 else '4plus' }}{% if order_print_count >= 4 %} order-print-landscape{% endif %}{% endif %}" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
+  <div class="grid-view{% if active_view == view_name %} is-active{% endif %}{% if view_name == 'master' %} order-print-master{% endif %}{% if mode == 'combined' %} order-print-combined order-print-count-{{ order_print_count if order_print_count <= 3 else '4plus' }}{% if order_print_count >= 4 %} order-print-landscape{% endif %}{% endif %}" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
     {% if mode == 'combined' and card_views %}
       <div class="order-card-grid">
         {% for card in card_views.get(view_name, []) %}
@@ -217,9 +225,9 @@
                   <div class="order-card-section">{{ field.section }}</div>
                   {% set ns.last_section = field.section %}
                 {% endif %}
-                <div class="order-card-row">
+                <div class="order-card-row{% if view_name == 'master' and field.key in master_print_hidden_keys %} master-print-hidden-row{% endif %}">
                   <div class="order-card-label">{{ field.label }}</div>
-                  <div class="order-card-value">{{ field.value }}</div>
+                  <div class="order-card-value{% if view_name == 'master' and field.section != 'Header' and field.is_numeric %} master-print-portion-value{% endif %}">{{ field.value }}</div>
                 </div>
               {% endfor %}
               {% if not card.fields %}

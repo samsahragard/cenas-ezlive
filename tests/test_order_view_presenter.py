@@ -30,6 +30,10 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert "grid-auto-flow: row !important;" in html
     assert "grid-template-columns: repeat(4, minmax(0, 1fr)) !important;" in html
     assert '<div class="order-card-eyebrow">Order</div>' not in html
+    assert "order-print-master" in html
+    assert "master-print-hidden-row" in html
+    assert "master-print-portion-value" in html
+    assert "meta.store_origin" in html
 
 
 def _row(key: str, label: str, section: str = "Header") -> dict[str, object]:
@@ -156,6 +160,41 @@ def test_combined_order_card_header_uses_kitchen_ready_and_dropdown_driver():
     )
 
     assert cards["master"][0]["header_fields"] == ["10:40 AM", "Sam CK #2"]
+
+
+def test_combined_order_cards_mark_numeric_values_for_master_print_sizing():
+    grids = {
+        "master": {
+            "view": "master",
+            "rows": [
+                _row("meta.order_id", "Order #"),
+                _row("meta.headcount", "Headcount"),
+                _row("hot.beef_lb", "Beef (Lb)", "Hot Food"),
+                _row("hot.package", "Party Package", "Individual Packages"),
+                _row("utensils.plates", "Plates", "Utensils"),
+            ],
+            "columns": [
+                {
+                    "order_id": "1KP-QAJ",
+                    "values": {
+                        "meta.order_id": "1KP-QAJ",
+                        "meta.headcount": "19",
+                        "hot.beef_lb": "2.67",
+                        "hot.package": "12 Chicken; 8 Beef",
+                        "utensils.plates": "3",
+                    },
+                },
+            ],
+        },
+    }
+
+    cards = build_combined_order_card_views(grids)
+    fields = {field["key"]: field for field in cards["master"][0]["fields"]}
+
+    assert fields["meta.headcount"]["is_numeric"] is True
+    assert fields["hot.beef_lb"]["is_numeric"] is True
+    assert fields["utensils.plates"]["is_numeric"] is True
+    assert fields["hot.package"]["is_numeric"] is False
 
 
 def test_clock_minutes_sorts_am_times_by_clock_not_string_order():

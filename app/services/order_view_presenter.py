@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
+
 
 _EMPTY_DISPLAY_VALUES = {"", "N/A", "-", "\u2014", "0", "0.0", "0.00"}
+_NUMERIC_DISPLAY_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 
 
 def _display_value(raw: object) -> str:
@@ -12,6 +15,11 @@ def _display_value(raw: object) -> str:
 
 def _has_display_value(raw: object) -> bool:
     return _display_value(raw) not in _EMPTY_DISPLAY_VALUES
+
+
+def _is_numeric_display_value(raw: object) -> bool:
+    value = _display_value(raw).replace(",", "")
+    return bool(_NUMERIC_DISPLAY_RE.fullmatch(value))
 
 
 def _dropdown_driver_label(
@@ -58,7 +66,7 @@ def build_combined_order_card_views(
             if order_id == "Total":
                 continue
             values = dict(col["values"])
-            fields: list[dict[str, str]] = []
+            fields: list[dict[str, object]] = []
             for row in rows:
                 key = str(row["key"])
                 value = _display_value(values.get(key, ""))
@@ -71,6 +79,7 @@ def build_combined_order_card_views(
                     "label": str(row["label"]),
                     "section": str(row["section"]),
                     "value": value,
+                    "is_numeric": _is_numeric_display_value(value),
                 })
             cards.append({
                 "order_id": order_id,

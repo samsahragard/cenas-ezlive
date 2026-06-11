@@ -88,3 +88,4 @@ def test_route_map_template_keeps_google_directions_contract():
     assert "duration_in_traffic" in html
     assert "Refresh Routes" in html
     assert "DATA_URL" in html
+    assert "color:#1f2937;line-height:1.35" in html

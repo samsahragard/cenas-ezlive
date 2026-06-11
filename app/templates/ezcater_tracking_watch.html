@@ -440,7 +440,13 @@
       const lng = Number(o.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
       pointCount += 1;
-      const html = `<strong>${escapeHtml(o.order_number)}</strong><br>${escapeHtml(o.driver_name || '')}<br>${escapeHtml(o.status_label || '')}`;
+      const html = `
+        <div style="color:#1f2937;line-height:1.35;min-width:160px;">
+          <strong style="color:#111827;">${escapeHtml(o.order_number)}</strong><br>
+          <span>${escapeHtml(o.driver_name || '')}</span><br>
+          <span>${escapeHtml(o.status_label || '')}</span>
+        </div>
+      `;
       if (googleMap) {
         const pos = {lat, lng};
         googleBounds.extend(pos);

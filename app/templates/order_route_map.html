@@ -307,13 +307,13 @@
 
   function popupHtml(order, stats) {
     return `
-      <div style="min-width:220px;">
-        <div style="font-weight:800;font-size:15px;margin-bottom:4px;">${escapeHtml(order.order_id)}</div>
+      <div style="min-width:220px;color:#1f2937;line-height:1.35;">
+        <div style="font-weight:800;font-size:15px;margin-bottom:4px;color:#111827;">${escapeHtml(order.order_id)}</div>
         <div><strong>Deliver at:</strong> ${escapeHtml(order.deliver_at || '--')}</div>
         <div><strong>From:</strong> ${escapeHtml((order.kitchen && order.kitchen.label) || 'Pickup')}</div>
         <div><strong>Miles:</strong> ${escapeHtml(stats.distanceText || '--')}</div>
         <div><strong>Drive time:</strong> ${escapeHtml(stats.durationText || '--')}</div>
-        <div style="margin-top:6px;color:#555;">${escapeHtml(order.address || '')}</div>
+        <div style="margin-top:6px;color:#4b5563;">${escapeHtml(order.address || '')}</div>
       </div>
     `;
   }
@@ -353,7 +353,7 @@
         label: { text: 'K', color: '#ffffff', fontWeight: '900' },
       });
       marker.addListener('click', function () {
-        infoWindow.setContent('<strong>' + escapeHtml(kitchen.label) + '</strong><br>' + escapeHtml(kitchen.address));
+        infoWindow.setContent('<div style="color:#1f2937;line-height:1.35;"><strong style="color:#111827;">' + escapeHtml(kitchen.label) + '</strong><br>' + escapeHtml(kitchen.address) + '</div>');
         infoWindow.open({ map: googleMap, anchor: marker });
       });
       markers.push(marker);

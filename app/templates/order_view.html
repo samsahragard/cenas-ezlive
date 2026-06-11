@@ -117,11 +117,23 @@
     .order-print-landscape .order-card-label,
     .order-print-landscape .order-card-value { font-size: 5.95pt !important; }
     .order-print-master .master-print-hidden-row { display: none !important; }
+    .order-print-master .order-card-row {
+      padding-top: 1.65pt !important;
+      padding-bottom: 1.65pt !important;
+    }
+    .order-print-master table tbody td {
+      padding-top: 2.2pt !important;
+      padding-bottom: 2.2pt !important;
+    }
+    .order-print-master .order-card-value,
+    .order-print-master .master-print-value-cell,
     .order-print-master .master-print-portion-value {
       font-size: 12.3pt !important;
-      line-height: 1 !important;
+      line-height: 1.18 !important;
       font-weight: 900 !important;
     }
+    .order-print-landscape.order-print-master .order-card-value,
+    .order-print-landscape.order-print-master .master-print-value-cell,
     .order-print-landscape.order-print-master .master-print-portion-value { font-size: 11.9pt !important; }
   }
 </style>
@@ -187,6 +199,9 @@
   {% endif %}
   <button onclick="window.print()" class="btn-download">Print</button>
   <a href="javascript:history.back()" class="btn-download">Back</a>
+  {% if route_map_url %}
+    <a href="{{ route_map_url }}" class="btn-download">Route Map</a>
+  {% endif %}
 </div>
 
 <div class="tabs">
@@ -269,13 +284,13 @@
                   {% set row_ns.has_print_value = true %}
                 {% endif %}
               {% endfor %}
-              <tr class="{% if row.key == "meta.order_id" %}bold-row{% endif %}{% if not row_ns.has_print_value %} print-empty-row{% endif %}">
+              <tr class="{% if row.key == "meta.order_id" %}bold-row{% endif %}{% if view_name == 'master' and row.key in master_print_hidden_keys %} master-print-hidden-row{% endif %}{% if not row_ns.has_print_value %} print-empty-row{% endif %}">
                 <td>{{ row.label }}</td>
                 {% for col in grid.columns %}
                   {% if col["order_id"] == "Total" %}
-                    <td class="total-col">{{ col["values"].get(row.key, "") }}</td>
+                    <td class="total-col{% if view_name == 'master' %} master-print-value-cell{% endif %}">{{ col["values"].get(row.key, "") }}</td>
                   {% else %}
-                    <td>{{ col["values"].get(row.key, "") }}</td>
+                    <td class="{% if view_name == 'master' %}master-print-value-cell{% endif %}">{{ col["values"].get(row.key, "") }}</td>
                   {% endif %}
                 {% endfor %}
               </tr>

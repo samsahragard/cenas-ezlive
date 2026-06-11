@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import os
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -22,6 +23,7 @@ from app.services.orders_query import (
     build_grids_for_orders,
 )
 from app.services.order_view_presenter import build_combined_order_card_views
+from app.services.order_route_map_presenter import build_route_map_payload
 from app.infra.export_xlsx import export_view_grids_to_xlsx
 # Phase 0 Block 4 follow-up (ck 2026-05-13): tag-based gate on the
 # unassign-courier action. URL gets a store_scope segment so the
@@ -253,6 +255,47 @@ def _print_header_driver_by_order(orders: list[Order]) -> dict[str, str]:
     }
 
 
+def _google_maps_browser_key() -> str:
+    return (
+        os.getenv("GOOGLE_MAPS_BROWSER_KEY")
+        or os.getenv("GOOGLE_MAPS_PUBLIC_KEY")
+        or os.getenv("GOOGLE_MAPS_API_KEY")
+        or ""
+    ).strip()
+
+
+def _orders_for_combined_map(db, location: str, date: str) -> tuple[list[Order], str]:
+    location = location.lower()
+    if location == "both":
+        origin_ids = list(LOCATION_TO_ORIGIN.values())
+        orders = (
+            db.query(Order)
+            .filter(Order.origin_store_id.in_(origin_ids), Order.delivery_date == date)
+            .filter(Order.status != "cancelled")
+            .order_by(Order.origin_store_id, Order.deliver_at)
+            .all()
+        )
+        return orders, "Tomball + Copperfield"
+
+    if location not in LOCATION_TO_ORIGIN:
+        abort(404)
+    origin = LOCATION_TO_ORIGIN[location]
+    orders = (
+        db.query(Order)
+        .filter(Order.origin_store_id == origin, Order.delivery_date == date)
+        .filter(Order.status != "cancelled")
+        .order_by(Order.deliver_at)
+        .all()
+    )
+    return orders, LOCATION_LABELS[location]
+
+
+def _combined_day_back_url(location: str, date: str) -> str:
+    if location.lower() == "both":
+        return url_for("orders_browse.combined_day_both", date=date)
+    return url_for("orders_browse.combined_day", location=location, date=date)
+
+
 @browse.route("/orders/view/<external_order_id>")
 def view_order(external_order_id: str):
     db = next(get_db())
@@ -275,7 +318,41 @@ def view_order(external_order_id: str):
             mode="single",
             external_order_id=external_order_id,
             unassign_store_scope=store_scope,
+            route_map_url=url_for("orders_browse.single_order_route_map", external_order_id=external_order_id),
         )
+    finally:
+        db.close()
+
+
+@browse.route("/orders/view/<external_order_id>/map")
+def single_order_route_map(external_order_id: str):
+    db = next(get_db())
+    try:
+        order = db.query(Order).filter_by(external_order_id=external_order_id).first()
+        if not order:
+            abort(404, f"Order {external_order_id} not found")
+        payload = build_route_map_payload([order])
+        return render_template(
+            "order_route_map.html",
+            title=f"Route Map - {order.external_order_id}",
+            subtitle=f"{order.external_order_id} - {order.deliver_at or 'delivery time not set'}",
+            back_url=url_for("orders_browse.view_order", external_order_id=external_order_id),
+            data_url=url_for("orders_browse.single_order_route_map_data", external_order_id=external_order_id),
+            map_payload=payload,
+            google_maps_key=_google_maps_browser_key(),
+        )
+    finally:
+        db.close()
+
+
+@browse.route("/orders/view/<external_order_id>/map/data")
+def single_order_route_map_data(external_order_id: str):
+    db = next(get_db())
+    try:
+        order = db.query(Order).filter_by(external_order_id=external_order_id).first()
+        if not order:
+            return jsonify({"ok": False, "error": "order not found"}), 404
+        return jsonify({"ok": True, **build_route_map_payload([order])})
     finally:
         db.close()
 
@@ -334,6 +411,7 @@ def combined_day(location: str, date: str):
             location_label=LOCATION_LABELS[location],
             date=date,
             collapse_empty_rows=collapse,
+            route_map_url=url_for("orders_browse.combined_day_route_map", location=location, date=date),
         )
     finally:
         db.close()
@@ -383,7 +461,41 @@ def combined_day_both(date: str):
             location_label="Tomball + Copperfield",
             date=date,
             collapse_empty_rows=collapse,
+            route_map_url=url_for("orders_browse.combined_day_route_map", location="both", date=date),
         )
+    finally:
+        db.close()
+
+
+@browse.route("/orders/<location>/<date>/map")
+def combined_day_route_map(location: str, date: str):
+    db = next(get_db())
+    try:
+        orders, location_label = _orders_for_combined_map(db, location, date)
+        if not orders:
+            abort(404, f"No orders for {location_label} on {date}")
+        payload = build_route_map_payload(orders)
+        return render_template(
+            "order_route_map.html",
+            title=f"{location_label} Route Map - {date}",
+            subtitle=f"{location_label} - {date} - {len(orders)} order{'s' if len(orders) != 1 else ''}",
+            back_url=_combined_day_back_url(location, date),
+            data_url=url_for("orders_browse.combined_day_route_map_data", location=location, date=date),
+            map_payload=payload,
+            google_maps_key=_google_maps_browser_key(),
+        )
+    finally:
+        db.close()
+
+
+@browse.route("/orders/<location>/<date>/map/data")
+def combined_day_route_map_data(location: str, date: str):
+    db = next(get_db())
+    try:
+        orders, _location_label = _orders_for_combined_map(db, location, date)
+        if not orders:
+            return jsonify({"ok": False, "error": "no orders found"}), 404
+        return jsonify({"ok": True, **build_route_map_payload(orders)})
     finally:
         db.close()
 
@@ -452,8 +564,6 @@ def combined_day_xlsx(location: str, date: str):
 # courierAssign API, ezCater's portal won't let the user unassign that courier
 # through the UI. This endpoint calls courierUnassign on Cenas Kitchen's
 # behalf so the portal driver field opens up for manual reassignment.
-
-import os
 
 EZCATER_API = "https://api.ezcater.com/graphql"
 EZ_TOKEN_FILE = Path(r"C:\Users\sam\.openclaw\.secrets\ezcater_api_token.txt")

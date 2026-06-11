@@ -33,7 +33,11 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert "order-print-master" in html
     assert "master-print-hidden-row" in html
     assert "master-print-portion-value" in html
+    assert "master-print-value-cell" in html
+    assert ".order-print-master .order-card-value" in html
     assert "meta.store_origin" in html
+    assert "route_map_url" in html
+    assert "Route Map" in html
 
 
 def _row(key: str, label: str, section: str = "Header") -> dict[str, object]:

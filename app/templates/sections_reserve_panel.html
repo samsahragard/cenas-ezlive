@@ -1,0 +1,50 @@
+{#- SA-5 partial: Reservations + Waitlist + History panel (docs/floor_contract.md
+    sections 6, 8, 10). NOT a full page - it is included inside the Host tab's
+    side panel (sections_host.html slot) at Gate 2 integration.
+    JS entry point: window.FloorReserve.mount(panelEl, ctx) in reserve.js.
+    Shared visual classes (floor-card, floor-btn, floor-pill--*, floor-sheet,
+    floor-input, floor-stepper, floor-list-row, floor-subtabs, floor-search,
+    floor-datepager) come from sections.css (SA-3). reserve.css only adds
+    .floor-reserve-scoped layout rules. -#}
+<link rel="stylesheet" href="/static/sections/reserve.css">
+<div id="floorReservePanel" class="floor-reserve floor-card">
+  <div class="floor-reserve__head">
+    <div class="floor-subtabs floor-reserve__subtabs" data-role="subtabs" role="tablist">
+      <button type="button" class="floor-subtab active" data-subtab="reservations" role="tab" aria-selected="true">
+        Reservations <span class="floor-reserve__count" data-role="count-reservations"></span>
+      </button>
+      <button type="button" class="floor-subtab" data-subtab="waitlist" role="tab" aria-selected="false">
+        Waitlist <span class="floor-reserve__count" data-role="count-waitlist"></span>
+      </button>
+      <button type="button" class="floor-subtab" data-subtab="history" role="tab" aria-selected="false">
+        History
+      </button>
+    </div>
+    <div class="floor-reserve__tools">
+      <input type="search" class="floor-input floor-search floor-reserve__search" data-role="search"
+             placeholder="Search name or phone" aria-label="Search name or phone">
+      <div class="floor-datepager floor-reserve__datepager" data-role="datepager">
+        <button type="button" class="floor-btn floor-btn--ghost" data-role="date-prev" aria-label="Previous day">&lsaquo;</button>
+        <button type="button" class="floor-btn floor-btn--ghost" data-role="date-today">Today</button>
+        <button type="button" class="floor-btn floor-btn--ghost" data-role="date-next" aria-label="Next day">&rsaquo;</button>
+        <span class="floor-reserve__datelabel" data-role="date-label"></span>
+      </div>
+    </div>
+    <div class="floor-reserve__actions">
+      <button type="button" class="floor-btn floor-reserve__add" data-role="add-reservation">+ Add reservation</button>
+      <button type="button" class="floor-btn floor-btn--ghost floor-reserve__add-wait" data-role="add-waitlist">+ Add to waitlist</button>
+    </div>
+  </div>
+  <div class="floor-reserve__pickbar" data-role="pickbar" hidden>
+    <span data-role="pickbar-text">Tap an open table</span>
+    <button type="button" class="floor-btn floor-btn--ghost" data-role="pick-cancel">Cancel</button>
+  </div>
+  <div class="floor-reserve__notice" data-role="notice" hidden></div>
+  <div class="floor-reserve__body" data-role="list" aria-live="polite">
+    <div class="floor-reserve__empty">Loading...</div>
+  </div>
+  <div class="floor-reserve__overlay" data-role="overlay" hidden>
+    <div class="floor-sheet floor-reserve__sheet" data-role="sheet"></div>
+  </div>
+</div>
+<script src="/static/sections/reserve.js" defer></script>

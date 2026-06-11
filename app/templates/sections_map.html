@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Map Setup - Cenas Kitchen Floor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='sections/sections.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='sections/map.css') }}">
+  <style>
+    /* page chrome only - everything else is scoped inside .floor-app */
+    html, body { margin: 0; padding: 0; background: #111317; }
+  </style>
+</head>
+<body>
+  <div class="floor-app" id="floorApp"
+       data-store="{{ store_slug }}" data-active-tab="{{ active_tab|default('map') }}"
+       data-locations='{{ locations_json }}' data-loc-default="{{ loc_default|default(store_slug) }}"
+       data-is-manager="{{ '1' if is_manager else '0' }}"
+       data-attention-minutes="{{ attention_minutes }}">
+    <div id="floorShell"></div>
+    <div id="floorPanel">
+      <div class="floor-card floor-map-panel">
+        <h1 class="floor-map-title">Map Setup</h1>
+        <p class="floor-map-hint">Drag tables from the tray onto the floor. Tap a placed
+          table to select it, then resize with the corner handles, rotate, change its
+          shape, or send it back to the tray. Snap grid: 10 units.</p>
+
+        <div class="floor-map-section-label">Shape</div>
+        <div class="floor-map-tools" id="mapShapeTools">
+          <button type="button" class="floor-btn floor-btn--ghost" id="mapShape-square">Square</button>
+          <button type="button" class="floor-btn floor-btn--ghost" id="mapShape-rect">Rect</button>
+          <button type="button" class="floor-btn floor-btn--ghost" id="mapShape-circle">Circle</button>
+          <button type="button" class="floor-btn floor-btn--ghost" id="mapShape-diamond">Diamond</button>
+        </div>
+
+        <div class="floor-map-section-label">Selected table</div>
+        <div class="floor-map-tools">
+          <button type="button" class="floor-btn floor-btn--ghost" id="mapRotate">Rotate 45</button>
+          <button type="button" class="floor-btn floor-btn--danger" id="mapRemove">Remove</button>
+        </div>
+
+        <div class="floor-map-section-label">Fixtures</div>
+        <div class="floor-map-tools">
+          <button type="button" class="floor-btn floor-btn--ghost" id="mapDrawWall">Draw wall</button>
+          <button type="button" class="floor-btn floor-btn--ghost" id="mapDrawLabel">Draw label box</button>
+        </div>
+
+        <div class="floor-map-section-label">Unplaced tables</div>
+        <div class="floor-map-tray" id="mapTray"></div>
+
+        <div class="floor-map-save-row">
+          <button type="button" class="floor-btn" id="mapSave">Save layout</button>
+          <span class="floor-map-status" id="mapStatus"></span>
+        </div>
+      </div>
+      <div class="floor-toast" id="mapToast"></div>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='sections/canvas.js') }}"></script>
+  <script src="{{ url_for('static', filename='sections/map.js') }}"></script>
+</body>
+</html>

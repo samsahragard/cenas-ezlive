@@ -1,0 +1,48 @@
+<!doctype html>
+{#- SA-4: Host tab / live map (docs/floor_contract.md sections 7, 8, 10).
+    Standalone full HTML page: iframed by the Operations dashboard and must
+    work full-screen on a phone. No dashboard base / sidebar.
+    Frozen context: store_slug, active_tab, locations_json, loc_default,
+    is_manager, attention_minutes, user_name.
+    The reservations panel mounts at the FLOOR_RESERVE_PANEL_INCLUDE_SLOT
+    comment below; the orchestrator swaps the comment for the live include
+    at Gate 2 (SA-5's partial carries id="floorReservePanel" itself). -#}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Sections - Host - Cenas Kitchen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='sections/sections.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='sections/host.css') }}">
+</head>
+<body>
+  <div class="floor-app" id="floorApp"
+       data-store="{{ store_slug }}" data-active-tab="host"
+       data-locations='{{ locations_json }}' data-loc-default="{{ loc_default }}"
+       data-is-manager="{{ '1' if is_manager else '0' }}"
+       data-attention-minutes="{{ attention_minutes }}">
+    <div id="floorShell"></div>
+    <div id="floorPanel">
+      <div class="floor-card sa4-panel" id="hostPanel">
+        <div class="sa4-panel-head">
+          <h2 class="sa4-panel-title">Host stand</h2>
+          <span class="sa4-live-dot" id="hostLiveDot" title="Live updates"></span>
+        </div>
+        <p class="sa4-hint">Tap an open table to seat a party. Tap an occupied table to view or clear it.</p>
+        <div class="sa4-legend" aria-hidden="true">
+          <span><i class="sa4-legend--open"></i>Open</span>
+          <span><i class="sa4-legend--occupied"></i>Occupied</span>
+          <span><i class="sa4-legend--attention"></i>Needs attention</span>
+        </div>
+      </div>
+      <div class="sa4-reserve-slot" id="hostReserveSlot">
+        {# FLOOR_RESERVE_PANEL_INCLUDE_SLOT - wired live at Gate 2 (ck orchestrator) #}
+        {% include "sections_reserve_panel.html" %}
+      </div>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='sections/canvas.js') }}"></script>
+  <script src="{{ url_for('static', filename='sections/host.js') }}"></script>
+</body>
+</html>

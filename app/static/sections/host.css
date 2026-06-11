@@ -1,0 +1,201 @@
+/* ==========================================================================
+ * host.css - SA-4 Host tab styles.
+ * Only sa4-* classes are defined here; shared classes (floor-card,
+ * floor-btn, floor-stepper, floor-avatar, floor-list-row, floor-sheet, ...)
+ * belong to SA-3's sections.css and are consumed untouched. Everything is
+ * scoped under .floor-app (contract section 8 design tokens).
+ * ========================================================================== */
+
+.floor-app .sa4-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.floor-app .sa4-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.floor-app .sa4-panel-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.floor-app .sa4-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #9AA0A8;
+}
+
+/* Live-updates dot: gray until the first successful /floor/api/live poll. */
+.floor-app .sa4-live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #64748B;
+  flex: none;
+}
+
+.floor-app .sa4-live-dot.is-ok {
+  background: #22C55E;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+}
+
+/* Status legend. */
+.floor-app .sa4-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.floor-app .sa4-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #9AA0A8;
+}
+
+.floor-app .sa4-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.floor-app .sa4-legend--open {
+  background: #FFFFFF;
+}
+
+.floor-app .sa4-legend--occupied {
+  background: #3B82F6;
+}
+
+.floor-app .sa4-legend--attention {
+  background: #F5B81C;
+}
+
+/* Reservations panel slot wrapper (SA-5 mounts inside). */
+.floor-app .sa4-reserve-slot {
+  margin-top: 12px;
+}
+
+/* Sheet additions (positioning/visuals come from SA-3's .floor-sheet). */
+.floor-app .sa4-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.floor-app .sa4-sheet-head {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.floor-app .sa4-sheet-close {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+.floor-app .sa4-sheet-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.floor-app .sa4-stepper {
+  align-self: center;
+}
+
+.floor-app .sa4-picker {
+  display: flex;
+  flex-direction: column;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.floor-app .sa4-picker-row {
+  border-radius: 10px;
+}
+
+.floor-app .sa4-picker-row.is-on {
+  box-shadow: 0 0 0 2px #2F6FED inset;
+  background: rgba(47, 111, 237, 0.12);
+}
+
+.floor-app .sa4-server-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.floor-app .sa4-server-body strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floor-app .sa4-btn-wide {
+  width: 100%;
+  padding: 12px 18px;
+  font-size: 15px;
+}
+
+.floor-app .sa4-occupied-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.floor-app .sa4-occupied-info p {
+  margin: 0;
+  font-size: 13px;
+  color: #FFFFFF;
+}
+
+.floor-app .sa4-occupied-info p:first-child {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* Transient toast confirmation. */
+.floor-app .sa4-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 90;
+  background: #111317;
+  color: #FFFFFF;
+  border: 1px solid #2F6FED;
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 90vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+
+.floor-app .sa4-toast--error {
+  border-color: #EF4444;
+}
+
+.floor-app .sa4-toast.is-out {
+  opacity: 0;
+}

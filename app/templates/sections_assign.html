@@ -1,0 +1,41 @@
+<!doctype html>
+{#- SA-4: Assign tab (docs/floor_contract.md sections 7, 8, 10).
+    Standalone full HTML page: iframed by the Operations dashboard and must
+    work full-screen on a phone. No dashboard base / sidebar.
+    Frozen context: store_slug, active_tab, locations_json, loc_default,
+    is_manager, attention_minutes, user_name. -#}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Sections - Assign - Cenas Kitchen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='sections/sections.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='sections/assign.css') }}">
+</head>
+<body>
+  <div class="floor-app" id="floorApp"
+       data-store="{{ store_slug }}" data-active-tab="assign"
+       data-locations='{{ locations_json }}' data-loc-default="{{ loc_default }}"
+       data-is-manager="{{ '1' if is_manager else '0' }}"
+       data-attention-minutes="{{ attention_minutes }}">
+    <div id="floorShell"></div>
+    <div id="floorPanel">
+      <div class="floor-card sa4-panel" id="assignPanel">
+        <div class="sa4-panel-head">
+          <h2 class="sa4-panel-title">Tonight's sections</h2>
+          <span class="sa4-dirty" id="assignDirty" hidden>Unsaved changes</span>
+        </div>
+        <p class="sa4-hint">Tap a server to arm them, then tap or lasso tables to assign. Tap an assigned table again to remove it.</p>
+        <div class="sa4-server-list" id="assignServerList" aria-label="Servers on shift"></div>
+        <div class="sa4-panel-actions">
+          <button type="button" class="floor-btn floor-btn--ghost" id="assignAddServer">+ Add server</button>
+          <button type="button" class="floor-btn" id="assignSave">Save sections</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='sections/canvas.js') }}"></script>
+  <script src="{{ url_for('static', filename='sections/assign.js') }}"></script>
+</body>
+</html>

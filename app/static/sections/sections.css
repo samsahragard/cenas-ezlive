@@ -1,0 +1,616 @@
+/* ==========================================================================
+   sections.css - Cenas Kitchen Floor / Sections design system (SA-3, sole owner)
+   FROZEN CONTRACT: docs/floor_contract.md section 8 "Design tokens".
+   EVERY rule in this file is scoped under .floor-app - nothing may leak.
+
+   SHARED CLASS API (consumed read-only by assign.js / host.js / reserve.js):
+   --------------------------------------------------------------------------
+   .floor-card            dark card, bg #1C1F24, radius 14px, padded
+   .floor-btn             primary action button, blue #2F6FED, fully rounded
+   .floor-btn--ghost      transparent button w/ subtle border
+   .floor-btn--danger     destructive red button
+   .floor-pill            fully-rounded status pill; combine with one of:
+     .floor-pill--upcoming    gray outline
+     .floor-pill--confirmed   purple
+     .floor-pill--arrived     mint
+     .floor-pill--seated      green
+     .floor-pill--no_show     slate
+     .floor-pill--cancelled   slate (muted red text)
+     .floor-pill--left        slate
+     .floor-pill--waiting     gray outline
+     .floor-pill--notified    amber outline
+   .floor-sheet           panel container: bottom sheet on phone (<768px),
+                          side card on tablet/desktop
+   .floor-input           text/number/date input
+   .floor-stepper         - n + party-size stepper (children: button, .floor-stepper-val)
+   .floor-avatar          circular initials avatar; set bg via inline style/JS
+   .floor-list-row        tappable list row (entry lists, server lists)
+   .floor-subtabs         sub-tab strip; .floor-subtab items, .floor-subtab.active
+   .floor-search          search input wrapper (input.floor-input inside)
+   .floor-datepager       prev / label / next date pager row
+   --------------------------------------------------------------------------
+   Shell classes (rendered by canvas.js, styled here):
+   .floor-topbar .floor-chiprow .floor-chip .floor-chip.active
+   .floor-tabs .floor-tab .floor-tab.active .floor-tab-badge
+   .floor-serverstrip .floor-server-chip .floor-server-covers
+   .floor-canvas-host  (SVG canvas host; svg.floor-canvas-svg inside)
+   Layout: #floorShell = .floor-shell, #floorPanel = .floor-panel.
+   Mobile <768px: canvas on top, panel below as sheet.
+   Tablet/desktop >=768px: panel left, canvas right.
+   ========================================================================== */
+
+.floor-app {
+  /* ---- frozen design tokens ---- */
+  --floor-bg: #111317;        /* panel bg */
+  --floor-card: #1C1F24;      /* card bg */
+  --floor-card-radius: 14px;
+  --floor-canvas: #2F3338;    /* canvas bg */
+  --floor-text: #FFFFFF;
+  --floor-text-2: #9AA0A8;    /* secondary text */
+  --floor-primary: #2F6FED;   /* primary action */
+  --floor-attention: #F5B81C; /* table attention fill */
+  --floor-unknown: #6B7280;   /* occupied, unknown server */
+  --floor-table-open: #FFFFFF;
+  --floor-table-name-dark: #111317;
+  --floor-fixture-wall: #E8E8E8;
+  --floor-line: rgba(255, 255, 255, 0.08);
+  --floor-danger: #EF4444;
+  --floor-mint: #34D399;
+  --floor-green: #22C55E;
+  --floor-purple: #8B5CF6;
+  --floor-slate: #64748B;
+
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--floor-bg);
+  color: var(--floor-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.floor-app *,
+.floor-app *::before,
+.floor-app *::after {
+  box-sizing: border-box;
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.floor-app .floor-shell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.floor-app .floor-panel {
+  min-width: 0;
+}
+
+/* Mobile default: shell (canvas) on top, panel below as a sheet. */
+.floor-app .floor-panel {
+  order: 2;
+}
+.floor-app .floor-shell {
+  order: 1;
+}
+
+@media (min-width: 768px) {
+  .floor-app {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 14px;
+    padding: 14px;
+  }
+  .floor-app .floor-panel {
+    order: 1;
+    width: 360px;
+    flex: 0 0 360px;
+    overflow-y: auto;
+    max-height: calc(100vh - 28px);
+  }
+  .floor-app .floor-shell {
+    order: 2;
+    flex: 1 1 auto;
+  }
+}
+
+/* ---------------------------------------------------------------- topbar */
+
+.floor-app .floor-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 6px;
+}
+
+.floor-app .floor-chiprow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 12px 8px;
+}
+.floor-app .floor-chiprow::-webkit-scrollbar {
+  display: none;
+}
+
+.floor-app .floor-chip {
+  flex: 0 0 auto;
+  appearance: none;
+  border: 1px solid var(--floor-line);
+  background: var(--floor-card);
+  color: var(--floor-text-2);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.floor-app .floor-chip:hover {
+  color: var(--floor-text);
+}
+.floor-app .floor-chip.active {
+  background: var(--floor-primary);
+  border-color: var(--floor-primary);
+  color: #FFFFFF;
+}
+
+/* Tab links: underlined chips */
+.floor-app .floor-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.floor-app .floor-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  color: var(--floor-text-2);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.floor-app .floor-tab:hover {
+  color: var(--floor-text);
+}
+.floor-app .floor-tab.active {
+  color: var(--floor-text);
+  border-bottom-color: var(--floor-primary);
+}
+.floor-app .floor-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--floor-danger);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.floor-app .floor-tab-badge[hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------- server strip */
+
+.floor-app .floor-serverstrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 12px 10px;
+  min-height: 0;
+}
+.floor-app .floor-serverstrip::-webkit-scrollbar {
+  display: none;
+}
+.floor-app .floor-serverstrip:empty {
+  display: none;
+}
+
+.floor-app .floor-server-chip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--floor-card);
+  border: 1px solid var(--floor-line);
+  border-radius: 999px;
+  padding: 5px 14px 5px 6px;
+}
+.floor-app .floor-server-chip .floor-server-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--floor-text);
+  white-space: nowrap;
+}
+.floor-app .floor-server-covers {
+  font-size: 12px;
+  color: var(--floor-text-2);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- avatar */
+
+.floor-app .floor-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--floor-slate);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* ---------------------------------------------------------------- canvas */
+
+.floor-app .floor-canvas-host {
+  position: relative;
+  flex: 1 1 auto;
+  margin: 0 12px 12px;
+  background: var(--floor-canvas);
+  border-radius: var(--floor-card-radius);
+  overflow: hidden;
+  min-height: 240px;
+}
+@media (min-width: 768px) {
+  .floor-app .floor-canvas-host {
+    margin: 0;
+  }
+}
+
+.floor-app .floor-canvas-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.floor-app .floor-canvas-svg .floor-table {
+  cursor: pointer;
+}
+.floor-app .floor-canvas-svg text {
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ card */
+
+.floor-app .floor-card {
+  background: var(--floor-card);
+  border-radius: var(--floor-card-radius);
+  padding: 14px;
+  border: 1px solid var(--floor-line);
+}
+
+/* --------------------------------------------------------------- buttons */
+
+.floor-app .floor-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--floor-primary);
+  background: var(--floor-primary);
+  color: #FFFFFF;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.12s, background 0.12s;
+}
+.floor-app .floor-btn:hover {
+  filter: brightness(1.1);
+}
+.floor-app .floor-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  filter: none;
+}
+
+.floor-app .floor-btn--ghost {
+  background: transparent;
+  border-color: var(--floor-line);
+  color: var(--floor-text);
+}
+.floor-app .floor-btn--ghost:hover {
+  border-color: var(--floor-text-2);
+  filter: none;
+}
+.floor-app .floor-btn--ghost.active {
+  border-color: var(--floor-primary);
+  color: var(--floor-primary);
+}
+
+.floor-app .floor-btn--danger {
+  background: var(--floor-danger);
+  border-color: var(--floor-danger);
+  color: #FFFFFF;
+}
+
+/* ----------------------------------------------------------- status pills */
+
+.floor-app .floor-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.floor-app .floor-pill--upcoming {
+  border-color: var(--floor-text-2);
+  color: var(--floor-text-2);
+  background: transparent;
+}
+.floor-app .floor-pill--confirmed {
+  background: rgba(139, 92, 246, 0.18);
+  color: #C4B5FD;
+  border-color: rgba(139, 92, 246, 0.45);
+}
+.floor-app .floor-pill--arrived {
+  background: rgba(52, 211, 153, 0.16);
+  color: #6EE7B7;
+  border-color: rgba(52, 211, 153, 0.45);
+}
+.floor-app .floor-pill--seated {
+  background: rgba(34, 197, 94, 0.18);
+  color: #86EFAC;
+  border-color: rgba(34, 197, 94, 0.5);
+}
+.floor-app .floor-pill--no_show,
+.floor-app .floor-pill--left {
+  background: rgba(100, 116, 139, 0.22);
+  color: #B6C2D1;
+  border-color: rgba(100, 116, 139, 0.5);
+}
+.floor-app .floor-pill--cancelled {
+  background: rgba(100, 116, 139, 0.22);
+  color: #F0A5A5;
+  border-color: rgba(100, 116, 139, 0.5);
+}
+.floor-app .floor-pill--waiting {
+  border-color: var(--floor-text-2);
+  color: var(--floor-text-2);
+  background: transparent;
+}
+.floor-app .floor-pill--notified {
+  background: rgba(245, 184, 28, 0.14);
+  color: #FCD34D;
+  border-color: rgba(245, 184, 28, 0.45);
+}
+
+/* ------------------------------------------------------------------ sheet */
+
+.floor-app .floor-sheet {
+  background: var(--floor-card);
+  border: 1px solid var(--floor-line);
+  border-radius: var(--floor-card-radius) var(--floor-card-radius) 0 0;
+  padding: 16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.45);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+@media (min-width: 768px) {
+  .floor-app .floor-sheet {
+    position: static;
+    border-radius: var(--floor-card-radius);
+    box-shadow: none;
+    max-height: none;
+  }
+}
+
+/* ------------------------------------------------------------------ input */
+
+.floor-app .floor-input {
+  appearance: none;
+  width: 100%;
+  background: var(--floor-bg);
+  border: 1px solid var(--floor-line);
+  border-radius: 10px;
+  color: var(--floor-text);
+  padding: 10px 12px;
+  font-size: 15px;
+  outline: none;
+}
+.floor-app .floor-input:focus {
+  border-color: var(--floor-primary);
+}
+.floor-app .floor-input::placeholder {
+  color: var(--floor-text-2);
+}
+
+/* ---------------------------------------------------------------- stepper */
+
+.floor-app .floor-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--floor-bg);
+  border: 1px solid var(--floor-line);
+  border-radius: 999px;
+  padding: 4px;
+}
+.floor-app .floor-stepper button {
+  appearance: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: var(--floor-card);
+  color: var(--floor-text);
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+}
+.floor-app .floor-stepper button:hover {
+  background: var(--floor-primary);
+}
+.floor-app .floor-stepper .floor-stepper-val {
+  min-width: 34px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+/* --------------------------------------------------------------- list row */
+
+.floor-app .floor-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--floor-line);
+  color: var(--floor-text);
+  padding: 11px 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.floor-app .floor-list-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.floor-app .floor-list-row:last-child {
+  border-bottom: none;
+}
+
+/* ---------------------------------------------------------------- subtabs */
+
+.floor-app .floor-subtabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--floor-line);
+  margin-bottom: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.floor-app .floor-subtabs::-webkit-scrollbar {
+  display: none;
+}
+.floor-app .floor-subtab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--floor-text-2);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.floor-app .floor-subtab.active {
+  color: var(--floor-text);
+  border-bottom-color: var(--floor-primary);
+}
+
+/* ----------------------------------------------------------------- search */
+
+.floor-app .floor-search {
+  position: relative;
+  display: block;
+  margin: 8px 0;
+}
+.floor-app .floor-search .floor-input {
+  padding-left: 34px;
+}
+.floor-app .floor-search::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  margin-top: -8px;
+  border: 2px solid var(--floor-text-2);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.floor-app .floor-search::after {
+  content: "";
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  width: 6px;
+  height: 2px;
+  margin-top: 4px;
+  background: var(--floor-text-2);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------- datepager */
+
+.floor-app .floor-datepager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0;
+}
+.floor-app .floor-datepager .floor-datepager-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--floor-text);
+  text-align: center;
+  flex: 1 1 auto;
+}
+.floor-app .floor-datepager button {
+  appearance: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--floor-line);
+  background: var(--floor-card);
+  color: var(--floor-text);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+}
+.floor-app .floor-datepager button:hover {
+  border-color: var(--floor-primary);
+}

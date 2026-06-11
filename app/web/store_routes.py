@@ -6006,6 +6006,7 @@ _OPERATIONS_DASH_TABS = [
     ("sales",       "Sales",           False),
     ("labor",       "Labor",           False),
     ("performance", "Performance",     False),
+    ("sections",    "Sections",        False),   # Floor map / section assignment / host seating + reservations (ck Gate 2; docs/floor_contract.md)
     ("schedule-reports", "Schedule Reports", False),
     ("forecasts",   "Forecasts",       True),
 ]
@@ -6045,6 +6046,11 @@ def _operations_dash_full_url(tab_key):
         return url_for("store.labor")
     if tab_key == "performance":
         return url_for("store.server_performance")
+    if tab_key == "sections":
+        # Sections/Floor page is store-scoped on the self-contained floor
+        # blueprint; partner/corporate views open it with their own slug
+        # (the page's in-app location switcher covers both stores).
+        return url_for("floor.sections_page", store_slug=g.current_store)
     if tab_key == "schedule":
         return url_for("store.sv2_week_page")   # repointed (samai #2156): Operations > Schedule opens the actual V2 scheduling (week-view + its sub-nav cards)
     if tab_key == "schedule-reports":

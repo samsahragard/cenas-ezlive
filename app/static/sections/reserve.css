@@ -1,0 +1,315 @@
+/* SA-5: Reservations + Waitlist + History panel layout.
+ * CONTRACT (docs/floor_contract.md sec 10): ONLY .floor-reserve-scoped rules.
+ * No design-token redefinition, no global selectors - look-and-feel classes
+ * (floor-btn, floor-pill--*, floor-sheet, floor-input, ...) come from
+ * sections.css (SA-3); this file only arranges them inside the panel. */
+
+.floor-reserve {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  position: relative;
+  font-size: 14px;
+}
+
+/* ------------------------------- header ------------------------------- */
+
+.floor-reserve .floor-reserve__head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.floor-reserve .floor-reserve__subtabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.floor-reserve .floor-reserve__count {
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.floor-reserve .floor-reserve__tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.floor-reserve .floor-reserve__search {
+  flex: 1 1 140px;
+  min-width: 120px;
+}
+
+.floor-reserve .floor-reserve__datepager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.floor-reserve .floor-reserve__datelabel {
+  margin-left: 4px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.floor-reserve .floor-reserve__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.floor-reserve .floor-reserve__actions .floor-btn {
+  flex: 1 1 auto;
+}
+
+/* ------------------------------ pick bar ------------------------------ */
+
+.floor-reserve .floor-reserve__pickbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px dashed currentColor;
+}
+
+.floor-reserve .floor-reserve__pickbar[hidden] {
+  display: none;
+}
+
+.floor-reserve.floor-reserve--picking .floor-reserve__pickbar {
+  animation: floor-reserve-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes floor-reserve-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ------------------------------- notice ------------------------------- */
+
+.floor-reserve .floor-reserve__notice {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+  opacity: 0.9;
+}
+
+.floor-reserve .floor-reserve__notice[hidden] {
+  display: none;
+}
+
+/* -------------------------------- list -------------------------------- */
+
+.floor-reserve .floor-reserve__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.floor-reserve .floor-reserve__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.floor-reserve .floor-reserve__row--history {
+  cursor: default;
+}
+
+.floor-reserve .floor-reserve__row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.floor-reserve .floor-reserve__guest {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floor-reserve .floor-reserve__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.floor-reserve .floor-reserve__party {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.floor-reserve .floor-reserve__party-icon {
+  display: inline-block;
+  vertical-align: -2px;
+}
+
+.floor-reserve .floor-reserve__waited--over {
+  font-weight: 700;
+}
+
+.floor-reserve .floor-reserve__notes {
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.floor-reserve .floor-reserve__group-title {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.floor-reserve .floor-reserve__empty {
+  padding: 18px 10px;
+  text-align: center;
+  opacity: 0.65;
+}
+
+/* ----------------------------- sheet/overlay --------------------------- */
+
+.floor-reserve .floor-reserve__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: stretch;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: inherit;
+  z-index: 5;
+}
+
+.floor-reserve .floor-reserve__overlay[hidden] {
+  display: none;
+}
+
+.floor-reserve .floor-reserve__sheet {
+  width: 100%;
+  max-height: 92%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.floor-reserve .floor-reserve__sheet-title {
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.floor-reserve .floor-reserve__sheet-meta {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.floor-reserve .floor-reserve__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.floor-reserve .floor-reserve__field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.floor-reserve .floor-reserve__field-row .floor-reserve__field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.floor-reserve .floor-reserve__stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.floor-reserve .floor-reserve__stepper-value {
+  min-width: 28px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.floor-reserve .floor-reserve__sheet-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.floor-reserve .floor-reserve__seat-btn {
+  width: 100%;
+}
+
+.floor-reserve .floor-reserve__sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ----------------------------- phone width ----------------------------- */
+
+@media (max-width: 767px) {
+  .floor-reserve .floor-reserve__tools {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* in the column layout the row flex-basis would become height */
+  .floor-reserve .floor-reserve__search {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .floor-reserve .floor-reserve__datepager {
+    justify-content: space-between;
+  }
+
+  .floor-reserve .floor-reserve__body {
+    max-height: 50vh;
+  }
+
+  .floor-reserve .floor-reserve__overlay {
+    position: fixed;
+    border-radius: 0;
+    z-index: 60;
+  }
+
+  .floor-reserve .floor-reserve__notes {
+    max-width: 120px;
+  }
+}

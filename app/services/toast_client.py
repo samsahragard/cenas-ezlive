@@ -312,3 +312,39 @@ class ToastClient:
             page += 1
         path.write_text(json.dumps(all_orders), encoding="utf-8")
         return all_orders
+
+    # ---- Sections / floor sync additions (SA-1, docs/floor_contract.md) ----
+    def fetch_service_areas(self, location: str, restaurant_guid: str,
+                            refresh: bool = False) -> list:
+        """Pull configured service areas (config/v2/serviceAreas) for a
+        restaurant. Same auth/header pattern and 24h disk-cache policy as
+        fetch_tables; refresh=True bypasses the cache (the floor config
+        sync always passes refresh=True - it needs fresh data)."""
+        path = _cache_dir() / f"serviceareas_{location}.json"
+        if path.exists() and not refresh:
+            try:
+                age_min = (time.time() - path.stat().st_mtime) / 60
+                if age_min < 60 * 24:
+                    return json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        log.info("toast: fetching service areas for %s", location)
+        data = self._http_get(f"{API_HOST}/config/v2/serviceAreas", restaurant_guid)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return data  # type: ignore[return-value]
+
+    def fetch_config_since(self, resource: str, restaurant_guid: str,
+                           last_modified: str) -> list:
+        """Incremental config pull: GET /config/v2/<resource> limited to
+        entities modified after `last_modified` (Toast lastModified query
+        param, ISO-8601 with offset e.g. 2026-06-11T00:00:00.000+0000).
+
+        `resource` is the URL leaf ('tables' | 'serviceAreas'). No disk
+        cache on purpose - used by app.services.toast_config_sync for
+        fresh incremental pulls; raises ToastError (HTTP 400) if Toast
+        rejects the param, which the sync treats as not-supported."""
+        url = (f"{API_HOST}/config/v2/{resource}"
+               f"?lastModified={urllib.parse.quote(last_modified)}")
+        log.info("toast: fetching %s modified since %s", resource, last_modified)
+        data = self._http_get(url, restaurant_guid)
+        return data  # type: ignore[return-value]

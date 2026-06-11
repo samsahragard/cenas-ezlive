@@ -27,7 +27,7 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert 'class="grid-view{% if active_view == view_name %} is-active{% endif %}' in html
     assert "order-print-landscape" in html
     assert "size: letter landscape;" in html
-    assert "order-card-print-page" in html
+    assert "grid-auto-flow: row !important;" in html
     assert "grid-template-columns: repeat(4, minmax(0, 1fr)) !important;" in html
     assert '<div class="order-card-eyebrow">Order</div>' not in html
     assert "order-print-master" in html
@@ -35,7 +35,8 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert "master-print-portion-value" in html
     assert "master-print-value-cell" in html
     assert ".order-print-master .order-card-value" in html
-    assert "order-print-single-card" in html
+    assert "order-card-print-page" not in html
+    assert "order-print-single-card" not in html
     assert "master-print-meta-value" in html
     assert "master-print-value-part-text" in html
     assert "meta.store_origin" in html
@@ -43,8 +44,7 @@ def test_order_view_template_prints_only_active_copy_and_hides_empty_rows():
     assert "Route Map" in html
 
     route_source = Path("app/web/orders_browse.py").read_text(encoding="utf-8")
-    assert "card_views=card_views" in route_source
-    assert "combined_count=1" in route_source
+    assert "combined_count=1" not in route_source
 
 
 def _row(key: str, label: str, section: str = "Header") -> dict[str, object]:

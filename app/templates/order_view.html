@@ -4,8 +4,6 @@
 
 {% block head_extra %}
 <style>
-  .order-card-print-page { display: contents; }
-  .order-print-single-card { display: none; }
   @media print {
     @page {
       size: letter landscape;
@@ -68,27 +66,20 @@
       font-weight: 800;
     }
     .order-card-grid {
-      display: block !important;
+      display: grid !important;
+      grid-auto-flow: row !important;
+      grid-auto-columns: auto !important;
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+      gap: 4pt !important;
       padding: 0 !important;
       overflow: visible !important;
       min-height: 0 !important;
-    }
-    .order-card-print-page {
-      display: grid !important;
-      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-      gap: 4pt !important;
       align-items: start !important;
-      page-break-after: always;
-      break-after: page;
     }
-    .order-card-print-page:last-child {
-      page-break-after: auto;
-      break-after: auto;
-    }
-    .order-print-count-1 .order-card-print-page { grid-template-columns: 1fr !important; }
-    .order-print-count-2 .order-card-print-page { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-    .order-print-count-3 .order-card-print-page { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-    .order-print-landscape .order-card-print-page { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+    .order-print-count-1 .order-card-grid { grid-template-columns: 1fr !important; }
+    .order-print-count-2 .order-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .order-print-count-3 .order-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    .order-print-landscape .order-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
     .order-card {
       background: #fff !important;
       border-color: #555 !important;
@@ -204,12 +195,6 @@
       font-size: 9.5pt !important;
       line-height: 1.06 !important;
     }
-    .order-print-single-card {
-      display: block !important;
-    }
-    .order-print-single-card + .table-wrap {
-      display: none !important;
-    }
     .order-print-landscape.order-print-master .master-print-value-cell { font-size: 11.9pt !important; }
   }
 </style>
@@ -318,9 +303,7 @@
           <div class="order-card-label">{{ field.label }}</div>
           <div class="order-card-value{% if view_name == 'master' and field.key in master_print_compact_value_keys %} master-print-meta-value{% endif %}{% if view_name == 'master' and field.section != 'Header' %} master-print-detail-value{% endif %}{% if view_name == 'master' and field.section != 'Header' and field.is_numeric %} master-print-portion-value{% endif %}">
             {% if view_name == 'master' and field.section != 'Header' and field.print_parts %}
-              {% for part in field.print_parts %}
-                <span class="master-print-value-part-{{ part.kind }}">{{ part.text }}</span>
-              {% endfor %}
+              {%- for part in field.print_parts -%}<span class="master-print-value-part-{{ part.kind }}">{{ part.text }}</span>{%- endfor -%}
             {% else %}
               {{ field.value }}
             {% endif %}
@@ -337,28 +320,11 @@
   <div class="grid-view{% if active_view == view_name %} is-active{% endif %}{% if view_name == 'master' %} order-print-master{% endif %}{% if mode == 'single' %} order-print-single order-print-count-1{% endif %}{% if mode == 'combined' %} order-print-combined order-print-count-{{ order_print_count if order_print_count <= 3 else '4plus' }}{% if order_print_count >= 4 %} order-print-landscape{% endif %}{% endif %}" id="view-{{ view_name }}" {% if active_view != view_name %}style="display:none;"{% endif %}>
     {% if mode == 'combined' and active_card_views %}
       <div class="order-card-grid">
-        {% for card_page in active_card_views.get(view_name, [])|batch(4) %}
-          <div class="order-card-print-page">
-            {% for card in card_page %}
-              {{ render_order_card(card, view_name) }}
-            {% endfor %}
-          </div>
+        {% for card in active_card_views.get(view_name, []) %}
+          {{ render_order_card(card, view_name) }}
         {% endfor %}
       </div>
     {% else %}
-      {% if mode == 'single' and active_card_views %}
-        <div class="order-print-single-card">
-          <div class="order-card-grid">
-            {% for card_page in active_card_views.get(view_name, [])|batch(4) %}
-              <div class="order-card-print-page">
-                {% for card in card_page %}
-                  {{ render_order_card(card, view_name) }}
-                {% endfor %}
-              </div>
-            {% endfor %}
-          </div>
-        </div>
-      {% endif %}
       <div class="table-wrap">
         <table>
           <tbody>

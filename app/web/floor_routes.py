@@ -510,6 +510,89 @@ def _bootstrap_sync_if_empty(db, loc) -> None:
         log.exception("floor bootstrap sync failed for %s", loc["key"])
 
 
+# Default layouts transcribed from the real Toast Tables maps (Sam,
+# 2026-06-12). Seeded ONCE per location, only while that location has zero
+# layout rows - Map Setup edits are never overwritten.
+_SEED_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data", "floor_seed_layouts.json",
+)
+
+
+def _bootstrap_layout_if_empty(db, loc) -> None:
+    """First-touch layout seed (ck, Sam 2026-06-12): when a location has NO
+    floor_layouts rows, apply app/data/floor_seed_layouts.json so the floor
+    opens looking like the real room instead of an empty canvas. Tables are
+    matched to toast_tables by NAME (uppercased, spaces stripped); unknown
+    names are skipped and logged. Fixtures seed only when the location has
+    none. Best-effort + race-safe: a concurrent worker winning the insert
+    just makes our commit fail, which we swallow after rollback."""
+    has_layout = (
+        db.query(FloorLayout.table_guid)
+        .filter(FloorLayout.location_guid == loc["guid"])
+        .first()
+    )
+    if has_layout is not None:
+        return
+    try:
+        with open(_SEED_PATH, encoding="utf-8") as f:
+            seed = (json.load(f) or {}).get(loc["key"])
+    except Exception:
+        log.exception("floor: layout seed file unreadable")
+        return
+    if not seed:
+        return
+
+    def _norm(s) -> str:
+        return "".join(str(s).split()).upper()
+
+    idx = {
+        _norm(t.name): t.guid
+        for t in db.query(ToastTableCfg)
+        .filter(ToastTableCfg.location_guid == loc["guid"],
+                ToastTableCfg.deleted.is_(False))
+    }
+    placed, missing = 0, []
+    try:
+        for name, row in (seed.get("tables") or {}).items():
+            guid = idx.get(_norm(name))
+            if not guid:
+                missing.append(name)
+                continue
+            db.add(FloorLayout(
+                location_guid=loc["guid"], table_guid=guid,
+                x=float(row["x"]), y=float(row["y"]),
+                w=float(row["w"]), h=float(row["h"]),
+                shape=row.get("shape", "square"),
+                rotation=int(row.get("rotation", 0)),
+            ))
+            placed += 1
+        has_fixtures = (
+            db.query(FloorFixture.id)
+            .filter(FloorFixture.location_guid == loc["guid"])
+            .first()
+        )
+        fixtures = 0
+        if has_fixtures is None:
+            for f_ in (seed.get("fixtures") or []):
+                db.add(FloorFixture(
+                    location_guid=loc["guid"], type=f_["type"],
+                    x=float(f_["x"]), y=float(f_["y"]),
+                    w=float(f_["w"]), h=float(f_["h"]),
+                    rotation=int(f_.get("rotation", 0)),
+                    label=f_.get("label"),
+                ))
+                fixtures += 1
+        db.commit()
+        log.info("floor: seeded default layout for %s (%d tables placed, "
+                 "%d fixtures, %d seed names unmatched%s)",
+                 loc["key"], placed, fixtures, len(missing),
+                 ": " + ", ".join(missing) if missing else "")
+    except Exception:
+        db.rollback()
+        log.exception("floor: layout seed failed for %s", loc["key"])
+
+
 @floor_bp.route("/api/floor", methods=["GET"])
 def api_floor():
     loc, err = _loc_or_400()
@@ -518,6 +601,7 @@ def api_floor():
     db = _open_db()
     try:
         _bootstrap_sync_if_empty(db, loc)
+        _bootstrap_layout_if_empty(db, loc)
         tables = (
             db.query(ToastTableCfg)
             .filter(ToastTableCfg.location_guid == loc["guid"],

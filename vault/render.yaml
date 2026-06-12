@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: cenas-vault
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: vault
+    buildCommand: pip install --upgrade pip
+    startCommand: python cenas_vault_cloud.py
+    disk:
+      name: vault-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: VAULT_TOKEN
+        sync: false
+      - key: VAULT_ROOT
+        value: /var/data/vault
+      - key: VAULT_DB
+        value: /var/data/vault_sync.db

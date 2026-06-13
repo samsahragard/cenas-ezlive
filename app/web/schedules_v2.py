@@ -17,9 +17,10 @@ on shift create/update as no-op stubs now (ckai fills them in B7/B8).
 """
 from __future__ import annotations
 
+import json
 from datetime import date as _date, datetime, timedelta
 
-from flask import g, jsonify, request
+from flask import abort, g, jsonify, request
 
 from app.db import SessionLocal
 from app.models import (
@@ -526,6 +527,78 @@ def sv2_schedule_new():
         db.commit()
         return jsonify({"ok": True, "id": sched.id, "store": _store(),
                         "week_start": week_start.isoformat(), "status": "draft"}), 201
+    finally:
+        db.close()
+
+
+_DRAFT_IMPORT_FORM = """<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Draft schedule import</title>
+<body style="font-family: system-ui, sans-serif; max-width: 860px; margin: 32px auto;">
+  <h1>Draft schedule import</h1>
+  <p>Partner-only utility. Imports unpublished draft shifts and refuses weeks that already have shifts.</p>
+  <form method="post">
+    <textarea name="payload" rows="22" style="width:100%; font-family: ui-monospace, monospace;" required></textarea>
+    <p>
+      <button name="commit" value="0" type="submit">Dry run</button>
+      <button name="commit" value="1" type="submit">Import draft shifts</button>
+    </p>
+  </form>
+</body>
+</html>"""
+
+
+@store_bp.route("/schedules-v2/draft-import", methods=["GET", "POST"])
+@require_level("partner")
+def sv2_draft_import():
+    """Partner-only utility for bulk-loading next-week Sling shifts as drafts.
+
+    This route is intentionally not linked in the UI. It is for controlled admin
+    imports only and is stricter than normal shift creation: it refuses to import
+    if any target week already contains shifts, and it never publishes.
+    """
+    if getattr(g, "current_store", None) != "partner":
+        abort(404)
+    if request.method == "GET":
+        return _DRAFT_IMPORT_FORM, 200
+
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        commit = bool(payload.get("commit"))
+    else:
+        raw_payload = request.form.get("payload") or ""
+        try:
+            payload = json.loads(raw_payload)
+        except Exception as exc:  # noqa: BLE001
+            return jsonify({"ok": False, "error": f"bad payload JSON: {exc}"}), 400
+        commit = request.form.get("commit") == "1" or bool(payload.get("commit"))
+
+    try:
+        week_start = _date.fromisoformat(str(payload.get("week_start") or "").strip())
+    except Exception:
+        return jsonify({"ok": False, "error": "week_start required (YYYY-MM-DD)"}), 400
+    records = payload.get("records")
+    if not isinstance(records, list) or not records:
+        return jsonify({"ok": False, "error": "records[] required"}), 400
+    if len(records) > 1000:
+        return jsonify({"ok": False, "error": "records[] limit is 1000"}), 400
+
+    from app.services.schedule_draft_import import import_draft_records
+    db = SessionLocal()
+    try:
+        summary = import_draft_records(
+            records,
+            db,
+            week_start=week_start,
+            actor_id=current_user_id(),
+            commit=commit,
+        )
+        status = 200 if summary.get("ok") else 409
+        return jsonify(summary), status
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        return jsonify({"ok": False, "error": f"{type(exc).__name__}: {exc}"}), 500
     finally:
         db.close()
 

@@ -115,3 +115,5 @@ def test_market_iframe_skips_auto_height_feedback_loop():
     assert "reveal(frame);\n        return;\n      }\n      // Sam #2888" in template
     assert "new ResizeObserver(fit).observe(doc.body)" in template
     assert "Math.abs(target - current) > 2" in template
+    assert ".tws-tabs, .tws-store-tabs, .tws-subbar { max-width: 100%; flex-wrap: nowrap; overflow-x: auto;" in template
+    assert "#tws-panel-market, #tws-panel-market .tws-store-shell, #tws-panel-market .tws-embed-wrap { max-width: 100%; overflow-x: hidden; }" in template

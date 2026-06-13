@@ -319,6 +319,14 @@
   .tws-modal-err { color: var(--tws-red); font-size: 12.5px; min-height: 16px; margin-bottom: 8px; }
   .tws-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
   .tws-btn-ghost { font-family: inherit; font-size: 13px; color: var(--tws-cream-dim); background: transparent; border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 9px 16px; cursor: pointer; }
+  @media (max-width: 780px) {
+    .tws { max-width: 100%; overflow-x: hidden; }
+    .tws-tabs, .tws-store-tabs, .tws-subbar { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+    .tws-tabs::-webkit-scrollbar, .tws-store-tabs::-webkit-scrollbar, .tws-subbar::-webkit-scrollbar { display: none; }
+    .tws-tab, .tws-store-tab, .tws-subtab { flex: 0 0 auto; }
+    #tws-panel-market, #tws-panel-market .tws-store-shell, #tws-panel-market .tws-embed-wrap { max-width: 100%; overflow-x: hidden; }
+    #tws-panel-market .tws-embed-frame { max-width: 100%; }
+  }
 </style>
 
 <div class="tws" id="tws-root"

@@ -195,6 +195,9 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
                 ok_pass = hmac.compare_digest(pw, AUTH_PASS)
                 if ok_user and ok_pass:
                     return True
+        return self._send_401()
+
+    def _send_401(self):
         body = b'{"ok": false}'
         try:
             self.send_response(401)
@@ -208,6 +211,31 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             pass
         self.close_connection = True
         return False
+
+    # -- token auth for the app relay ---------------------------------------
+    # The live app relay authenticates to /assistant/answer with
+    #   Authorization: Bearer <AI_ASSISTANT_CK_RUNTIME_TOKEN>
+    #   X-Ai-Assistant-Token: <same>
+    # The cutover sets that token == CENA_CLOUD_TOKEN. So /assistant/answer
+    # accepts EITHER the existing Basic sam:CENA_CLOUD_TOKEN (via _authed) OR a
+    # Bearer/X-Ai-Assistant-Token equal to CENA_CLOUD_TOKEN. Both halves are
+    # compared with hmac.compare_digest. /sync/* and / stay Basic-only.
+    def _bearer_or_basic_authed(self):
+        if self._token_match():
+            return True
+        return self._authed()  # falls back to Basic; emits 401 on failure
+
+    def _token_match(self):
+        hdr = self.headers.get("Authorization", "")
+        token = ""
+        if hdr.lower().startswith("bearer "):
+            token = hdr[7:].strip()
+        if not token:
+            token = (self.headers.get("X-Ai-Assistant-Token") or "").strip()
+        if not token:
+            return False
+        return hmac.compare_digest(
+            token.encode("utf-8"), CENA_CLOUD_TOKEN.encode("utf-8"))
 
     # -- helpers ------------------------------------------------------------
     def _send(self, code, ctype, body):
@@ -290,9 +318,17 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "not_found"}, 404)
 
     # -- POST ---------------------------------------------------------------
+    # Auth is ROUTE-AWARE for POST. /assistant/answer accepts Basic OR a
+    # Bearer/X-Ai-Assistant-Token equal to CENA_CLOUD_TOKEN (the app relay).
+    # Every other POST route (/sync/*) stays Basic-only - nothing is weakened.
     def do_POST(self):
-        if not self._authed():
-            return
+        route = urllib.parse.urlsplit(self.path).path
+        if route == "/assistant/answer":
+            if not self._bearer_or_basic_authed():
+                return
+        else:
+            if not self._authed():
+                return
         try:
             self._post_routes()
         except Exception:
@@ -480,30 +516,45 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
     # failure yields a clean 200 {"ok": false, "error": "..."} - never a 500
     # with a traceback, never a leaked stack.
     def _assistant_answer(self):
+        # Full SUPERVISOR-shaped response, identical to the CK-local runtime.
+        # The vendored cena_cloud_supervisor.answer(payload) wraps the legacy
+        # answer path with 48h conversations, per-turn grading, DEV rescue, the
+        # yes/no ladder, the DEV intro, the "Did I answer your question?"
+        # follow-up, and the cena_active/ck_engaged observe-mode state machine.
+        # It returns (body_dict, http_status); the dict is returned VERBATIM.
+        #
+        # Accept the app relay's full payload shape:
+        #   {question, principal, tools, tool_data, route_path, route_meta,
+        #    source, previous_question, previous_answer, routed_tool_id}
         body = self._body()
+        if not isinstance(body, dict):
+            return self._json({"ok": False, "error": "invalid body"}, 400)
         question = str(body.get("question") or "").strip()
         if not question:
             return self._json({"ok": False, "error": "missing 'question'"}, 400)
-        principal = body.get("principal")
-        if not isinstance(principal, dict):
-            # Default to a partner-level principal (full read of the analytics
-            # surface). The L3 orchestrator currently routes on the question +
-            # context, not principal, so this is forward-looking metadata.
-            principal = {"role": "partner", "source": "cena-cloud"}
-        context = body.get("context")
-        if not isinstance(context, dict):
-            context = None
+        if not isinstance(body.get("principal"), dict):
+            # Default to a partner-level principal so an un-scoped probe still
+            # reaches the analytics surface. The relay normally sends the real
+            # authenticated principal.
+            body = dict(body)
+            body["principal"] = {
+                "role": "partner",
+                "kind": "partner",
+                "is_owner_operator": True,
+                "can_ask_operational": True,
+                "source": "cena-cloud",
+            }
         try:
-            from cena_engine.cena_sql_orchestrator import answer_question
-            result = answer_question(question, principal, context)
+            from cena_cloud_supervisor import answer
+            result, status = answer(body)
             if not isinstance(result, dict):
                 return self._json(
-                    {"ok": False, "error": "engine returned no result"}, 200)
-            return self._json(result, 200)
+                    {"ok": False, "error": "supervisor returned no result"}, 200)
+            return self._json(result, int(status) if status else 200)
         except Exception as e:  # never 500 with a traceback into the response
             return self._json(
                 {"ok": False,
-                 "error": "engine failure: %s: %s" % (type(e).__name__, e)},
+                 "error": "supervisor failure: %s: %s" % (type(e).__name__, e)},
                 200)
 
     @staticmethod

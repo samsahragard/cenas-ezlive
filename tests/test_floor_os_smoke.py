@@ -56,7 +56,7 @@ def _assert_shell(html: str):
     assert "employee_console.css" in html
     assert "cc-shell" in html
     assert "cc-bottom-tabs" in html
-    assert html.count('class="cc-tab') == 5
+    assert html.count('class="cc-tab') == 6   # Sam 2026-06-13: + Sports tab
     assert 'aria-current="page"' in html
     # Logout reachable from every page (topbar) -- Sam's ask.
     assert 'id="cc-logout"' in html

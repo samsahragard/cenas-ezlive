@@ -18,6 +18,7 @@
 
 {% block employee_content %}
 <style>
+  .cf-req-note{ color:#fff; font-weight:600; }
   .mk-actions{ display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
   .mk-state{ color:var(--cf-faint); font-size:11px; }
   .mk-link{ background:none; border:none; color:var(--cf-accent,#d9a436); font-weight:700;
@@ -90,8 +91,9 @@
       <input type="date" name="end" id="cf-end" required />
     </label>
     <label>
-      <span>Reason (optional)</span>
-      <textarea name="reason" id="cf-reason" rows="2" placeholder="A quick note helps your manager plan coverage"></textarea>
+      <span>Reason <span class="cf-req-note">(REQUIRED &mdash; if there is no clear reason placed, then it's not a request anymore, it's a demand)</span></span>
+      <textarea name="reason" id="cf-reason" rows="4" required minlength="100" placeholder="Explain why you need these days off — at least 100 characters so your manager can plan coverage."></textarea>
+      <small class="cf-faint" id="cf-reason-count" style="display:block;text-align:right;color:var(--cf-faint);font-size:11px;margin-top:4px;">0 / 100</small>
     </label>
     <div class="cf-error" id="cf-timeoff-error" hidden></div>
     <div class="cf-success" id="cf-timeoff-success" hidden>
@@ -221,16 +223,38 @@
   }
   if(document.querySelector('[data-pane="market"]') && !$('cf-pane-market').hidden) loadMarket();
 
-  // ---- Time-off form (unchanged): client-side validation only.
+  // ---- Time-off form: dates open the picker on click/focus; reason REQUIRED
+  // (>= 100 chars) with a live counter.
+  var REASON_MIN = 100;
+  ['cf-start','cf-end'].forEach(function(id){
+    var el = $(id); if(!el) return;
+    var open = function(){ try { if(el.showPicker) el.showPicker(); } catch(e){} };
+    el.addEventListener('click', open);
+    el.addEventListener('focus', open);
+  });
+  var reasonEl = $('cf-reason'), countEl = $('cf-reason-count');
+  function syncCount(){
+    if(!reasonEl || !countEl) return;
+    var n = reasonEl.value.trim().length;
+    countEl.textContent = n + ' / ' + REASON_MIN;
+    countEl.style.color = (n >= REASON_MIN) ? '#5bd6a0' : 'var(--cf-faint)';
+  }
+  if(reasonEl){ reasonEl.addEventListener('input', syncCount); syncCount(); }
+
   var form = $('cf-timeoff');
   if(form){
     form.addEventListener('submit', function(ev){
       ev.preventDefault();
       var start = $('cf-start').value, end = $('cf-end').value;
+      var reason = reasonEl ? reasonEl.value.trim() : '';
       var err = $('cf-timeoff-error'), ok = $('cf-timeoff-success');
       err.hidden = true; ok.hidden = true;
       if(!start || !end){ err.textContent='Start and end dates are required.'; err.hidden=false; return; }
       if(end < start){ err.textContent='End date cannot be before start date.'; err.hidden=false; return; }
+      if(reason.length < REASON_MIN){
+        err.textContent = 'A clear reason is required — at least ' + REASON_MIN + ' characters (' + reason.length + '/' + REASON_MIN + ').';
+        err.hidden = false; if(reasonEl) reasonEl.focus(); return;
+      }
       ok.hidden = false;
     });
   }

@@ -15,7 +15,8 @@
   'profile': 'you',
   'my_profile': 'you',
   'you': 'you',
-  'notifications': 'you'
+  'notifications': 'you',
+  'sports': 'sports'
 } %}
 {% set _en_active = _active_alias.get(_raw_active, _raw_active) %}
 {% set _en_path = request.path if request else '' %}
@@ -24,7 +25,8 @@
   ('tables', '/employee/tables', 'Tables', '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/><path d="M3 15h18"/>'),
   ('shifts', '/employee/my-schedule', 'Shifts', '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M8 14h3"/><path d="M13 14h3"/>'),
   ('inbox', '/employee/messages', 'Inbox', '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
-  ('you', '/employee/my-profile', 'You', '<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>')
+  ('you', '/employee/my-profile', 'You', '<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>'),
+  ('sports', '/employee/sports', 'Sports', '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a13 13 0 0 1 0 18"/><path d="M12 3a13 13 0 0 0 0 18"/>')
 ] %}
 
 {% if not employee_console_css_loaded|default(false) %}

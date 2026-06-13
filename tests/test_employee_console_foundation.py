@@ -41,7 +41,7 @@ def test_employee_console_css_exposes_required_system_classes():
         assert cls in css
 
 
-def test_employee_nav_has_exactly_five_console_tabs():
+def test_employee_nav_has_exactly_six_console_tabs():
     nav = _read("app/templates/partials/_employee_nav.html")
 
     expected = {
@@ -50,26 +50,27 @@ def test_employee_nav_has_exactly_five_console_tabs():
         "Shifts": "/employee/my-schedule",
         "Inbox": "/employee/messages",
         "You": "/employee/my-profile",
+        "Sports": "/employee/sports",   # Sam 2026-06-13: 6th tab, right of You
     }
     for label, route in expected.items():
         assert f"'{label}'" in nav
         assert f"'{route}'" in nav
     assert nav.count("('/employee/") == 0
-    assert nav.count("'/employee/") == 5
+    assert nav.count("'/employee/") == 6
     assert "Time Off" not in nav
     assert "News" not in nav
     assert "aria-current=\"page\"" in nav
     assert "aria-label=\"Employee tabs\"" in nav
 
 
-def test_employee_console_base_renders_five_tabs():
+def test_employee_console_base_renders_six_tabs():
     app = Flask(__name__, template_folder=str(ROOT / "app/templates"), static_folder=str(ROOT / "app/static"))
 
     with app.test_request_context("/employee/tables"):
         html = render_template("employee_console_base.html", active_tab="tables", sync_label="synced")
 
     assert "employee_console.css" in html
-    assert html.count('class="cc-tab') == 5
+    assert html.count('class="cc-tab') == 6
     assert 'href="/employee/tables"' in html
     assert 'aria-current="page"' in html
     assert 'aria-label="Sync status"' in html

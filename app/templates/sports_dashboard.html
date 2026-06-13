@@ -309,6 +309,8 @@
   @keyframes beat{0%,100%{box-shadow:0 0 0 0 var(--field)}50%{box-shadow:0 0 0 5px transparent}}
   @keyframes rise{from{opacity:0; transform:translateY(9px)}to{opacity:1; transform:none}}
 </style>
+{% if feed_url %}<script>window.SPORTS_FEED_URL = {{ feed_url|tojson }};</script>{% endif %}
+{% if employee_nav %}<style>body{padding-bottom:96px !important}</style>{% endif %}
 </head>
 <body>
   <header class="top">
@@ -824,5 +826,6 @@ if(WORLDCUP_MODE) applyWorldCupMode();
 renderFilters(); render(); tickClock(); setInterval(tickClock, 1000);
 loadLive(); setInterval(loadLive, 60000);
 </script>
+{% if employee_nav %}{% include "partials/_employee_nav.html" %}{% endif %}
 </body>
 </html>

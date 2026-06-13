@@ -50,6 +50,7 @@ EXEMPT_PREFIXES = (
     "/employee/shift-marketplace",  # Schedules V2 B9: ckai's marketplace DATA (/list) + ck's PAGE - self-guards employee_id (401 JSON).
     "/employee/shift-swaps",     # Schedules V2 B9: ckai's swap API (propose/accept/cancel + /list) - self-guards employee_id (401 JSON).
     "/employee/messages",        # Employee messaging: one prefix covers the PAGE GET /employee/messages (HTML; self-guards employee_id -> 302 /employee/login) AND the data endpoints /employee/messages/directory + /conversations + /thread/<id> + /send + /thread/<id>/read (each self-guards employee_id -> 401 JSON). Same treatment as /employee/my-schedule.
+    "/employee/sports",          # Employee Sports tab (Sam 2026-06-13): PAGE GET /employee/sports (HTML; self-guards employee_id -> 302 /employee/login) + DATA /employee/sports/data.json (self-guards -> 401 JSON). Same pattern as /employee/my-schedule.
     "/employee/setup",           # email-pivot: the emailed one-time setup link (GET /employee/setup/<token> page + /info + /complete) - the invited employee has no session yet; the single-use expiring sha256 token IS the auth. ckai.
     "/change-passcode",          # post-keypad-login, before main app
     "/install",                  # public PWA install instructions (was dropped in cb0d482, restored)

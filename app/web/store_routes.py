@@ -4168,14 +4168,32 @@ def sports_dashboard():
     ALWAYS shows the Houston DirecTV + Xfinity channel (number or
     "Not available") plus a details drawer. Houston / Central time.
 
-    Phase 1 (Sam 2026-06-13): renders the approved visual prototype on
-    self-contained SAMPLE DATA with verified Houston channel numbers.
-    The live score feed (ESPN provider sync + the /api/sports/*
-    blueprint in app/sports/) is the gated next phase. Same audience
-    gate as the rest of the Manager section."""
+    The board loads live games from the sibling /sports/data.json feed
+    (real games across all sports from ESPN, Houston-broadcast-mapped);
+    if that feed is unavailable it falls back to a built-in sample slate.
+    Same audience gate as the rest of the Manager section."""
     if not _manager_dashboard_ok():
         abort(403)
     return render_template("sports_dashboard.html")
+
+
+@store_bp.route("/sports/data.json", methods=["GET"])
+def sports_data():
+    """Live "what's on" feed for the Sports Board. Real games across all
+    sports (soccer/World Cup, MLB, NBA, NHL, WNBA, golf, tennis, ...) pulled
+    from ESPN's public scoreboard for a date window, normalized and tagged
+    with each game's carrying networks (the board maps those to the Houston
+    DirecTV / Xfinity channel). Cached ~60s in process. Same gate as the tab;
+    on any failure returns ok:false so the board keeps its sample slate."""
+    if not _manager_dashboard_ok():
+        abort(403)
+    try:
+        from app.sports.live_feed import get_live_games
+        games, meta = get_live_games()
+        return jsonify({"ok": True, "sample": False, "games": games, "meta": meta})
+    except Exception:
+        logging.getLogger(__name__).exception("sports live feed failed")
+        return jsonify({"ok": False, "sample": True, "games": [], "meta": {}})
 
 
 @store_bp.route("/manager/<page>", methods=["GET"])

@@ -59,6 +59,10 @@
     background:var(--amber-dim); border:1px solid #4a3c20; border-radius:999px;
     font-size:11px; color:var(--amber); letter-spacing:.04em; font-weight:600}
   .sample b{font-weight:700}
+  /* live state — flips amber "SAMPLE DATA" pill to a green "LIVE" pill */
+  .sample.islive{background:var(--field-dim); border-color:#1f6b3f; color:#7fe3ad}
+  .sample .livedot{width:8px; height:8px; border-radius:50%; background:var(--live);
+    box-shadow:0 0 8px var(--live); animation:beat 1.4s ease-in-out infinite; flex-shrink:0}
   .sample-row{padding:14px 0 0}
 
   /* ---------- tabs ---------- */
@@ -441,7 +445,8 @@ function ctLabel(d){ const p=fmtParts(d,{weekday:"short",month:"short",day:"nume
 function ctTime(d){ const p=fmtParts(d,{hour:"numeric",minute:"2-digit",timeZoneName:"short"}); return `${p.hour}:${p.minute} ${p.dayPeriod} ${p.timeZoneName}`; }
 
 /* ---- sample data (mid-June 2026); off = minutes from now ---- */
-const SPORTS = {soccer:"\u26BD", baseball:"\u26BE", basketball:"\uD83C\uDFC0", hockey:"\uD83C\uDFD2", football:"\uD83C\uDFC8"};
+const SPORTS = {soccer:"\u26BD", baseball:"\u26BE", basketball:"\uD83C\uDFC0", hockey:"\uD83C\uDFD2", football:"\uD83C\uDFC8",
+  golf:"\u26F3", tennis:"\uD83C\uDFBE", mma:"\uD83E\uDD4A", racing:"\uD83C\uDFC1"};
 const RAW = [
   {id:"wc-hou", league:"FIFA World Cup", sport:"soccer", round:"Group A", status:"in_progress", detail:"34'",
    off:-34, venue:"NRG Stadium", city:"Houston, TX", nets:["FS1","Telemundo"],
@@ -482,14 +487,19 @@ const RAW = [
 ];
 
 const LIVE_STATES = ["in_progress","halftime","delayed"];
-const now0 = Date.now();
-const GAMES = RAW.map(g=>{
-  const startISO = new Date(now0 + g.off*60000).toISOString();
-  const d = new Date(startISO);
-  return {...g, startISO, startDate:d, dateKey:ctDateKey(d), label:ctLabel(d), time:ctTime(d),
-    isLive:LIVE_STATES.includes(g.status), isFinal:g.status==="final",
-    broadcast:resolveBroadcast(g.league, g.nets)};
-});
+/* Build the working game list from either the sample slate (uses `off` =
+   minutes-from-now) or the live feed (uses real `start_utc` ISO). */
+function buildGames(list){
+  const now0 = Date.now();
+  return list.map(g=>{
+    const startISO = g.start_utc || new Date(now0 + (g.off||0)*60000).toISOString();
+    const d = new Date(startISO);
+    return {...g, startISO, startDate:d, dateKey:ctDateKey(d), label:ctLabel(d), time:ctTime(d),
+      isLive:LIVE_STATES.includes(g.status), isFinal:g.status==="final",
+      broadcast:resolveBroadcast(g.league, g.nets||[])};
+  });
+}
+let GAMES = buildGames(RAW);   // sample slate first; replaced by the live feed
 
 /* ---- state ---- */
 const state = {
@@ -515,7 +525,7 @@ const short = p => SHORT[p] || p;
 
 function inFavorites(g){
   return state.favGames.has(g.id) || state.favLeagues.has(g.league) ||
-         state.favTeams.has(g.home.name) || state.favTeams.has(g.away.name);
+         state.favTeams.has(g.home.name) || (g.away && state.favTeams.has(g.away.name));
 }
 
 /* ---- bucketing (mirror of sports_core.py) ---- */
@@ -536,7 +546,7 @@ function bucket(tab){
   if(state.league) list = list.filter(g=>g.league===state.league);
   if(state.query){
     const q = state.query.toLowerCase();
-    list = list.filter(g=>[g.home.name,g.away.name,g.home.abbr,g.away.abbr,g.league,g.venue,g.city,g.nets.join(" ")]
+    list = list.filter(g=>[g.home.name,g.away?.name,g.home.abbr,g.away?.abbr,g.league,g.venue,g.city,(g.nets||[]).join(" ")]
       .join(" ").toLowerCase().includes(q));
   }
   const rank = g => g.isLive?0 : (["scheduled","pre"].includes(g.status)?1:2);
@@ -595,6 +605,7 @@ function statusPill(g){
   return `<span class="pill sched">${p.hour}:${p.minute} ${p.dayPeriod}</span>`;
 }
 function teamClasses(g){
+  if(!g.away) return ["win", null];   // single-entity event (golf tournament, etc.)
   const h=g.home.score, a=g.away.score;
   if(h==null||a==null) return ["win","win"];
   if(h>a) return ["win","lose"]; if(a>h) return ["lose","win"]; return ["win","win"];
@@ -610,7 +621,7 @@ function card(g){
       ${statusPill(g)}
     </div>
     <div class="c-body">
-      <div class="teams">${teamRow(g.home,hc)}${teamRow(g.away,ac)}</div>
+      <div class="teams">${teamRow(g.home,hc)}${g.away?teamRow(g.away,ac):""}</div>
       ${chans(g.broadcast)}
     </div>
     <div class="c-foot">
@@ -688,8 +699,8 @@ function openDrawer(id){
       <div class="d-matchup">
         <div class="d-team ${hc}"><span class="mono-logo" style="background:${esc(g.home.color)}">${esc(g.home.abbr)}</span>
           <span class="nm">${esc(g.home.name)}</span><span class="score">${g.home.score==null?"":g.home.score}</span></div>
-        <div class="d-team ${ac}"><span class="mono-logo" style="background:${esc(g.away.color)}">${esc(g.away.abbr)}</span>
-          <span class="nm">${esc(g.away.name)}</span><span class="score">${g.away.score==null?"":g.away.score}</span></div>
+        ${g.away?`<div class="d-team ${ac}"><span class="mono-logo" style="background:${esc(g.away.color)}">${esc(g.away.abbr)}</span>
+          <span class="nm">${esc(g.away.name)}</span><span class="score">${g.away.score==null?"":g.away.score}</span></div>`:""}
       </div>
       <div class="d-status">${statusPill(g)}</div>
       <dl class="d-info">
@@ -753,8 +764,33 @@ document.getElementById("grid").addEventListener("keydown", e=>{
 document.getElementById("scrim").addEventListener("click", closeDrawer);
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeDrawer(); });
 
+/* ---- live feed ---- */
+/* Pull real games across all sports from the server feed (/sports/data.json:
+   ESPN, Houston-broadcast-mapped, cached ~60s). The page renders the sample
+   slate instantly, then swaps to live as soon as the feed answers, and
+   refreshes every 60s. If the feed ever fails, the sample slate stays up. */
+const FEED_URL = (window.SPORTS_FEED_URL) || (location.pathname.replace(/\/+$/,"") + "/data.json");
+function setLiveBanner(count){
+  const el = document.querySelector(".sample");
+  if(!el) return;
+  el.classList.add("islive");
+  el.innerHTML = `<span class="livedot"></span> <b>LIVE</b> · ${count} games on now &amp; upcoming · all times Houston · auto-updates`;
+}
+async function loadLive(){
+  try{
+    const r = await fetch(FEED_URL, {headers:{"Accept":"application/json"}, credentials:"same-origin"});
+    if(!r.ok) return;
+    const j = await r.json();
+    if(!j || !j.ok || !Array.isArray(j.games) || !j.games.length) return;
+    GAMES = buildGames(j.games);
+    renderFilters(); render();
+    setLiveBanner(j.games.length);
+  }catch(e){ /* keep the sample slate */ }
+}
+
 /* ---- init ---- */
 renderFilters(); render(); tickClock(); setInterval(tickClock, 1000);
+loadLive(); setInterval(loadLive, 60000);
 </script>
 </body>
 </html>

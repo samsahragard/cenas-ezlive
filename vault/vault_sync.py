@@ -367,8 +367,15 @@ def walk_root(root, skip_prefixes_normed, runlog, manifest):
 # http
 # ---------------------------------------------------------------------------
 
-def http_call(base_url, token, method, path_qs, body=None, headers=None):
-    """Returns (status, bytes). status 0 = transport-level failure."""
+# Render's edge intermittently returns 404 "no-server" / 502 / 503 while it
+# rebalances routing to a healthy single instance. These are TRANSPORT blips,
+# not real answers, so the worker retries them with backoff. Each urllib call
+# is a fresh connection, so a retry usually lands on a good edge path.
+_TRANSIENT = (404, 502, 503, 504, 0)
+_MAX_TRIES = 5
+
+
+def _http_once(base_url, token, method, path_qs, body=None, headers=None):
     req = urllib.request.Request(base_url + path_qs, data=body, method=method)
     cred = base64.b64encode(("sam:" + token).encode("utf-8")).decode("ascii")
     req.add_header("Authorization", "Basic " + cred)
@@ -385,6 +392,24 @@ def http_call(base_url, token, method, path_qs, body=None, headers=None):
         return exc.code, data
     except (urllib.error.URLError, OSError) as exc:
         return 0, str(exc).encode("ascii", "replace")
+
+
+def http_call(base_url, token, method, path_qs, body=None, headers=None):
+    """Returns (status, bytes). status 0 = transport-level failure.
+    Retries transient Render-edge failures (404 no-server / 5xx / transport)
+    with linear backoff. A 404 carrying the 'no-server' marker is treated as
+    transient; a 404 from the app itself (JSON body) is returned as-is."""
+    status, data = _http_once(base_url, token, method, path_qs, body, headers)
+    tries = 1
+    while status in _TRANSIENT and tries < _MAX_TRIES:
+        # A real app 404 (unknown hash) returns a JSON body; the edge no-server
+        # 404 returns plain "Not Found". Only retry the edge flavor.
+        if status == 404 and b"not_found" in (data or b"").lower():
+            break
+        time.sleep(1.5 * tries)
+        status, data = _http_once(base_url, token, method, path_qs, body, headers)
+        tries += 1
+    return status, data
 
 
 def resp_ok(status, data):

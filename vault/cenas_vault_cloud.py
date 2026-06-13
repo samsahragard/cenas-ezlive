@@ -1552,6 +1552,23 @@ class VaultHandler(BaseHTTPRequestHandler):
 
     # -- GET ----------------------------------------------------------------
     def do_GET(self):
+        # UNAUTHENTICATED health check (must precede the auth wall) so Render's
+        # router has a definitive 200 signal and keeps this instance in
+        # rotation. Leaks nothing -- static {"ok": true}. Set as the service
+        # healthCheckPath. Without it, an all-auth-walled service gives the
+        # edge no positive HTTP signal and routing flaps ("no-server" 404s).
+        if urllib.parse.urlsplit(self.path).path == "/healthz":
+            body = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except Exception:
+                pass
+            return
         if not self._authed():
             return
         try:

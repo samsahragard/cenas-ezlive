@@ -286,8 +286,30 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             self._sync_manifest()
         elif route == "/sync/file":
             self._sync_file_get()
+        elif route == "/debug/snap":
+            self._debug_snap()
         else:
             self._json({"ok": False, "error": "not_found"}, 404)
+
+    def _debug_snap(self):
+        """TEMP diagnostic (authed): what the engine actually sees on disk."""
+        import os as _os
+        info = {}
+        for k in ("CENA_CLOUD_ROOT", "CENA_L3_SNAPSHOT_DIR", "CENA_L3_SRC_APPDB",
+                  "CENA_L3_DATA_DIR", "CENA_MEMORY_DB"):
+            info["env_" + k] = _os.environ.get(k)
+        for label, d in (("cloud_root", _os.environ.get("CENA_CLOUD_ROOT")),
+                         ("snap_dir", _os.environ.get("CENA_L3_SNAPSHOT_DIR"))):
+            try:
+                info["listdir_" + label] = sorted(_os.listdir(d)) if d and _os.path.isdir(d) else f"NOT A DIR: {d}"
+            except Exception as e:
+                info["listdir_" + label] = f"ERR {e}"
+        try:
+            from cena_engine.cena_sql_executor import snapshot_status
+            info["snapshot_status"] = snapshot_status()
+        except Exception as e:
+            info["snapshot_status"] = f"ERR {type(e).__name__}: {e}"
+        self._json({"ok": True, "debug": info})
 
     # -- POST ---------------------------------------------------------------
     def do_POST(self):

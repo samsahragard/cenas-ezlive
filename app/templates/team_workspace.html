@@ -509,8 +509,23 @@
       var m = doc.querySelector("main.main");
       if (m) { m.style.setProperty("margin", "0", "important"); m.style.setProperty("padding", "0", "important"); m.style.setProperty("width", "100%", "important"); m.style.setProperty("max-width", "100%", "important"); }
       if (isMarketFrame) {
-        frame.style.setProperty("height", "78vh", "important");
-        frame.style.removeProperty("min-height");
+        var isPhoneMarket = frame.getBoundingClientRect && frame.getBoundingClientRect().width <= 560;
+        if (!isPhoneMarket) {
+          frame.style.setProperty("height", "78vh", "important");
+          frame.style.removeProperty("min-height");
+          reveal(frame);
+          return;
+        }
+        var box = doc.querySelector(".sv2-mk") || doc.body;
+        var fitMarket = function () {
+          var rect = box && box.getBoundingClientRect ? box.getBoundingClientRect() : null;
+          var h = Math.ceil((rect && rect.height) || (box && box.scrollHeight) || 0);
+          var target = h + 18;
+          var current = parseFloat(frame.style.height) || 0;
+          if (target > 0 && Math.abs(target - current) > 2) frame.style.setProperty("height", target + "px", "important");
+        };
+        fitMarket(); setTimeout(fitMarket, 400); setTimeout(fitMarket, 1200);
+        if (window.ResizeObserver && box) { try { new ResizeObserver(fitMarket).observe(box); } catch (e) {} }
         reveal(frame);
         return;
       }

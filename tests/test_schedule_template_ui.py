@@ -109,7 +109,9 @@ def test_market_iframe_skips_auto_height_feedback_loop():
     assert ".ck-page-body>.sv2-mk,.sv2-mk{display:block!important;flex:0 0 auto!important" in template
     assert "overflow-x:hidden!important" in template
     assert ".sv2-mk:only-child" not in template
-    assert 'if (isMarketFrame) {\n        frame.style.setProperty("height", "78vh", "important");' in template
+    assert "var isPhoneMarket = frame.getBoundingClientRect && frame.getBoundingClientRect().width <= 560;" in template
+    assert 'if (!isPhoneMarket) {\n          frame.style.setProperty("height", "78vh", "important");' in template
+    assert "new ResizeObserver(fitMarket).observe(box)" in template
     assert "reveal(frame);\n        return;\n      }\n      // Sam #2888" in template
     assert "new ResizeObserver(fit).observe(doc.body)" in template
     assert "Math.abs(target - current) > 2" in template

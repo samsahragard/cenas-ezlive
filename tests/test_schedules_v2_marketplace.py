@@ -151,6 +151,8 @@ def test_marketplace_has_mobile_card_table_layout():
 
     assert "@media (max-width: 780px)" in template
     assert ".sv2-mk table{min-width:0" in template
+    assert ".sv2-mk,.sv2-mk .mk-surface,.sv2-mk .mk-pad{max-width:100%;overflow-x:clip}" in template
+    assert "margin-right:0;scrollbar-width:none" in template
     assert ".sv2-mk thead{display:none}" in template
     assert "content:attr(data-label)" in template
     assert 'data-label="Shift"' in template

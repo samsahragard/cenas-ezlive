@@ -95,6 +95,8 @@ def test_team_pages_render_and_roster_is_section_grouped(app_with_partner):
             assert f'data-sub="{sub}"' in html, f"missing tab {sub} on /{slug}/team"
         for key in ("week-uno", "week-dos", "market-uno", "market-dos"):
             assert key in html, f"missing per-store frame {key} on /{slug}/team"
+        assert 'data-src="/uno/schedules-v2/marketplace?embed=1"' in html
+        assert 'data-src="/dos/schedules-v2/marketplace?embed=1"' in html
         assert "data-add-section" in html, f"missing section +Add wiring on /{slug}/team"
         assert "openAddFor" in html
 

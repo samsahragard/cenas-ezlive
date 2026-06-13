@@ -93,22 +93,25 @@
   .sv2-mk .toast.err{background:#8a1d18}
   @media (max-width: 780px){
     .sv2-mk{padding:16px}
+    .sv2-mk,.sv2-mk .mk-surface,.sv2-mk .mk-pad{max-width:100%;overflow-x:clip}
     .sv2-mk .mk-stats{grid-template-columns:1fr 1fr}
-    .sv2-mk .mk-chips{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:4px;margin-right:-6px}
+    .sv2-mk .mk-chips{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;max-width:100%;padding-bottom:4px;margin-right:0;scrollbar-width:none}
+    .sv2-mk .mk-chips::-webkit-scrollbar{display:none}
     .sv2-mk .mk-chip{flex:0 0 auto}
     .sv2-mk .mk-filters{display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .sv2-mk .mk-filters select,.sv2-mk .mk-filters input{width:100%;min-width:0}
-    .sv2-mk .mk-pad{padding:14px;overflow-x:visible}
+    .sv2-mk .mk-pad{padding:14px}
     .sv2-mk table{min-width:0;font-size:12.5px}
     .sv2-mk thead{display:none}
     .sv2-mk tbody,.sv2-mk tr,.sv2-mk td{display:block;width:100%}
     .sv2-mk tbody tr{background:#fff8ec;border:1px solid #ead9b4;border-radius:10px;margin-bottom:10px;padding:10px 12px;box-shadow:0 2px 0 rgba(42,29,16,.05)}
     .sv2-mk tbody tr:last-child{margin-bottom:0}
-    .sv2-mk tbody td{border-bottom:1px solid #ead9b4;padding:8px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;text-align:right}
+    .sv2-mk tbody td{border-bottom:1px solid #ead9b4;padding:8px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;text-align:right;min-width:0;overflow-wrap:anywhere}
+    .sv2-mk tbody td > *{min-width:0}
     .sv2-mk tbody td::before{content:attr(data-label);flex:0 0 86px;text-align:left;color:var(--mk-ink-soft);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
     .sv2-mk tbody td:last-child{border-bottom:0}
     .sv2-mk td.swap-arrow{display:none}
-    .sv2-mk tbody td.actions{display:flex;justify-content:flex-start;gap:8px;padding-top:10px;text-align:left}
+    .sv2-mk tbody td.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));justify-content:flex-start;gap:8px;padding-top:10px;text-align:left}
     .sv2-mk tbody td.actions::before{display:none}
     .sv2-mk .actions .btn{flex:1 1 auto;padding:8px 10px}
     .sv2-mk .mk-empty-row{display:block;text-align:center;padding:24px 8px}

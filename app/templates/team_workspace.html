@@ -1,8 +1,8 @@
 {% extends "base_dashboard.html" %}
 {# ============================================================
    team_workspace.html -- PROJECT 1 (Team + Schedule unify, Sam #2261).
-   The Operations "Team" tab opens into ONE workspace with three sub-tabs:
-     [ Team | Schedule | Market ]
+   The Operations "Team" tab opens into ONE workspace with five sub-tabs:
+     [ Team | Schedule | Market | Link | Schedule Reports ]
    - Team   = the unified roster (SCREEN 01): All/BOH/FOH + Add, location +
               position filters, 3 stat cards, grouped by store. Binds to
               aick's GET team/roster contract (#2296). Built here, in-page.
@@ -343,6 +343,7 @@
     <a class="tws-tab"        href="?sub=schedule" data-sub="schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
     <a class="tws-tab"        href="?sub=market"   data-sub="market"   role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
     <a class="tws-tab"        href="?sub=link"     data-sub="link"     role="tab"><i class="ti ti-link"></i>Link</a>
+    <a class="tws-tab"        href="?sub=schedule-reports" data-sub="schedule-reports" role="tab"><i class="ti ti-report-analytics"></i>Schedule Reports</a>
   </div>
 
   {# ---- TEAM panel (the new roster; binds to aick's contract) ----
@@ -444,6 +445,17 @@
   <div class="tws-panel" id="tws-panel-link" data-sub-panel="link" role="tabpanel">
     <p class="tws-sub">Match each Cena team member to their Toast employee. You confirm every match; once verified, that person's Toast hours, timecards and pay load onto their Cena profile.</p>
     <div id="tws-link-rows" class="tws-link-rows"><div class="tws-empty">Loading team...</div></div>
+  </div>
+
+  {# ---- SCHEDULE REPORTS panel: the existing date-range schedule report,
+     relocated from the Operations top nav so it sits beside Link. ---- #}
+  <div class="tws-panel" id="tws-panel-schedule-reports" data-sub-panel="schedule-reports" role="tabpanel">
+    <div class="tws-embed-loading" data-embed-loading="schedule-reports"><span class="tws-embed-dot"></span><span>Loading Schedule Reports</span></div>
+    <iframe class="tws-embed-frame"
+            data-embed-frame="schedule-reports"
+            data-src="{{ schedule_reports_url }}?embed=1"
+            title="Schedule Reports"
+            loading="lazy"></iframe>
   </div>
 
   {# Positions THIS manager may add -- server-sourced from addable_positions_for()
@@ -613,6 +625,7 @@
     if (sub === "schedule") loadSchedFrame(activeSub2);   // load the active Schedule sub-tab's iframe(s)
     else if (sub === "market") loadMarketFrames();        // S7: both stores' marketplace iframes
     else if (sub === "link") loadLink();             // Sam #2629
+    else if (sub === "schedule-reports") loadFrame("schedule-reports");
   }
   tabs.forEach(function (t) {
     t.addEventListener("click", function (e) { e.preventDefault(); show(t.getAttribute("data-sub")); });

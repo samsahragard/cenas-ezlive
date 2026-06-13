@@ -2,7 +2,7 @@
 
 Verifies, against a real app render with data seeded through the proven +Add
 endpoint:
-  1. /uno/team and /dos/team render (200) with the 4 tabs, the per-store
+  1. /uno/team and /dos/team render (200) with the 5 tabs, the per-store
      Schedule/Market iframes (S7), and the section-scoped +Add wiring (S8).
   2. The /<store>/schedules-v2/team-roster JSON the page's JS consumes is
      section-grouped per store (management[] / hourly[]) -- the backend
@@ -91,12 +91,14 @@ def test_team_pages_render_and_roster_is_section_grouped(app_with_partner):
         r = client.get(f"/{slug}/team")
         assert r.status_code == 200, r.get_data(as_text=True)[:500]
         html = r.get_data(as_text=True)
-        for sub in ("team", "schedule", "market", "link"):
+        for sub in ("team", "schedule", "market", "link", "schedule-reports"):
             assert f'data-sub="{sub}"' in html, f"missing tab {sub} on /{slug}/team"
         for key in ("week-uno", "week-dos", "market-uno", "market-dos"):
             assert key in html, f"missing per-store frame {key} on /{slug}/team"
         assert 'data-src="/uno/schedules-v2/marketplace?embed=1"' in html
         assert 'data-src="/dos/schedules-v2/marketplace?embed=1"' in html
+        assert 'data-embed-frame="schedule-reports"' in html
+        assert 'data-src="/partner/schedule?embed=1"' in html
         assert "data-add-section" in html, f"missing section +Add wiring on /{slug}/team"
         assert "openAddFor" in html
 

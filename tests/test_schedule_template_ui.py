@@ -102,6 +102,17 @@ def test_link_tab_sorts_cena_profile_column_before_rendering_each_store_panel():
     assert "var uc = _sortByCenaName(d.unmatched_cena, function (c) { return c.name; });" in template
 
 
+def test_team_workspace_has_schedule_reports_beside_link():
+    template = _read("team_workspace.html")
+
+    assert 'data-sub="link"' in template
+    assert 'data-sub="schedule-reports"' in template
+    assert template.index('data-sub="link"') < template.index('data-sub="schedule-reports"')
+    assert 'data-embed-frame="schedule-reports"' in template
+    assert 'data-src="{{ schedule_reports_url }}?embed=1"' in template
+    assert 'loadFrame("schedule-reports")' in template
+
+
 def test_market_iframe_skips_auto_height_feedback_loop():
     template = _read("team_workspace.html")
 

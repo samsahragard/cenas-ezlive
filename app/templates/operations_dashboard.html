@@ -4,19 +4,18 @@
    (dck's just-reworked Catering dashboard) and manager_dashboard.html
    (samai's Manager dashboard). Per Sam: the bottom-nav Operations tab
    no longer opens a popover — it links straight here, and this page
-   is a tab strip across the seven operations surfaces, defaulting to
+   is a grouped tab strip across the operations surfaces, defaulting to
    the Team tab.
 
    DESIGN-CHANGE rework (Sam 2026-05-21, dck): each tab no longer
    shows a short preview + an "Open full page" link. Each tab now
    embeds the REAL, fully-functional operations page inline in an
    <iframe> — click a tab and the actual working page is right there
-   (Team -> /partner/team, Sales -> /<store>/reports/sales, Labor ->
-   /<store>/reports/labor, Performance ->
-   /<store>/reports/server-performance, Schedule -> /<store>/schedule,
-   Corporate Order -> /<store>/corporate-order). All existing
-   operations functionality is left as-is — the pages are simply
-   iframed, not rewritten.
+   (Team -> /<store>/team, Corporate Order -> /<store>/corporate-order,
+   Sections -> /<store>/sections, Analytics -> Performance/Sales/Labor/
+   Forecasts). All existing operations functionality is left as-is —
+   the pages are simply iframed, not rewritten. Schedule Reports now
+   lives under the Team workspace beside Link.
 
    FORECASTS is the exception: it is not a built page, so it has no
    real page to embed. Its tab keeps the coming-soon state — no
@@ -45,9 +44,16 @@
      active        -> 'operations_dashboard'
      store_label   -> str (store display name)
      today_label   -> str, e.g. "Wed, May 21"
-     active_tab    -> one of: team | forecasts | sales | labor |
-                      performance | schedule | corp-order
+     active_tab    -> one of: team | corp-order | sections | performance |
+                      sales | labor | forecasts
                       (default 'team'; from ?tab=, validated)
+     active_group  -> one of: team | corp-order | sections | analytics
+     tab_groups    -> ordered list[dict], one per parent tab:
+       key         (str)  — parent tab id
+       label       (str)  — parent tab caption
+       icon        (str)  — icon key from _opsd_icons
+       default_tab (str)  — leaf tab to open when parent is clicked
+       children    (list) — leaf tab dicts in that parent
      tabs          -> ordered list[dict], one per tab:
        key    (str)  — tab id, matches active_tab values
        label  (str)  — tab strip caption
@@ -275,6 +281,55 @@
   }
   .opsdash .opsd-tab.active .opsd-tab-icon { opacity: 1; }
 
+  .opsdash .opsd-subtab-bank {
+    background: rgba(0, 0, 0, 0.18);
+    border-top: 0.5px solid rgba(217, 164, 54, 0.12);
+    position: relative;
+    z-index: 1;
+  }
+  .opsdash .opsd-subtab-bank.hidden { display: none; }
+  .opsdash .opsd-subtabs {
+    display: flex;
+    gap: 8px;
+    padding: 9px 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .opsdash .opsd-subtabs::-webkit-scrollbar { display: none; }
+  .opsdash .opsd-subtabs.hidden { display: none; }
+  .opsdash .opsd-subtab {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border: 0.5px solid var(--opsd-border);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--opsd-cream-dim);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .opsdash .opsd-subtab:hover {
+    color: var(--opsd-cream);
+    border-color: var(--opsd-border-active);
+  }
+  .opsdash .opsd-subtab.active {
+    color: #1a0d08;
+    background: var(--opsd-accent);
+    border-color: var(--opsd-accent);
+  }
+  .opsdash .opsd-subtab.active .opsd-soon {
+    color: rgba(26, 13, 8, 0.74);
+    background: rgba(26, 13, 8, 0.08);
+    border-color: rgba(26, 13, 8, 0.22);
+  }
+
   /* SOON badge — on a tab whose surface is not built yet (Forecasts).
      Lifted from Sam's operations reference. */
   .opsdash .opsd-soon {
@@ -399,6 +454,8 @@
     .opsdash .opsd-tabs { padding: 0 8px; }
     .opsdash .opsd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .opsdash .opsd-tab-icon { width: 12px; height: 12px; }
+    .opsdash .opsd-subtabs { padding: 8px; gap: 6px; }
+    .opsdash .opsd-subtab { padding: 8px 10px; font-size: 11px; }
     .opsdash .opsd-content-wrap { margin-top: 14px; }
     .opsdash .opsd-panel { border-radius: 12px; }
     .opsdash .opsd-embed-frame {
@@ -422,6 +479,7 @@
    missing. Glyphs lifted from Sam's operations reference. #}
 {% set _opsd_icons = {
   'team':        '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>',
+  'analytics':   '<path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/>',
   'forecasts':   '<path d="M2.5 19.5l5.5-5.5 4 4 7-7L20.5 12V5h-7l2.5 2.5-5 5-4-4L2.5 14V19.5z"/>',
   'sales':       '<path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>',
   'labor':       '<path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/>',
@@ -452,33 +510,46 @@
       <div class="opsd-rule"></div>
     </div>
 
-    {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;
-       JS upgrades them to in-page panel swaps. #}
+    {# PARENT TAB STRIP — real anchors to each group's default ?tab=KEY
+       so it works without JS; JS upgrades them to in-page panel swaps. #}
     <div class="opsd-tabs" id="opsdTabs" role="tablist">
-      {% for t in tabs %}
-      {% if t.linkout %}
-      {# LINK-OUT tab (schedule): a full-page nav to the V2 area, NOT an in-dash
-         iframe (samai #2165). No data-tab, so the panel-swap JS leaves it alone
-         and the browser navigates; target=_top in case the dash is ever framed. #}
-      <a class="opsd-tab"
-         href="{{ t.url }}"
-         target="_top"
+      {% for grp in tab_groups %}
+      <a class="opsd-tab opsd-group-tab{% if grp.key == active_group %} active{% endif %}"
+         href="?tab={{ grp.default_tab }}"
          role="tab"
-         aria-selected="false">
-        <svg class="opsd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _opsd_icons.get(t.key, _opsd_icons['team'])|safe }}</svg>
-        <span class="opsd-tab-label">{{ t.label }}</span>
+         data-tab-group="{{ grp.key }}"
+         data-tab-default="{{ grp.default_tab }}"
+         aria-selected="{{ 'true' if grp.key == active_group else 'false' }}">
+        <svg class="opsd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _opsd_icons.get(grp.icon, _opsd_icons['team'])|safe }}</svg>
+        <span class="opsd-tab-label">{{ grp.label }}</span>
       </a>
-      {% else %}
-      <a class="opsd-tab{% if t.key == active_tab %} active{% endif %}"
-         href="?tab={{ t.key }}"
-         role="tab"
-         data-tab="{{ t.key }}"
-         aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
-        <svg class="opsd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _opsd_icons.get(t.key, _opsd_icons['team'])|safe }}</svg>
-        <span class="opsd-tab-label">{{ t.label }}</span>
-        {% if t.coming %}<span class="opsd-soon">soon</span>{% endif %}
-      </a>
-      {% endif %}
+      {% endfor %}
+    </div>
+
+    {# CHILD TAB STRIP — Analytics only for now. Single parent tabs stay
+       true top-level tabs with no extra row. #}
+    {% set _active_has_subtabs = namespace(value=false) %}
+    {% for grp in tab_groups if grp.key == active_group and grp.children|length > 1 %}
+      {% set _active_has_subtabs.value = true %}
+    {% endfor %}
+    <div class="opsd-subtab-bank{% if not _active_has_subtabs.value %} hidden{% endif %}" id="opsdSubtabBank">
+      {% for grp in tab_groups if grp.children|length > 1 %}
+      <div class="opsd-subtabs{% if grp.key != active_group %} hidden{% endif %}"
+           data-subtabs="{{ grp.key }}"
+           role="tablist"
+           aria-label="{{ grp.label }} tabs">
+        {% for child in grp.children %}
+        <a class="opsd-subtab opsd-leaf-tab{% if child.key == active_tab %} active{% endif %}"
+           href="?tab={{ child.key }}"
+           role="tab"
+           data-tab="{{ child.key }}"
+           data-parent-group="{{ grp.key }}"
+           aria-selected="{{ 'true' if child.key == active_tab else 'false' }}">
+          <span class="opsd-subtab-label">{{ child.label }}</span>
+          {% if child.coming %}<span class="opsd-soon">soon</span>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
       {% endfor %}
     </div>
 
@@ -533,9 +604,9 @@
   /* Operations dashboard — tab switching plus iframe lazy-load and the
      per-iframe chrome strip.
 
-     The tabs are real <a href="?tab=KEY"> links, so with JS off the
-     route serves the right tab server-side. With JS on, clicking a tab
-     swaps the visible panel in place (no navigation).
+     The parent and child tabs are real <a href="?tab=KEY"> links, so
+     with JS off the route serves the right tab server-side. With JS on,
+     clicking a tab swaps the visible panel in place (no navigation).
 
      Each built tab's panel holds ONE iframe of the real, fully-
      functional operations page. The iframe carries data-src, not src —
@@ -559,7 +630,9 @@
   var _IFCB = Date.now();
   var root = document.getElementById("opsdash");
   if (!root) return;
-  var tabs = root.querySelectorAll(".opsd-tab");
+  var groupTabs = root.querySelectorAll(".opsd-group-tab");
+  var leafTabs = root.querySelectorAll(".opsd-leaf-tab");
+  var subtabRows = root.querySelectorAll(".opsd-subtabs");
   var panels = root.querySelectorAll(".opsd-panel");
   var loaded = {};   // tab key -> true once its iframe src has been set
 
@@ -663,12 +736,41 @@
     frame.setAttribute("src", bustedSrc);
   }
 
+  function groupForKey(key) {
+    var leaf = root.querySelector('.opsd-leaf-tab[data-tab="' + key + '"]');
+    if (leaf) return leaf.getAttribute("data-parent-group");
+    var group = root.querySelector('.opsd-group-tab[data-tab-default="' + key + '"]');
+    return group ? group.getAttribute("data-tab-group") : null;
+  }
+
+  function syncUrl(key) {
+    /* Keep the URL in sync so a refresh / share lands on the same tab,
+       without adding a history entry per tap. */
+    try {
+      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
+    } catch (err) { /* history API unavailable — panel swap still works */ }
+  }
+
   function activate(key) {
-    tabs.forEach(function (t) {
+    var groupKey = groupForKey(key);
+    var hasSubtabs = false;
+    groupTabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab-group") === groupKey;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    leafTabs.forEach(function (t) {
       var on = t.getAttribute("data-tab") === key;
       t.classList.toggle("active", on);
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
+    subtabRows.forEach(function (row) {
+      var on = row.getAttribute("data-subtabs") === groupKey;
+      row.classList.toggle("hidden", !on);
+      hasSubtabs = hasSubtabs || on;
+    });
+    var subtabBank = root.querySelector("#opsdSubtabBank");
+    if (subtabBank) subtabBank.classList.toggle("hidden", !hasSubtabs);
     panels.forEach(function (p) {
       p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
     });
@@ -676,26 +778,33 @@
   }
 
   root.querySelector("#opsdTabs").addEventListener("click", function (e) {
-    var tab = e.target.closest(".opsd-tab");
+    var tab = e.target.closest(".opsd-group-tab");
     if (!tab) return;
-    var key = tab.getAttribute("data-tab");
-    if (!key) return;   // link-out tab (no data-tab, e.g. Schedule -> V2): let the browser follow its href
     e.preventDefault();
+    var key = tab.getAttribute("data-tab-default");
     activate(key);
-    /* Keep the URL in sync so a refresh / share lands on the same tab,
-       without adding a history entry per tap. */
-    try {
-      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
-    } catch (err) { /* history API unavailable — panel swap still works */ }
+    syncUrl(key);
   });
+
+  var subtabBankEl = root.querySelector("#opsdSubtabBank");
+  if (subtabBankEl) {
+    subtabBankEl.addEventListener("click", function (e) {
+      var tab = e.target.closest(".opsd-leaf-tab");
+      if (!tab) return;
+      e.preventDefault();
+      var key = tab.getAttribute("data-tab");
+      activate(key);
+      syncUrl(key);
+    });
+  }
 
   /* Load the iframe for the tab that is active on page load (the
      default tab, team, unless ?tab= deep-linked another). The other
      iframes stay unloaded until their tab is clicked; if the active
      tab is Forecasts there is no iframe and this is a no-op. */
   var startTab = (function () {
-    var activeTabEl = root.querySelector(".opsd-tab.active");
-    return activeTabEl ? activeTabEl.getAttribute("data-tab") : null;
+    var activePanel = root.querySelector(".opsd-panel:not(.hidden)");
+    return activePanel ? activePanel.getAttribute("data-tab-panel") : null;
   })();
   if (startTab) loadFrame(startTab);
 })();

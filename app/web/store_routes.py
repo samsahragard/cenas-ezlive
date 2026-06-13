@@ -6074,7 +6074,7 @@ def catering_dashboard():
 # Structural twin of the Catering dashboard above (itself a twin of the
 # Manager dashboard). The bottom-nav Operations tab no longer opens a
 # sub-option popover — it links straight here. This route renders
-# operations_dashboard.html: a tab strip across the seven operations
+# operations_dashboard.html: a grouped tab strip across the operations
 # surfaces, defaulting to the Team tab.
 #
 # DESIGN-CHANGE rework (Sam 2026-05-21, dck): each tab no longer shows a
@@ -6089,20 +6089,46 @@ def catering_dashboard():
 # page to embed. Its tab keeps the coming-soon state (no iframe, no
 # link), exactly as before.
 
-# Ordered tab spec: (tab key, caption, coming-soon flag). The key
+# Ordered leaf-tab spec: (tab key, caption, coming-soon flag). The key
 # matches the active_tab values operations_dashboard.html expects. The
-# first entry is the default tab. The per-tab url is built per-request
-# by _operations_dash_full_url since the tabs point at a mix of
-# store-scoped and flat routes, and the coming-soon tab gets no url.
+# first entry is the default leaf tab. The per-tab url is built
+# per-request by _operations_dash_full_url since the tabs point at a mix
+# of store-scoped and flat routes, and the coming-soon tab gets no url.
 _OPERATIONS_DASH_TABS = [
     ("team",        "Team",            False),
     ("corp-order",       "Corporate Order",  False),
+    ("sections",    "Sections",        False),   # Floor map / section assignment / host seating + reservations (ck Gate 2; docs/floor_contract.md)
+    ("performance", "Performance",     False),
     ("sales",       "Sales",           False),
     ("labor",       "Labor",           False),
-    ("performance", "Performance",     False),
-    ("sections",    "Sections",        False),   # Floor map / section assignment / host seating + reservations (ck Gate 2; docs/floor_contract.md)
-    ("schedule-reports", "Schedule Reports", False),
     ("forecasts",   "Forecasts",       True),
+]
+
+_OPERATIONS_DASH_GROUPS = [
+    {
+        "key": "team",
+        "label": "Team",
+        "icon": "team",
+        "tabs": ("team",),
+    },
+    {
+        "key": "corp-order",
+        "label": "Corporate Order",
+        "icon": "corp-order",
+        "tabs": ("corp-order",),
+    },
+    {
+        "key": "analytics",
+        "label": "Analytics",
+        "icon": "analytics",
+        "tabs": ("performance", "sales", "labor", "forecasts"),
+    },
+    {
+        "key": "sections",
+        "label": "Sections",
+        "icon": "team",
+        "tabs": ("sections",),
+    },
 ]
 
 
@@ -6268,7 +6294,9 @@ def team_workspace():
     # the Link tab shows Verify/Unlink to the partner only (the endpoints are partner-gated too).
     from app.web.permissions import load_current_user as _lcu
     _u = getattr(g, "current_user", None) or _lcu()
-    is_partner = bool(_u and (getattr(_u, "permission_level", "") or "").lower() == "partner")
+    _perm = (getattr(_u, "permission_level", "") or "").lower() if _u else ""
+    is_partner = bool(_perm == "partner")
+    _reports_store = _perm if _perm in ("partner", "corporate") else (getattr(g, "current_store", None) or store_slug)
 
     from flask import make_response as _make_response
     _resp = _make_response(render_template(
@@ -6286,6 +6314,7 @@ def team_workspace():
         schedule_stores=schedule_stores,
         schedule_store_default=schedule_store_default,
         link_store_default=schedule_store_default,
+        schedule_reports_url=url_for("store.schedule", store_slug=_reports_store),
         is_partner=is_partner,
     ))
     # Sam 2026-06-07: never serve a STALE Team Roster -- a cached old page is the
@@ -6303,10 +6332,10 @@ def operations_dashboard():
     in an iframe — except Forecasts, which is not built yet and shows a
     coming-soon state (no iframe). Structural twin of catering_dashboard.
 
-    This route is now a thin shell: it builds only the tab list (key,
-    label, url, coming) the template needs to point each iframe at its
-    page. No DB session is opened — the iframed pages run their own
-    queries when the browser loads them."""
+    This route is now a thin shell: it builds the leaf tab list (key,
+    label, url, coming) plus grouped parent navigation for the template.
+    No DB session is opened — the iframed pages run their own queries
+    when the browser loads them."""
     require_dashboard_access("dash.operations")
     dash_tab_specs = _OPERATIONS_DASH_TABS
     if current_role_is("expo"):
@@ -6315,27 +6344,47 @@ def operations_dashboard():
             if tab[0] in ("team", "corp-order")
         ]
     valid = {key for key, _, _ in dash_tab_specs}
-    active_tab = (request.args.get("tab") or "").strip().lower()
+    requested_tab = (request.args.get("tab") or "").strip().lower()
+    team_sub = "schedule-reports" if requested_tab == "schedule-reports" else ""
+    active_tab = "team" if team_sub else requested_tab
     if active_tab not in valid:
         active_tab = dash_tab_specs[0][0]
     if active_tab == "schedule":
         # 'schedule' is now a LINK-OUT to the V2 area (samai #2165) - it has no
         # in-dash panel, so a direct ?tab=schedule hit goes straight to V2.
         return redirect(_operations_dash_full_url("schedule"))
-    tabs = [
-        {
+    tabs = []
+    for key, caption, coming in dash_tab_specs:
+        tab_url = "" if coming else _operations_dash_full_url(key)
+        if key == "team" and team_sub:
+            tab_url = tab_url + ("&" if "?" in tab_url else "?") + "sub=" + team_sub
+        tabs.append({
             "key": key,
             "label": caption,
             "coming": coming,
             # Coming-soon surface has no real page to embed -> empty url.
-            "url": "" if coming else _operations_dash_full_url(key),
+            "url": tab_url,
             # 'schedule' is a LINK-OUT to the full V2 area (samai #2165): a real
             # full-page nav, NOT an in-dash iframe (the iframe chrome-strip would
             # hide V2 sub-nav cards like Add Staff). Every other tab stays iframe.
             "linkout": (key == "schedule"),
-        }
-        for key, caption, coming in dash_tab_specs
-    ]
+        })
+    tab_lookup = {tab["key"]: tab for tab in tabs}
+    tab_groups = []
+    active_group = "team"
+    for group in _OPERATIONS_DASH_GROUPS:
+        children = [tab_lookup[key] for key in group["tabs"] if key in tab_lookup]
+        if not children:
+            continue
+        if active_tab in group["tabs"]:
+            active_group = group["key"]
+        tab_groups.append({
+            "key": group["key"],
+            "label": group["label"],
+            "icon": group["icon"],
+            "children": children,
+            "default_tab": children[0]["key"],
+        })
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
     today_label = _today_label()
@@ -6345,6 +6394,8 @@ def operations_dashboard():
         store_label=label,
         today_label=today_label,
         active_tab=active_tab,
+        active_group=active_group,
+        tab_groups=tab_groups,
         tabs=tabs,
     )
 

@@ -127,6 +127,35 @@ def _manager_frame_src(html: str, key: str) -> str:
     return match.group(1)
 
 
+def _active_operations_group(html: str) -> str:
+    match = re.search(r'class="opsd-tab opsd-group-tab active"[^>]*data-tab-group="([^"]+)"', html)
+    assert match is not None
+    return match.group(1)
+
+
+def _active_operations_leaf(html: str) -> str | None:
+    match = re.search(r'class="opsd-subtab opsd-leaf-tab active"[^>]*data-tab="([^"]+)"', html)
+    return match.group(1) if match else None
+
+
+def _operations_panel_class(html: str, key: str) -> str:
+    match = re.search(
+        rf'<div class="([^"]*)"[^>]*data-tab-panel="{re.escape(key)}"',
+        html,
+    )
+    assert match is not None
+    return match.group(1)
+
+
+def _operations_frame_src(html: str, key: str) -> str:
+    match = re.search(
+        rf'<iframe class="opsd-embed-frame"[^>]*data-embed-frame="{re.escape(key)}"[^>]*data-src="([^"]+)"',
+        html,
+    )
+    assert match is not None
+    return match.group(1)
+
+
 def test_expo_today_and_operations_are_limited_to_allowed_tabs(dashboard_app):
     flask_app, db = dashboard_app
     expo = _seed_actor(db, uid=101, role="expo", position="Expo")
@@ -141,8 +170,8 @@ def test_expo_today_and_operations_are_limited_to_allowed_tabs(dashboard_app):
 
     ops = client.get("/dos/operations?tab=team")
     assert ops.status_code == 200
-    ops_tabs = _tab_keys(ops.get_data(as_text=True))
-    assert ops_tabs == {"team", "corp-order"}
+    ops_groups = _attr_values(ops.get_data(as_text=True), "data-tab-group")
+    assert ops_groups == ["team", "corp-order"]
 
     assert client.get("/dos/team").status_code == 200
     assert client.get("/dos/schedules-v2/team-roster").status_code == 200
@@ -164,9 +193,95 @@ def test_km_gets_manager_and_full_operations_tabs(dashboard_app):
 
     ops = client.get("/dos/operations?tab=sales")
     assert ops.status_code == 200
-    assert {"team", "corp-order", "sales", "labor", "performance"}.issubset(
-        _tab_keys(ops.get_data(as_text=True))
-    )
+    ops_html = ops.get_data(as_text=True)
+    assert _attr_values(ops_html, "data-tab-group") == [
+        "team",
+        "corp-order",
+        "analytics",
+        "sections",
+    ]
+    assert _attr_values(ops_html, "data-subtabs") == ["analytics"]
+    assert {"sales", "labor", "performance", "forecasts"}.issubset(_tab_keys(ops_html))
+
+
+def test_operations_dashboard_groups_analytics_and_keeps_team_default(dashboard_app):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=110, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    resp = client.get("/dos/operations")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert _attr_values(html, "data-tab-group") == [
+        "team",
+        "corp-order",
+        "analytics",
+        "sections",
+    ]
+    assert _attr_values(html, "data-tab-default")[:4] == [
+        "team",
+        "corp-order",
+        "performance",
+        "sections",
+    ]
+    assert _attr_values(html, "data-subtabs") == ["analytics"]
+    assert _active_operations_group(html) == "team"
+    assert _active_operations_leaf(html) is None
+    assert "hidden" not in _operations_panel_class(html, "team")
+    assert _operations_frame_src(html, "team") == "/dos/team"
+
+
+@pytest.mark.parametrize(
+    ("tab", "src"),
+    [
+        ("performance", "/dos/reports/server-performance"),
+        ("sales", "/dos/reports/sales"),
+        ("labor", "/dos/reports/labor"),
+    ],
+)
+def test_operations_dashboard_analytics_deep_links_select_child(dashboard_app, tab, src):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=111, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    resp = client.get(f"/dos/operations?tab={tab}")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert _active_operations_group(html) == "analytics"
+    assert _active_operations_leaf(html) == tab
+    assert "hidden" not in _operations_panel_class(html, tab)
+    assert _operations_frame_src(html, tab) == src
+
+
+def test_operations_dashboard_forecasts_deep_link_stays_under_analytics(dashboard_app):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=112, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    resp = client.get("/dos/operations?tab=forecasts")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert _active_operations_group(html) == "analytics"
+    assert _active_operations_leaf(html) == "forecasts"
+    assert "hidden" not in _operations_panel_class(html, "forecasts")
+    assert "Forecasts isn't live yet" in html
+
+
+def test_operations_schedule_reports_deep_link_opens_team_subtab(dashboard_app):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=113, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    resp = client.get("/dos/operations?tab=schedule-reports")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert _active_operations_group(html) == "team"
+    assert "hidden" not in _operations_panel_class(html, "team")
+    assert _operations_frame_src(html, "team") == "/dos/team?sub=schedule-reports"
 
 
 def test_manager_dashboard_groups_existing_pages_without_dropping_sports(dashboard_app):

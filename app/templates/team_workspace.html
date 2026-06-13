@@ -515,6 +515,8 @@
     if (doc) {
       var frameKey = frame.getAttribute("data-embed-frame") || "";
       var isMarketFrame = frameKey.indexOf("market-") === 0;
+      var isScheduleFrame = /^(week|timeoff|availability)-/.test(frameKey);
+      var isScheduleReportFrame = frameKey === "schedule-reports";
       [".sidebar", ".sidebar-overlay", ".dash-role-badge-bar", ".topbar", ".subnav-row", ".wordmark", ".ck-bnav"].forEach(function (s) { hideEl(doc, s); });
       try {
         var k = doc.createElement("style");
@@ -528,6 +530,15 @@
       if (lay) { lay.style.setProperty("grid-template-columns", "1fr", "important"); lay.style.setProperty("display", "block", "important"); }
       var m = doc.querySelector("main.main");
       if (m) { m.style.setProperty("margin", "0", "important"); m.style.setProperty("padding", "0", "important"); m.style.setProperty("width", "100%", "important"); m.style.setProperty("max-width", "100%", "important"); }
+      if (isScheduleFrame || isScheduleReportFrame) {
+        // Keep Schedule embeds fixed-height. Measuring the child page's
+        // scrollHeight and writing it back to the iframe creates a feedback
+        // loop on the Week Builder, making the page grow forever.
+        frame.style.setProperty("height", "78vh", "important");
+        frame.style.removeProperty("min-height");
+        reveal(frame);
+        return;
+      }
       if (isMarketFrame) {
         var isPhoneMarket = frame.getBoundingClientRect && frame.getBoundingClientRect().width <= 560;
         if (!isPhoneMarket) {
@@ -549,20 +560,6 @@
         reveal(frame);
         return;
       }
-      // Sam #2888: grow the embed to its CONTENT height so EVERY schedule row is
-      // visible by scrolling the page -- no cramped 78vh inner scrollbar. Re-measure
-      // on inner re-render (week switch / row sort) via ResizeObserver (same-origin).
-      try {
-        var fit = function () {
-          var h = 0;
-          h = (doc.body ? doc.body.scrollHeight : 0);
-          var target = h + 24;
-          var current = parseFloat(frame.style.height) || 0;
-          if (target > 0 && Math.abs(target - current) > 2) frame.style.setProperty("height", target + "px", "important");
-        };
-        fit(); setTimeout(fit, 400); setTimeout(fit, 1200);
-        if (window.ResizeObserver && doc.body) { try { new ResizeObserver(fit).observe(doc.body); } catch (e) {} }
-      } catch (e) {}
     }
     reveal(frame);
   }

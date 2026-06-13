@@ -123,8 +123,18 @@ def test_market_iframe_skips_auto_height_feedback_loop():
     assert "var isPhoneMarket = frame.getBoundingClientRect && frame.getBoundingClientRect().width <= 560;" in template
     assert 'if (!isPhoneMarket) {\n          frame.style.setProperty("height", "78vh", "important");' in template
     assert "new ResizeObserver(fitMarket).observe(box)" in template
-    assert "reveal(frame);\n        return;\n      }\n      // Sam #2888" in template
-    assert "new ResizeObserver(fit).observe(doc.body)" in template
-    assert "Math.abs(target - current) > 2" in template
+    assert "reveal(frame);\n        return;\n      }\n    }\n    reveal(frame);" in template
     assert ".tws-tabs, .tws-store-tabs, .tws-subbar { max-width: 100%; flex-wrap: nowrap; overflow-x: auto;" in template
     assert "#tws-panel-market, #tws-panel-market .tws-store-shell, #tws-panel-market .tws-embed-wrap { max-width: 100%; overflow-x: hidden; }" in template
+
+
+def test_schedule_iframes_skip_body_scrollheight_feedback_loop():
+    template = _read("team_workspace.html")
+
+    assert 'var isScheduleFrame = /^(week|timeoff|availability)-/.test(frameKey);' in template
+    assert 'var isScheduleReportFrame = frameKey === "schedule-reports";' in template
+    assert "if (isScheduleFrame || isScheduleReportFrame)" in template
+    assert 'frame.style.setProperty("height", "78vh", "important");' in template
+    assert "Week Builder, making the page grow forever" in template
+    assert "new ResizeObserver(fit).observe(doc.body)" not in template
+    assert "doc.body.scrollHeight" not in template

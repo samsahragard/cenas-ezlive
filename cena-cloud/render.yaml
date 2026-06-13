@@ -1,0 +1,24 @@
+# cena-cloud DB-receiver (Gate A). NOTE: service is created/managed via the
+# Render API, not this blueprint. healthCheckPath:/healthz is REQUIRED (an
+# all-auth-walled service flaps no-server 404s at the edge without it).
+services:
+  - type: web
+    name: cena-cloud
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: cena-cloud
+    buildCommand: pip install --upgrade pip
+    startCommand: python cena_cloud.py
+    healthCheckPath: /healthz
+    disk:
+      name: cena-db
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: CENA_CLOUD_TOKEN
+        sync: false
+      - key: CENA_CLOUD_ROOT
+        value: /var/data/cena-db
+      - key: CENA_CLOUD_DB
+        value: /var/data/cena_cloud_sync.db

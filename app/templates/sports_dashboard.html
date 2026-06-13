@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sports Board — Cenas Kitchen Manager Tabs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Saira+Condensed:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#11151C; --ink-2:#161D26; --surface:#19212C; --surface-2:#1F2935;
+    --line:#2A3340; --line-soft:#222B36;
+    --amber:#FFB23E; --amber-dim:#3a2f1c; --amber-deep:#caa44c;
+    --live:#FF5247; --live-glow:rgba(255,82,71,.18);
+    --field:#35D07F; --field-dim:#1b3329;
+    --txt:#EDF1F6; --txt-2:#9AA7B6; --txt-3:#62707F;
+    --r:14px; --r-sm:9px;
+    --mono:"Space Mono",ui-monospace,monospace;
+    --cond:"Saira Condensed",system-ui,sans-serif;
+    --sans:"Inter",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--sans); background:
+      radial-gradient(1100px 500px at 78% -8%, #1c2531 0%, rgba(28,37,49,0) 60%),
+      radial-gradient(900px 600px at -10% 110%, #15202b 0%, rgba(21,32,43,0) 55%),
+      var(--ink);
+    color:var(--txt); -webkit-font-smoothing:antialiased; line-height:1.45;
+    min-height:100%; padding-bottom:40px;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:0 18px}
+
+  /* ---------- header ---------- */
+  .top{position:sticky; top:0; z-index:30; background:rgba(17,21,28,.86);
+    backdrop-filter:blur(12px); border-bottom:1px solid var(--line-soft)}
+  .top-row{display:flex; align-items:center; gap:16px; padding:14px 0 12px}
+  .brand{flex:1; min-width:0}
+  .eyebrow{font-family:var(--cond); font-weight:700; letter-spacing:.22em;
+    font-size:13px; color:var(--amber); text-transform:uppercase}
+  .brand h1{font-family:var(--cond); font-weight:700; font-size:27px; letter-spacing:.01em;
+    line-height:1; margin-top:2px}
+  .brand .sub{font-size:12px; color:var(--txt-3); margin-top:5px; letter-spacing:.02em}
+  .clock{display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex-shrink:0}
+  .clock .t{font-family:var(--mono); font-weight:700; font-size:18px; color:var(--txt);
+    display:flex; align-items:center; gap:8px; letter-spacing:-.02em}
+  .clock .t .dot{width:8px; height:8px; border-radius:50%; background:var(--field);
+    box-shadow:0 0 0 0 var(--field); animation:beat 2.4s ease-in-out infinite}
+  .clock .z{font-size:10.5px; color:var(--txt-3); letter-spacing:.14em; text-transform:uppercase}
+  .search{flex-shrink:0}
+  .search input{width:188px; max-width:42vw; background:var(--ink-2); border:1px solid var(--line);
+    color:var(--txt); border-radius:999px; padding:9px 14px 9px 34px; font-size:13.5px;
+    font-family:var(--sans); background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' fill='none' stroke='%2362707F' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.2-3.2'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:13px center; transition:border-color .15s}
+  .search input:focus{outline:none; border-color:var(--amber)}
+
+  .sample{display:inline-flex; align-items:center; gap:7px; padding:5px 11px;
+    background:var(--amber-dim); border:1px solid #4a3c20; border-radius:999px;
+    font-size:11px; color:var(--amber); letter-spacing:.04em; font-weight:600}
+  .sample b{font-weight:700}
+  .sample-row{padding:14px 0 0}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex; gap:4px; overflow-x:auto; padding:12px 0 0; scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex-shrink:0; background:none; border:none; cursor:pointer; color:var(--txt-2);
+    font-family:var(--cond); font-weight:600; font-size:15.5px; letter-spacing:.05em;
+    text-transform:uppercase; padding:9px 13px 13px; position:relative; white-space:nowrap;
+    display:flex; align-items:center; gap:7px; transition:color .15s}
+  .tab:hover{color:var(--txt)}
+  .tab[aria-selected="true"]{color:var(--txt)}
+  .tab[aria-selected="true"]::after{content:""; position:absolute; left:13px; right:13px; bottom:0;
+    height:2.5px; background:var(--amber); border-radius:2px 2px 0 0}
+  .tab .badge{font-family:var(--mono); font-size:10.5px; font-weight:700; min-width:18px; height:18px;
+    padding:0 5px; border-radius:6px; background:var(--surface-2); color:var(--txt-2);
+    display:inline-flex; align-items:center; justify-content:center}
+  .tab[aria-selected="true"] .badge{background:var(--amber); color:#1b1407}
+  .tab.t-live .badge{background:var(--live-glow); color:#ffb0a9}
+  .tab.t-live[aria-selected="true"] .badge{background:var(--live); color:#2a0805}
+
+  /* ---------- filters ---------- */
+  .filters{display:flex; gap:8px; overflow-x:auto; padding:14px 0 4px; scrollbar-width:none}
+  .filters::-webkit-scrollbar{display:none}
+  .chip{flex-shrink:0; cursor:pointer; border:1px solid var(--line); background:var(--ink-2);
+    color:var(--txt-2); border-radius:999px; padding:7px 13px; font-size:13px; font-weight:500;
+    white-space:nowrap; transition:.15s; display:flex; align-items:center; gap:6px}
+  .chip:hover{border-color:#3a4655; color:var(--txt)}
+  .chip[aria-pressed="true"]{background:var(--surface-2); border-color:#46546a; color:var(--txt)}
+
+  /* ---------- list ---------- */
+  .meta{display:flex; align-items:center; justify-content:space-between; padding:18px 0 11px}
+  .meta .lbl{font-family:var(--cond); letter-spacing:.06em; text-transform:uppercase;
+    color:var(--txt-3); font-size:13px; font-weight:600}
+  .grid{display:grid; gap:11px; grid-template-columns:1fr}
+  @media(min-width:760px){ .grid{grid-template-columns:1fr 1fr} }
+
+  /* ---------- card ---------- */
+  .card{position:relative; background:var(--surface); border:1px solid var(--line-soft);
+    border-radius:var(--r); padding:15px 16px 14px; cursor:pointer; overflow:hidden;
+    transition:border-color .15s, transform .15s, background .15s;
+    animation:rise .45s cubic-bezier(.2,.7,.3,1) both}
+  .card:hover{border-color:#3a4757; background:var(--surface-2); transform:translateY(-1px)}
+  .card:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+  .card.live{border-color:#43323a}
+  .card.live::before{content:""; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(100deg, var(--live-glow), transparent 38%); opacity:.7}
+
+  .c-head{display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative}
+  .league{font-family:var(--cond); font-weight:600; letter-spacing:.07em; text-transform:uppercase;
+    font-size:12.5px; color:var(--txt-2); display:flex; align-items:center; gap:7px; min-width:0}
+  .league .sp{font-size:13px}
+  .league .rd{color:var(--txt-3)}
+  .pill{flex-shrink:0; font-family:var(--mono); font-weight:700; font-size:11px; letter-spacing:.02em;
+    padding:4px 9px; border-radius:999px; display:inline-flex; align-items:center; gap:6px;
+    text-transform:uppercase}
+  .pill.live{background:var(--live-glow); color:#ffb4ad}
+  .pill.live .ld{width:7px; height:7px; border-radius:50%; background:var(--live);
+    animation:beat 1.4s ease-in-out infinite}
+  .pill.final{background:#222b36; color:var(--txt-2)}
+  .pill.sched{background:var(--field-dim); color:#7fe3ad}
+
+  .c-body{display:flex; align-items:center; gap:14px; margin-top:13px; position:relative}
+  .teams{flex:1; min-width:0; display:flex; flex-direction:column; gap:9px}
+  .team{display:flex; align-items:center; gap:11px; min-width:0}
+  .mono-logo{width:34px; height:34px; border-radius:9px; flex-shrink:0; display:flex;
+    align-items:center; justify-content:center; font-family:var(--cond); font-weight:700;
+    font-size:13px; letter-spacing:.02em; color:#fff; box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+  .team .nm{font-family:var(--cond); font-weight:600; font-size:18px; letter-spacing:.01em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1}
+  .team.win .nm{color:var(--txt)}
+  .team.lose .nm{color:var(--txt-2)}
+  .score{font-family:var(--mono); font-weight:700; font-size:21px; letter-spacing:-.04em;
+    flex-shrink:0; min-width:26px; text-align:right}
+  .team.win .score{color:var(--amber)}
+  .team.lose .score{color:var(--txt-2)}
+
+  /* channel tile — the signature */
+  .tile{flex-shrink:0; width:84px; min-height:74px; border-radius:11px; display:flex;
+    flex-direction:column; align-items:center; justify-content:center; gap:1px; text-align:center;
+    border:1.5px solid var(--amber); background:linear-gradient(180deg,#251e10,#1c1810); padding:8px 6px}
+  .tile .num{font-family:var(--mono); font-weight:700; font-size:25px; color:var(--amber);
+    line-height:1; letter-spacing:-.03em; display:flex; align-items:center; gap:3px}
+  .tile .net{font-family:var(--cond); font-weight:600; font-size:11px; letter-spacing:.05em;
+    color:var(--amber-deep); text-transform:uppercase; line-height:1.1}
+  .tile .cap{font-size:8.5px; letter-spacing:.16em; color:#8a7644; text-transform:uppercase; margin-top:1px}
+  .tile.unverified{border-color:#39434f; background:#1b222c}
+  .tile.unverified .num{color:var(--txt); font-size:16px}
+  .tile.unverified .net{color:var(--txt-2)}
+  .tile.unverified .cap{color:var(--txt-3)}
+  .tile.stream{border-color:#2e3a4a; background:#172029}
+  .tile.stream .num{color:#7fb4ff; font-size:20px}
+  .tile.stream .net{color:#7fb4ff}
+  .tile .chk{color:var(--field)}
+
+  /* dual-provider channel block — the signature. ALWAYS shows DirecTV +
+     Xfinity for the Houston market: a tuned channel number (with a check
+     when verified) or an explicit "Not avail" when the game is
+     streaming-only / not carried. DirecTV = amber identity, Xfinity =
+     cool violet so the two read apart at a glance. */
+  .chans{flex-shrink:0; width:110px; display:flex; flex-direction:column; gap:6px}
+  .chan{display:flex; align-items:center; justify-content:space-between; gap:7px;
+    border:1.5px solid; border-radius:10px; padding:6px 9px 5px; min-height:35px}
+  .chan .pv{font-family:var(--cond); font-weight:700; font-size:8.5px; letter-spacing:.09em;
+    text-transform:uppercase; line-height:1.1; flex-shrink:0}
+  .chan .ch{font-family:var(--mono); font-weight:700; font-size:18px; line-height:1;
+    letter-spacing:-.03em; display:flex; align-items:center; gap:3px}
+  .chan .ch .chk{color:var(--field); font-size:11px}
+  .chan .na{font-family:var(--cond); font-weight:600; font-size:10px; letter-spacing:.03em;
+    color:var(--txt-3); text-transform:uppercase}
+  .chan.dtv{border-color:var(--amber); background:linear-gradient(180deg,#251e10,#1c1810)}
+  .chan.dtv .pv{color:#a98c4c}
+  .chan.dtv .ch{color:var(--amber)}
+  .chan.xfin{border-color:#6E79F0; background:linear-gradient(180deg,#181a2c,#14141f)}
+  .chan.xfin .pv{color:#9aa0e8}
+  .chan.xfin .ch{color:#b3b8ff}
+  .chan.off{border-color:#2b3340; background:#161d26}
+  .chan.off .pv{color:var(--txt-3)}
+
+  .c-foot{display:flex; align-items:center; gap:10px; margin-top:13px; padding-top:12px;
+    border-top:1px solid var(--line-soft); position:relative}
+  .venue{font-size:12px; color:var(--txt-3); display:flex; align-items:center; gap:6px;
+    min-width:0; flex:1}
+  .venue .v{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .streams{display:flex; gap:5px; flex-shrink:0; align-items:center}
+  .sb{font-size:10.5px; font-weight:600; letter-spacing:.02em; color:var(--txt-2);
+    background:var(--ink-2); border:1px solid var(--line-soft); border-radius:6px; padding:3px 7px;
+    white-space:nowrap}
+  .sb.more{color:var(--txt-3)}
+  .star{flex-shrink:0; width:30px; height:30px; border-radius:8px; border:1px solid var(--line-soft);
+    background:var(--ink-2); cursor:pointer; display:flex; align-items:center; justify-content:center;
+    color:var(--txt-3); transition:.15s}
+  .star:hover{border-color:var(--amber); color:var(--amber)}
+  .star.on{color:var(--amber); border-color:var(--amber-deep); background:var(--amber-dim)}
+  .star svg{width:16px; height:16px}
+
+  /* ---------- empty ---------- */
+  .empty{grid-column:1/-1; text-align:center; padding:54px 20px; color:var(--txt-3)}
+  .empty .big{font-family:var(--cond); font-weight:600; font-size:21px; color:var(--txt-2);
+    letter-spacing:.03em}
+  .empty .sm{font-size:13.5px; margin-top:7px}
+
+  /* ---------- drawer ---------- */
+  .scrim{position:fixed; inset:0; background:rgba(8,11,15,.62); backdrop-filter:blur(3px);
+    opacity:0; pointer-events:none; transition:opacity .25s; z-index:40}
+  .scrim.open{opacity:1; pointer-events:auto}
+  .drawer{position:fixed; top:0; right:0; height:100%; width:430px; max-width:92vw; z-index:50;
+    background:var(--ink-2); border-left:1px solid var(--line); transform:translateX(102%);
+    transition:transform .32s cubic-bezier(.2,.7,.25,1); display:flex; flex-direction:column;
+    box-shadow:-24px 0 60px rgba(0,0,0,.5)}
+  .drawer.open{transform:translateX(0)}
+  .d-top{display:flex; align-items:center; justify-content:space-between; padding:16px 18px;
+    border-bottom:1px solid var(--line-soft)}
+  .d-top .league{font-size:13px}
+  .d-close{width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:var(--surface);
+    color:var(--txt-2); cursor:pointer; font-size:17px; display:flex; align-items:center; justify-content:center}
+  .d-close:hover{color:var(--txt); border-color:#3a4655}
+  .d-body{overflow-y:auto; padding:20px 18px 28px; flex:1}
+
+  .d-matchup{display:flex; flex-direction:column; gap:14px}
+  .d-team{display:flex; align-items:center; gap:13px}
+  .d-team .mono-logo{width:44px; height:44px; font-size:16px; border-radius:11px}
+  .d-team .nm{font-family:var(--cond); font-weight:700; font-size:24px; flex:1; letter-spacing:.01em}
+  .d-team .score{font-family:var(--mono); font-weight:700; font-size:30px; letter-spacing:-.04em}
+  .d-team.win .nm,.d-team.win .score{color:var(--amber)}
+  .d-team.lose .nm,.d-team.lose .score{color:var(--txt-2)}
+  .d-status{display:flex; align-items:center; gap:9px; margin:16px 0 4px}
+
+  .d-info{display:grid; grid-template-columns:auto 1fr; gap:9px 14px; margin-top:18px;
+    padding-top:16px; border-top:1px solid var(--line-soft); font-size:13.5px}
+  .d-info dt{color:var(--txt-3); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    font-weight:600; padding-top:2px}
+  .d-info dd{color:var(--txt)}
+
+  .putiton{margin-top:20px; border:1.5px solid var(--amber); border-radius:12px; padding:14px 16px;
+    background:linear-gradient(120deg,#241d0f,#1b1710); display:flex; align-items:center; gap:14px}
+  .putiton .big{font-family:var(--mono); font-weight:700; font-size:34px; color:var(--amber);
+    line-height:1; letter-spacing:-.03em}
+  .putiton .txt .k{font-family:var(--cond); font-weight:700; letter-spacing:.14em; font-size:11px;
+    color:#a98c4c; text-transform:uppercase}
+  .putiton .txt .v{font-size:14px; color:var(--txt); margin-top:3px}
+  .putiton.stream{border-color:#2e3a4a; background:linear-gradient(120deg,#16202b,#141c25)}
+  .putiton.stream .big{color:#7fb4ff; font-size:22px}
+  .putiton.stream .txt .k{color:#6b8fc0}
+
+  .wsec{margin-top:22px}
+  .wsec h3{font-family:var(--cond); font-weight:600; letter-spacing:.1em; text-transform:uppercase;
+    font-size:12px; color:var(--txt-3); margin-bottom:11px}
+  .wrow{display:flex; flex-wrap:wrap; gap:8px}
+  .w-tv{font-family:var(--cond); font-weight:600; letter-spacing:.03em; font-size:14px; color:var(--txt);
+    background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:7px 12px}
+  .w-dtv{display:flex; align-items:center; gap:9px; background:var(--surface); border:1px solid var(--line);
+    border-radius:8px; padding:7px 11px}
+  .w-dtv .n{font-family:var(--mono); font-weight:700; font-size:17px; color:var(--amber)}
+  .w-dtv.unv .n{color:var(--txt-3); font-size:13px}
+  .w-dtv .l{font-size:12.5px; color:var(--txt-2)}
+  .w-dtv .vf{color:var(--field); font-size:12px}
+
+  /* drawer Channels (Houston) — one row per provider, always present */
+  .wcol{display:flex; flex-direction:column; gap:8px}
+  .w-prov{display:flex; align-items:center; gap:10px; background:var(--surface);
+    border:1px solid var(--line); border-radius:9px; padding:9px 12px}
+  .w-prov .pn{font-family:var(--cond); font-weight:700; font-size:11.5px; letter-spacing:.07em;
+    text-transform:uppercase; color:var(--txt-2); width:62px; flex-shrink:0}
+  .w-prov .pc{font-family:var(--mono); font-weight:700; font-size:19px; letter-spacing:-.03em;
+    color:var(--amber); min-width:38px}
+  .w-prov.xf .pc{color:#b3b8ff}
+  .w-prov .pl{font-size:12.5px; color:var(--txt-2); flex:1; min-width:0; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis}
+  .w-prov .vf{color:var(--field); font-size:11.5px; flex-shrink:0}
+  .w-prov .uv{color:#caa44c; font-size:10.5px; letter-spacing:.04em; flex-shrink:0}
+  .w-prov.off{border-style:dashed}
+  .w-prov.off .pna{font-family:var(--cond); font-weight:600; letter-spacing:.04em;
+    color:var(--txt-3); text-transform:uppercase; font-size:12px}
+  .w-stream{display:flex; align-items:center; gap:7px; background:var(--surface); border:1px solid var(--line);
+    border-radius:8px; padding:7px 11px; font-size:13px; color:var(--txt)}
+  .w-stream .pd{width:6px; height:6px; border-radius:50%; background:var(--field)}
+  .w-stream.pred .pd{background:var(--txt-3)}
+  .w-stream.pred{color:var(--txt-2)}
+  .note{font-size:11.5px; color:var(--txt-3); margin-top:10px; line-height:1.5}
+
+  .d-actions{display:flex; gap:10px; padding:16px 18px; border-top:1px solid var(--line-soft)}
+  .btn{flex:1; cursor:pointer; border-radius:10px; padding:11px; font-size:14px; font-weight:600;
+    font-family:var(--sans); border:1px solid var(--line); background:var(--surface); color:var(--txt);
+    display:flex; align-items:center; justify-content:center; gap:8px; transition:.15s}
+  .btn:hover{border-color:#3a4655}
+  .btn.primary{background:var(--amber-dim); border-color:var(--amber-deep); color:var(--amber)}
+  .btn.primary.on{background:var(--amber); border-color:var(--amber); color:#1b1407}
+  .btn svg{width:16px; height:16px}
+
+  @media(max-width:560px){
+    .top-row{flex-wrap:wrap}
+    .search{order:3; flex-basis:100%}
+    .search input{width:100%; max-width:none}
+    .drawer{width:100%; max-width:100%; top:auto; bottom:0; height:90vh; border-left:none;
+      border-top:1px solid var(--line); border-radius:18px 18px 0 0; transform:translateY(102%)}
+    .drawer.open{transform:translateY(0)}
+    .tile{width:74px; min-height:66px}
+    .tile .num{font-size:21px}
+  }
+  @media(prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important} }
+  @keyframes beat{0%,100%{box-shadow:0 0 0 0 var(--field)}50%{box-shadow:0 0 0 5px transparent}}
+  @keyframes rise{from{opacity:0; transform:translateY(9px)}to{opacity:1; transform:none}}
+</style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <div class="top-row">
+        <div class="brand">
+          <div class="eyebrow">Sports Board</div>
+          <h1>What's On</h1>
+          <div class="sub">Uno Mas · Copperfield &nbsp;|&nbsp; Dos Mas · Tomball</div>
+        </div>
+        <div class="clock">
+          <div class="t"><span class="dot"></span><span id="clock">—:—</span></div>
+          <div class="z" id="clockzone">Houston · Central</div>
+        </div>
+        <div class="search">
+          <input id="search" type="search" placeholder="Search team, league, venue…" autocomplete="off" aria-label="Search games">
+        </div>
+      </div>
+      <div class="tabs" role="tablist" id="tabs"></div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="sample-row">
+      <span class="sample">&#9873; <b>SAMPLE DATA</b> · times are live in Houston time — wire the feed to go live</span>
+    </div>
+    <div class="filters" id="filters"></div>
+    <div class="meta"><span class="lbl" id="metalbl"></span><span class="lbl" id="metacount"></span></div>
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Game details"></aside>
+
+<script>
+/* ====================================================================
+   Sports Board — front-end prototype.
+   Mirrors the backend (sports_core.py / sports_broadcast.py):
+   identical Houston-time bucketing + identical DirecTV / streaming map.
+   Favorites live in memory; in production they persist via the API.
+   ==================================================================== */
+const TZ = "America/Chicago";
+
+/* ---- broadcast mapping (mirror of sports_broadcast.py) ---- */
+/* DirecTV — HOUSTON market. Numbers verified June 2026 against two
+   independent lineup sources (v:true => green check). v:false = best-known
+   number, shown WITHOUT a check until a second source re-confirms it.
+   Locals are carried by DirecTV at the station's local channel position. */
+const DIRECTV = {
+  "ESPN":{n:206,v:true},"ESPN2":{n:209,v:true},"ESPNU":{n:208,v:true},"ESPNEWS":{n:207,v:true},
+  "FS1":{n:219,v:true},"FS2":{n:618,v:true},"TNT":{n:245,v:true},"TBS":{n:247,v:true},
+  "truTV":{n:246,v:true},"USA Network":{n:242,v:true},"NBA TV":{n:216,v:true},
+  "NFL Network":{n:212,v:true},"NFL RedZone":{n:211,v:true},"MLB Network":{n:213,v:true},
+  "NHL Network":{n:215,v:true},"CBS Sports Network":{n:221,v:true},
+  "SEC Network":{n:611,v:true},"ACC Network":{n:612,v:true},"Big Ten Network":{n:610,v:true},
+  "Golf Channel":{n:218,v:true},"Tennis Channel":{n:217,v:true},
+  "ABC":{n:13,v:false,note:"KTRK 13 — confirm for your DirecTV area"},
+  "CBS":{n:11,v:true,note:"KHOU 11"},
+  "NBC":{n:2,v:true,note:"KPRC 2"},
+  "FOX":{n:26,v:false,note:"KRIV 26 — confirm for your DirecTV area"},
+  "Telemundo":{n:47,v:false,note:"KTMD 47 — confirm for your DirecTV area"},
+  "Univision":{n:45,v:false,note:"KXLN 45 — confirm for your DirecTV area"},
+  "Universo":{n:410,v:true},
+  "CW":{n:39,v:true,note:"KIAH 39"},
+  "Space City Home Network":{n:674,v:true,note:"Astros/Rockets RSN — verify active carriage"},
+};
+/* Xfinity / Comcast — HOUSTON market (zip 77002). Same verification rule.
+   n:null => no Xfinity number found (not listed) -> renders "Not avail"
+   unless another carrying network covers the game on Xfinity. */
+const XFINITY = {
+  "ESPN":{n:633,v:true},"ESPN2":{n:634,v:true},"ESPNU":{n:725,v:true},"ESPNEWS":{n:716,v:false},
+  "FS1":{n:null,v:false,note:"Xfinity number not listed — also on FOX One / Fox app"},
+  "FS2":{n:null,v:false,note:"Xfinity number not listed"},
+  "TNT":{n:636,v:true},"TBS":{n:651,v:true},"truTV":{n:667,v:true},
+  "NBA TV":{n:101,v:false},"NFL Network":{n:113,v:false},"NFL RedZone":{n:861,v:false},
+  "MLB Network":{n:682,v:false},"NHL Network":{n:124,v:false},
+  "CBS Sports Network":{n:706,v:true},"Golf Channel":{n:635,v:true},"Tennis Channel":{n:705,v:false},
+  "SEC Network":{n:null,v:false,note:"Xfinity number not listed"},
+  "ACC Network":{n:null,v:false,note:"Xfinity number not listed"},
+  "Big Ten Network":{n:123,v:false},
+  "ABC":{n:613,v:true,note:"KTRK"},"CBS":{n:611,v:true,note:"KHOU"},
+  "NBC":{n:612,v:true,note:"KPRC"},"FOX":{n:609,v:true,note:"KRIV"},
+  "Telemundo":{n:606,v:true,note:"KTMD"},"Univision":{n:610,v:true,note:"KXLN"},
+  "Universo":{n:239,v:false},"CW":{n:605,v:true,note:"KIAH"},
+  "Space City Home Network":{n:639,v:true,note:"Astros/Rockets RSN — verify active carriage"},
+};
+const NET_STREAM = {
+  "ESPN":["ESPN App"],"ESPN2":["ESPN App"],"ABC":["ESPN App"],"NBC":["Peacock"],
+  "FOX":["FOX One","Fox Sports app"],"FS1":["FOX One","Fox Sports app"],"FS2":["FOX One","Fox Sports app"],
+  "CBS":["Paramount+"],"CBS Sports Network":["Paramount+"],"TNT":["Max"],"TBS":["Max"],
+  "Telemundo":["Peacock","Telemundo app"],"Universo":["Peacock"],"NBA TV":["NBA App / League Pass"],
+  "NFL Network":["NFL+"],"MLB Network":["MLB.TV"],"Amazon Prime Video":["Amazon Prime Video"],
+  "Apple TV+":["Apple TV+"],"Netflix":["Netflix"],"Peacock":["Peacock"],
+};
+const LEAGUE_PKG = {
+  "NFL":["NFL+","NFL Sunday Ticket (YouTube)"],"NBA":["NBA App / League Pass"],
+  "WNBA":["WNBA League Pass"],"MLB":["MLB.TV"],"NHL":["ESPN+"],
+  "FIFA World Cup":["FOX One","Tubi (free, select)","Peacock (Spanish)"],
+  "MLS":["MLS Season Pass (Apple TV)"],
+};
+/* For one provider, return the first carrying network that actually has a
+   Houston channel number — the game's best linear option on that provider —
+   or {available:false} when none carry it (streaming-only / not carried),
+   which is what renders "Not available". */
+function provLookup(map, networks){
+  for(const name of networks){
+    const info = map[name];
+    if(info && info.n!=null) return {available:true, num:info.n, net:name, verified:!!info.v, note:info.note||""};
+  }
+  return {available:false};
+}
+function provList(map, networks){
+  const out=[];
+  for(const name of networks){ const info=map[name]; if(info && info.n!=null) out.push({name, num:info.n, verified:!!info.v, note:info.note||""}); }
+  return out;
+}
+function resolveBroadcast(league, networks){
+  const tv = [...new Set(networks)];
+  const directv = provLookup(DIRECTV, tv);
+  const xfinity = provLookup(XFINITY, tv);
+  const directvAll = provList(DIRECTV, tv);
+  const xfinityAll = provList(XFINITY, tv);
+  const seen=new Set(), streaming=[];
+  const add=(p,pred,note)=>{ if(p&&!seen.has(p)){seen.add(p); streaming.push({platform:p,predicted:pred,note:note||""});}};
+  tv.forEach(n=>(NET_STREAM[n]||[]).forEach(p=>add(p,false)));
+  (LEAGUE_PKG[league]||[]).forEach(p=>add(p,true,"depends on matchup — verify"));
+  return {tv, directv, xfinity, directvAll, xfinityAll, streaming,
+          streamingOnly: !directv.available && !xfinity.available};
+}
+
+/* ---- time helpers (Houston) ---- */
+const fmtParts = (d,opts)=>new Intl.DateTimeFormat("en-US",{timeZone:TZ,...opts}).formatToParts(d)
+  .reduce((o,p)=>(o[p.type]=p.value,o),{});
+function ctDateKey(d){ const p=fmtParts(d,{year:"numeric",month:"2-digit",day:"2-digit"}); return `${p.year}-${p.month}-${p.day}`; }
+function ctLabel(d){ const p=fmtParts(d,{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"});
+  return `${p.weekday}, ${p.month} ${p.day} · ${p.hour}:${p.minute} ${p.dayPeriod} ${p.timeZoneName}`; }
+function ctTime(d){ const p=fmtParts(d,{hour:"numeric",minute:"2-digit",timeZoneName:"short"}); return `${p.hour}:${p.minute} ${p.dayPeriod} ${p.timeZoneName}`; }
+
+/* ---- sample data (mid-June 2026); off = minutes from now ---- */
+const SPORTS = {soccer:"\u26BD", baseball:"\u26BE", basketball:"\uD83C\uDFC0", hockey:"\uD83C\uDFD2", football:"\uD83C\uDFC8"};
+const RAW = [
+  {id:"wc-hou", league:"FIFA World Cup", sport:"soccer", round:"Group A", status:"in_progress", detail:"34'",
+   off:-34, venue:"NRG Stadium", city:"Houston, TX", nets:["FS1","Telemundo"],
+   home:{name:"Mexico",abbr:"MEX",color:"#0B6E4F",score:2}, away:{name:"South Korea",abbr:"KOR",color:"#C8102E",score:1}},
+  {id:"mlb-ast", league:"MLB", sport:"baseball", round:"", status:"in_progress", detail:"Top 7th",
+   off:-95, venue:"Daikin Park", city:"Houston, TX", nets:["Space City Home Network"],
+   home:{name:"Houston Astros",abbr:"HOU",color:"#EB6E1F",score:3}, away:{name:"Seattle Mariners",abbr:"SEA",color:"#0C2C56",score:2}},
+  {id:"nhl-cup", league:"NHL", sport:"hockey", round:"Stanley Cup Final · Game 5", status:"in_progress", detail:"2nd Period",
+   off:-52, venue:"American Airlines Center", city:"Dallas, TX", nets:["TNT"],
+   home:{name:"Dallas Stars",abbr:"DAL",color:"#006847",score:1}, away:{name:"Edmonton Oilers",abbr:"EDM",color:"#CF4520",score:1}},
+  {id:"wnba", league:"WNBA", sport:"basketball", round:"", status:"scheduled", detail:"",
+   off:160, venue:"Michelob ULTRA Arena", city:"Las Vegas, NV", nets:["ESPN"],
+   home:{name:"Las Vegas Aces",abbr:"LV",color:"#BA0C2F",score:null}, away:{name:"New York Liberty",abbr:"NY",color:"#1B7A4B",score:null}},
+  {id:"wc-bra", league:"FIFA World Cup", sport:"soccer", round:"Group F", status:"scheduled", detail:"",
+   off:205, venue:"Mercedes-Benz Stadium", city:"Atlanta, GA", nets:["FS1","Telemundo"],
+   home:{name:"Brazil",abbr:"BRA",color:"#009C3B",score:null}, away:{name:"Morocco",abbr:"MAR",color:"#C1272D",score:null}},
+  {id:"mls-dyn", league:"MLS", sport:"soccer", round:"Matchday 19", status:"scheduled", detail:"",
+   off:2*1440+90, venue:"Shell Energy Stadium", city:"Houston, TX", nets:["Apple TV+"],
+   home:{name:"Houston Dynamo",abbr:"HOU",color:"#FF6B00",score:null}, away:{name:"LAFC",abbr:"LAFC",color:"#C39E6D",score:null}},
+  {id:"mlb-ast2", league:"MLB", sport:"baseball", round:"", status:"scheduled", detail:"",
+   off:1440+95, venue:"Daikin Park", city:"Houston, TX", nets:["Space City Home Network"],
+   home:{name:"Houston Astros",abbr:"HOU",color:"#EB6E1F",score:null}, away:{name:"Texas Rangers",abbr:"TEX",color:"#003278",score:null}},
+  {id:"wc-usa", league:"FIFA World Cup", sport:"soccer", round:"Group D", status:"scheduled", detail:"",
+   off:6*1440, venue:"Lumen Field", city:"Seattle, WA", nets:["FOX","Telemundo"],
+   home:{name:"United States",abbr:"USA",color:"#0A3161",score:null}, away:{name:"Australia",abbr:"AUS",color:"#00843D",score:null}},
+  {id:"mlb-nyy", league:"MLB", sport:"baseball", round:"", status:"final", detail:"Final",
+   off:-300, venue:"Yankee Stadium", city:"Bronx, NY", nets:["FOX"],
+   home:{name:"New York Yankees",abbr:"NYY",color:"#0C2340",score:5}, away:{name:"Boston Red Sox",abbr:"BOS",color:"#BD3039",score:3}},
+  {id:"nba-fin", league:"NBA", sport:"basketball", round:"NBA Finals · Game 6", status:"final", detail:"Final",
+   off:-1080, venue:"Paycom Center", city:"Oklahoma City, OK", nets:["ABC"],
+   home:{name:"Okla. City Thunder",abbr:"OKC",color:"#007AC1",score:112}, away:{name:"Indiana Pacers",abbr:"IND",color:"#002D62",score:105}},
+  {id:"nba-fin0", league:"NBA", sport:"basketball", round:"NBA Finals · Game 5", status:"final", detail:"Final",
+   off:-4*1440, venue:"Gainbridge Fieldhouse", city:"Indianapolis, IN", nets:["ABC"],
+   home:{name:"Indiana Pacers",abbr:"IND",color:"#002D62",score:99}, away:{name:"Okla. City Thunder",abbr:"OKC",color:"#007AC1",score:110}},
+  {id:"wc-arg", league:"FIFA World Cup", sport:"soccer", round:"Group C", status:"final", detail:"Full Time",
+   off:-1700, venue:"Hard Rock Stadium", city:"Miami, FL", nets:["FOX","Telemundo"],
+   home:{name:"Argentina",abbr:"ARG",color:"#5B92C7",score:3}, away:{name:"Nigeria",abbr:"NGA",color:"#008751",score:1}},
+];
+
+const LIVE_STATES = ["in_progress","halftime","delayed"];
+const now0 = Date.now();
+const GAMES = RAW.map(g=>{
+  const startISO = new Date(now0 + g.off*60000).toISOString();
+  const d = new Date(startISO);
+  return {...g, startISO, startDate:d, dateKey:ctDateKey(d), label:ctLabel(d), time:ctTime(d),
+    isLive:LIVE_STATES.includes(g.status), isFinal:g.status==="final",
+    broadcast:resolveBroadcast(g.league, g.nets)};
+});
+
+/* ---- state ---- */
+const state = {
+  tab:"today", league:null, query:"",
+  favGames:new Set(),
+  favTeams:new Set(["Houston Astros"]),
+  favLeagues:new Set(["FIFA World Cup"]),
+};
+const TABS = [
+  {key:"today",label:"Today"},
+  {key:"live",label:"Live",cls:"t-live"},
+  {key:"upcoming",label:"Upcoming"},
+  {key:"completed",label:"Completed"},
+  {key:"previous",label:"Previous"},
+  {key:"favorites",label:"Favorites"},
+];
+const SHORT = {
+  "Amazon Prime Video":"Prime","Apple TV+":"Apple TV","MLS Season Pass (Apple TV)":"Apple TV",
+  "Tubi (free, select)":"Tubi","Peacock (Spanish)":"Peacock ES","NFL Sunday Ticket (YouTube)":"Sunday Ticket",
+  "NBA App / League Pass":"League Pass","WNBA League Pass":"League Pass","Fox Sports app":"Fox app",
+};
+const short = p => SHORT[p] || p;
+
+function inFavorites(g){
+  return state.favGames.has(g.id) || state.favLeagues.has(g.league) ||
+         state.favTeams.has(g.home.name) || state.favTeams.has(g.away.name);
+}
+
+/* ---- bucketing (mirror of sports_core.py) ---- */
+function bucket(tab){
+  const todayKey = ctDateKey(new Date());
+  const now = Date.now();
+  const horizon = now + 8*86400000;
+  let list = GAMES.filter(g=>{
+    switch(tab){
+      case "today":    return g.dateKey === todayKey;
+      case "live":     return g.isLive;
+      case "upcoming": return ["scheduled","pre"].includes(g.status) && g.startDate.getTime()>now && g.startDate.getTime()<=horizon;
+      case "completed":return g.isFinal;
+      case "previous": return g.isFinal && g.dateKey < todayKey;
+      case "favorites":return inFavorites(g);
+    }
+  });
+  if(state.league) list = list.filter(g=>g.league===state.league);
+  if(state.query){
+    const q = state.query.toLowerCase();
+    list = list.filter(g=>[g.home.name,g.away.name,g.home.abbr,g.away.abbr,g.league,g.venue,g.city,g.nets.join(" ")]
+      .join(" ").toLowerCase().includes(q));
+  }
+  const rank = g => g.isLive?0 : (["scheduled","pre"].includes(g.status)?1:2);
+  const desc = ["completed","previous"].includes(tab);
+  list.sort((a,b)=>{
+    if(tab==="favorites" && rank(a)!==rank(b)) return rank(a)-rank(b);
+    return desc ? b.startDate-a.startDate : a.startDate-b.startDate;
+  });
+  return list;
+}
+function tabCount(tab){
+  const saved = state.query; state.query=""; const n = bucket(tab).length; state.query=saved; return n;
+}
+
+/* ---- the signature channel block — ALWAYS DirecTV + Xfinity (Houston) ---- */
+function provRow(kind, label, res){
+  if(res.available){
+    return `<div class="chan ${kind}"><span class="pv">${label}</span>
+      <span class="ch">${res.num}${res.verified?'<span class="chk">&#10003;</span>':''}</span></div>`;
+  }
+  return `<div class="chan ${kind} off"><span class="pv">${label}</span><span class="na">Not avail</span></div>`;
+}
+function chans(bc){
+  return `<div class="chans">${provRow("dtv","DirecTV",bc.directv)}${provRow("xfin","Xfinity",bc.xfinity)}</div>`;
+}
+const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---- render ---- */
+function renderTabs(){
+  document.getElementById("tabs").innerHTML = TABS.map(t=>{
+    const n = tabCount(t.key);
+    return `<button class="tab ${t.cls||""}" role="tab" data-tab="${t.key}"
+       aria-selected="${state.tab===t.key}">${t.label}${n?`<span class="badge">${n}</span>`:""}</button>`;
+  }).join("");
+}
+function renderFilters(){
+  const leagues = [...new Set(GAMES.map(g=>g.league))];
+  const chips = [`<button class="chip" data-lg="" aria-pressed="${!state.league}">All sports</button>`]
+    .concat(leagues.map(lg=>{
+      const sp = SPORTS[GAMES.find(g=>g.league===lg).sport]||"";
+      return `<button class="chip" data-lg="${esc(lg)}" aria-pressed="${state.league===lg}"><span>${sp}</span>${esc(lg)}</button>`;
+    }));
+  document.getElementById("filters").innerHTML = chips.join("");
+}
+function teamRow(t, cls){
+  const initials = t.abbr || t.name.slice(0,3).toUpperCase();
+  const sc = t.score==null ? "" : t.score;
+  return `<div class="team ${cls}">
+      <span class="mono-logo" style="background:${esc(t.color)}">${esc(initials)}</span>
+      <span class="nm">${esc(t.name)}</span><span class="score">${sc}</span></div>`;
+}
+function statusPill(g){
+  if(g.isLive) return `<span class="pill live"><span class="ld"></span>${esc(g.detail||"LIVE")}</span>`;
+  if(g.isFinal) return `<span class="pill final">Final</span>`;
+  const p = fmtParts(g.startDate,{hour:"numeric",minute:"2-digit"});
+  return `<span class="pill sched">${p.hour}:${p.minute} ${p.dayPeriod}</span>`;
+}
+function teamClasses(g){
+  const h=g.home.score, a=g.away.score;
+  if(h==null||a==null) return ["win","win"];
+  if(h>a) return ["win","lose"]; if(a>h) return ["lose","win"]; return ["win","win"];
+}
+function card(g){
+  const [hc,ac] = teamClasses(g);
+  const sp = SPORTS[g.sport]||"";
+  const plats = g.broadcast.streaming.slice(0,3).map(s=>`<span class="sb">${esc(short(s.platform))}</span>`).join("");
+  const extra = g.broadcast.streaming.length>3 ? `<span class="sb more">+${g.broadcast.streaming.length-3}</span>` : "";
+  return `<article class="card ${g.isLive?"live":""}" tabindex="0" data-id="${g.id}">
+    <div class="c-head">
+      <span class="league"><span class="sp">${sp}</span>${esc(g.league)}${g.round?` <span class="rd">· ${esc(g.round)}</span>`:""}</span>
+      ${statusPill(g)}
+    </div>
+    <div class="c-body">
+      <div class="teams">${teamRow(g.home,hc)}${teamRow(g.away,ac)}</div>
+      ${chans(g.broadcast)}
+    </div>
+    <div class="c-foot">
+      <span class="venue">&#128205;<span class="v">${esc(g.venue||"")}${g.city?` · ${esc(g.city)}`:""}</span></span>
+      <span class="streams">${plats}${extra}</span>
+      <button class="star ${inFavorites(g)?"on":""}" data-star="${g.id}" aria-label="Toggle favorite" aria-pressed="${inFavorites(g)}">
+        <svg viewBox="0 0 24 24" fill="${inFavorites(g)?"currentColor":"none"}" stroke="currentColor" stroke-width="2">
+          <path d="M12 2l3 6.5 7 .7-5.2 4.7 1.5 6.9L12 18l-6.8 3.5 1.5-6.9L1.5 9.2l7-.7z"/></svg>
+      </button>
+    </div>
+  </article>`;
+}
+function render(){
+  const list = bucket(state.tab);
+  const t = TABS.find(t=>t.key===state.tab);
+  document.getElementById("metalbl").textContent =
+    (t.label) + (state.league?` · ${state.league}`:"") + (state.query?` · "${state.query}"`:"");
+  document.getElementById("metacount").textContent = `${list.length} ${list.length===1?"game":"games"}`;
+  const grid = document.getElementById("grid");
+  if(!list.length){
+    const msg = {today:"Nothing scheduled today.",live:"No live games right now.",
+      upcoming:"No upcoming games in the next 8 days.",completed:"No completed games yet.",
+      previous:"No past games on record.",favorites:"No favorites yet — tap the star on any game."}[state.tab];
+    grid.innerHTML = `<div class="empty"><div class="big">All quiet</div><div class="sm">${msg}</div></div>`;
+  } else {
+    grid.innerHTML = list.map((g,i)=>card(g)).join("");
+    [...grid.children].forEach((el,i)=>{ el.style.animationDelay = Math.min(i*32,260)+"ms"; });
+  }
+  renderTabs();
+}
+
+/* ---- drawer ---- */
+let currentId = null;
+function putIton(bc){
+  const rec = bc.directv.available ? {prov:"DirecTV", num:bc.directv.num, net:bc.directv.net}
+            : bc.xfinity.available ? {prov:"Xfinity", num:bc.xfinity.num, net:bc.xfinity.net}
+            : null;
+  if(rec) return `<div class="putiton"><div class="big">${rec.num}</div>
+    <div class="txt"><div class="k">Put it on</div><div class="v">${rec.prov} ${rec.num} &mdash; ${esc(rec.net)}</div></div></div>`;
+  if(bc.streaming.length){ const s=bc.streaming[0];
+    return `<div class="putiton stream"><div class="big">&#9654;</div>
+      <div class="txt"><div class="k">Stream on</div><div class="v">${esc(s.platform)}</div></div></div>`; }
+  return "";
+}
+function openDrawer(id){
+  const g = GAMES.find(x=>x.id===id); if(!g) return;
+  currentId = id;
+  const [hc,ac] = teamClasses(g);
+  const bc = g.broadcast;
+  const wprov = (label, kind, res) => {
+    const cls = `w-prov ${kind}${res.available?"":" off"}`;
+    if(res.available) return `<div class="${cls}"><span class="pn">${label}</span>
+       <span class="pc">${res.num}</span><span class="pl">${esc(res.net)}</span>
+       ${res.verified?'<span class="vf">&#10003; verified</span>':'<span class="uv">unverified</span>'}</div>`;
+    return `<div class="${cls}"><span class="pn">${label}</span><span class="pna">Not available</span></div>`;
+  };
+  const channels = wprov("DirecTV","",bc.directv) + wprov("Xfinity","xf",bc.xfinity);
+  const streams = bc.streaming.length ? bc.streaming.map(s=>
+      `<div class="w-stream ${s.predicted?"pred":""}"><span class="pd"></span>${esc(s.platform)}</div>`).join("")
+    : `<div class="w-stream pred"><span class="pd"></span>None listed</div>`;
+  const hasPred = bc.streaming.some(s=>s.predicted);
+  const hasUnv = (bc.directv.available && !bc.directv.verified) || (bc.xfinity.available && !bc.xfinity.verified);
+  let notes = [];
+  if(bc.streamingOnly) notes.push("Streaming-only game — no DirecTV or Xfinity channel in the Houston market. Use the streaming option below.");
+  if(hasUnv) notes.push("Channel numbers marked “unverified” are best-known but not double-confirmed for Houston — confirm before relying on them.");
+  if(hasPred) notes.push("Dimmed streaming options are league packages that depend on the specific matchup — verify before relying on them.");
+  const fav = inFavorites(g);
+
+  document.getElementById("drawer").innerHTML = `
+    <div class="d-top">
+      <span class="league"><span class="sp">${SPORTS[g.sport]||""}</span>${esc(g.league)}${g.round?` · ${esc(g.round)}`:""}</span>
+      <button class="d-close" id="dclose" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="d-body">
+      <div class="d-matchup">
+        <div class="d-team ${hc}"><span class="mono-logo" style="background:${esc(g.home.color)}">${esc(g.home.abbr)}</span>
+          <span class="nm">${esc(g.home.name)}</span><span class="score">${g.home.score==null?"":g.home.score}</span></div>
+        <div class="d-team ${ac}"><span class="mono-logo" style="background:${esc(g.away.color)}">${esc(g.away.abbr)}</span>
+          <span class="nm">${esc(g.away.name)}</span><span class="score">${g.away.score==null?"":g.away.score}</span></div>
+      </div>
+      <div class="d-status">${statusPill(g)}</div>
+      <dl class="d-info">
+        <dt>Start</dt><dd>${esc(g.label)}</dd>
+        <dt>Venue</dt><dd>${esc(g.venue||"—")}${g.city?` · ${esc(g.city)}`:""}</dd>
+        <dt>League</dt><dd>${esc(g.league)}${g.round?` · ${esc(g.round)}`:""}</dd>
+      </dl>
+      ${putIton(bc)}
+      <div class="wsec"><h3>On TV</h3><div class="wrow">${bc.tv.length?bc.tv.map(n=>`<span class="w-tv">${esc(n)}</span>`).join(""):'<span class="w-tv">Streaming only</span>'}</div></div>
+      <div class="wsec"><h3>Channels &middot; Houston</h3><div class="wcol">${channels}</div></div>
+      <div class="wsec"><h3>Streaming</h3><div class="wrow">${streams}</div>
+        ${notes.length?`<div class="note">${notes.map(esc).join("<br>")}</div>`:""}</div>
+    </div>
+    <div class="d-actions">
+      <button class="btn primary ${fav?"on":""}" id="dfav">
+        <svg viewBox="0 0 24 24" fill="${fav?"currentColor":"none"}" stroke="currentColor" stroke-width="2">
+          <path d="M12 2l3 6.5 7 .7-5.2 4.7 1.5 6.9L12 18l-6.8 3.5 1.5-6.9L1.5 9.2l7-.7z"/></svg>
+        ${fav?"Favorited":"Add to favorites"}</button>
+      <button class="btn" id="drem">&#128276; Set reminder</button>
+    </div>`;
+  document.getElementById("scrim").classList.add("open");
+  document.getElementById("drawer").classList.add("open");
+  document.getElementById("dclose").onclick = closeDrawer;
+  document.getElementById("dfav").onclick = ()=>{ toggleFav(id); openDrawer(id); render(); };
+  document.getElementById("drem").onclick = (e)=>{ e.currentTarget.textContent="Reminder set ✓"; };
+}
+function closeDrawer(){
+  currentId=null;
+  document.getElementById("scrim").classList.remove("open");
+  document.getElementById("drawer").classList.remove("open");
+}
+function toggleFav(id){
+  if(state.favGames.has(id)) state.favGames.delete(id); else state.favGames.add(id);
+}
+
+/* ---- clock ---- */
+function tickClock(){
+  const p = fmtParts(new Date(),{hour:"numeric",minute:"2-digit",second:"2-digit",timeZoneName:"short"});
+  document.getElementById("clock").textContent = `${p.hour}:${p.minute}:${p.second} ${p.dayPeriod}`;
+  document.getElementById("clockzone").textContent = `Houston · ${p.timeZoneName}`;
+}
+
+/* ---- events ---- */
+document.getElementById("tabs").addEventListener("click", e=>{
+  const b = e.target.closest("[data-tab]"); if(!b) return;
+  state.tab = b.dataset.tab; render();
+});
+document.getElementById("filters").addEventListener("click", e=>{
+  const b = e.target.closest("[data-lg]"); if(!b) return;
+  state.league = b.dataset.lg || null; renderFilters(); render();
+});
+document.getElementById("search").addEventListener("input", e=>{ state.query = e.target.value.trim(); render(); });
+document.getElementById("grid").addEventListener("click", e=>{
+  const s = e.target.closest("[data-star]");
+  if(s){ e.stopPropagation(); toggleFav(s.dataset.star); render(); return; }
+  const c = e.target.closest("[data-id]"); if(c) openDrawer(c.dataset.id);
+});
+document.getElementById("grid").addEventListener("keydown", e=>{
+  if((e.key==="Enter"||e.key===" ") && e.target.dataset.id){ e.preventDefault(); openDrawer(e.target.dataset.id); }
+});
+document.getElementById("scrim").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeDrawer(); });
+
+/* ---- init ---- */
+renderFilters(); render(); tickClock(); setInterval(tickClock, 1000);
+</script>
+</body>
+</html>

@@ -4080,6 +4080,10 @@ _MANAGER_DASH_TABS = [
     ("maintenance", "Maintenance"),
     ("counseling",  "Counseling"),
     ("interview",   "Interview"),
+    # Sports Board (Sam 2026-06-13): the "What's On" sports tracker — six
+    # category sub-tabs (Today / Live / Upcoming / Completed / Previous /
+    # Favorites) rendered inside the tab's iframe by store.sports_dashboard.
+    ("sports",      "Sports"),
 ]
 
 
@@ -4111,6 +4115,8 @@ def _manager_dash_full_url(tab_key):
         return url_for("store.manager_page_list", page="counseling")
     if tab_key == "interview":
         return "/partner/interview-tracker"
+    if tab_key == "sports":
+        return url_for("store.sports_dashboard")
     return url_for("store.manager_page_list", page="daily-log")
 
 
@@ -4151,6 +4157,25 @@ def manager_dashboard():
         active_tab=active_tab,
         tabs=tabs,
     )
+
+
+@store_bp.route("/sports", methods=["GET"])
+def sports_dashboard():
+    """Sports Board ("What's On") — the page the Manager dashboard's
+    Sports tab embeds in its iframe. A self-contained scoreboard with
+    six category sub-tabs (Today / Live / Upcoming / Completed /
+    Previous / Favorites), sport filters, search, and a game card that
+    ALWAYS shows the Houston DirecTV + Xfinity channel (number or
+    "Not available") plus a details drawer. Houston / Central time.
+
+    Phase 1 (Sam 2026-06-13): renders the approved visual prototype on
+    self-contained SAMPLE DATA with verified Houston channel numbers.
+    The live score feed (ESPN provider sync + the /api/sports/*
+    blueprint in app/sports/) is the gated next phase. Same audience
+    gate as the rest of the Manager section."""
+    if not _manager_dashboard_ok():
+        abort(403)
+    return render_template("sports_dashboard.html")
 
 
 @store_bp.route("/manager/<page>", methods=["GET"])

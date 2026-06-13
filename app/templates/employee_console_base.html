@@ -76,9 +76,12 @@
   if(!b) return;
   b.addEventListener("click", function(){
     b.disabled = true;
+    // After clearing the employee session, land on the shared number-pad
+    // (/keypad-login) so the next person can sign in -- NOT /employee/login
+    // (the email/PIN form). Matches the site-wide + driver logout targets.
     fetch("/employee/logout", {method:"POST", credentials:"same-origin", headers:{Accept:"application/json"}})
-      .then(function(){ window.location.assign("/employee/login"); })
-      .catch(function(){ window.location.assign("/employee/login"); });
+      .then(function(){ window.location.assign("/keypad-login"); })
+      .catch(function(){ window.location.assign("/keypad-login"); });
   });
 })();
 </script>

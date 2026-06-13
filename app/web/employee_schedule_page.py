@@ -37,15 +37,20 @@ from flask import redirect, render_template, request, session
 from app.db import SessionLocal
 from app.models import Employee
 from app.web.employee_auth import employee_auth
+from app.web.schedules_v2_employee import employee_schedule_rows
 
 
 @employee_auth.route("/employee/my-schedule", methods=["GET"])
 def my_schedule_page():
-    """Render the client-side employee schedule view. Requires an employee
-    session; with none we bounce to /employee/login (the employee door, not the
-    staff keypad). Only the Employee name is read here - the shifts come from
-    aick's data endpoint via fetch(); this view just assembles the config blob
-    + the greeting name."""
+    """Render the employee schedule view. Requires an employee session; with
+    none we bounce to /employee/login (the employee door, not the staff keypad).
+
+    The Shifts tab is SERVER-RENDERED: there is no client-side fetch wiring on
+    this page, so we must hand the template the real shift list here (passing an
+    empty list left the tab stuck on 'No shifts posted yet' for every employee).
+    employee_schedule_rows() applies the same published-schedule + per-shift
+    publish + legacy-Saturday-week-key selection as the /employee/my-schedule/
+    shifts JSON endpoint, so the page and that endpoint always agree."""
     emp_id = session.get("employee_id")
     if not emp_id:
         return redirect("/employee/login")
@@ -62,6 +67,7 @@ def my_schedule_page():
         first_name = full_name.split(" ")[0] if full_name else None
         # Plain-string namespace (no detached ORM rows used after close).
         view = SimpleNamespace(first_name=first_name, full_name=full_name or None)
+        shift_rows = employee_schedule_rows(db, emp_id)
     finally:
         db.close()
 
@@ -72,18 +78,15 @@ def my_schedule_page():
         "loginUrl": "/employee/login",
     }
 
-    # Cenas Floor Pulse: the Shifts tab reads its own shift list. The
-    # /employee/my-schedule/shifts JSON endpoint is the live source -- but for
-    # the initial server-render we ship the empty-state path so the tab works
-    # before the JSON client is wired. active_section drives the segmented
-    # control; the time-off form posts to its backend when that lands.
+    # active_section drives the segmented control; the time-off form posts to
+    # its backend when that lands.
     section = (request.args.get("view") or "shifts").lower()
     if section not in ("shifts", "timeoff"):
         section = "shifts"
     return render_template(
         "employee_schedule.html",
         employee=view,
-        shifts=[],            # populated by /employee/my-schedule/shifts client-side
+        shifts=shift_rows,    # server-rendered this+next week (see employee_schedule_rows)
         active_section=section,
         config_json=json.dumps(config),
         dashboard_url="/employee/dashboard",

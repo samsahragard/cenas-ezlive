@@ -46,6 +46,13 @@ from app.models import (
 from app.web.employee_auth import employee_auth
 
 
+try:  # store-local calendar day for the employee week window (both stores = Houston)
+    from zoneinfo import ZoneInfo
+    _STORE_TZ = ZoneInfo("America/Chicago")
+except Exception:  # pragma: no cover - tzdata missing
+    _STORE_TZ = None
+
+
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
@@ -92,6 +99,75 @@ def _weeks_with_legacy(weeks):
         legacy = _legacy_saturday_week_start(w)
         if legacy is not None:
             out.append(legacy)
+    return out
+
+
+def _store_today():
+    """Today's date in STORE-LOCAL time (Houston / America-Chicago). The
+    employee this-week/next-week window must key off the store's calendar day,
+    not the server's UTC day -- otherwise the week rolls over ~5h early (UTC
+    midnight = 7pm CT) and the current week's shifts vanish from the employee's
+    view while it is still that day in Houston."""
+    if _STORE_TZ is not None:
+        return datetime.now(_STORE_TZ).date()
+    return (datetime.utcnow() - timedelta(hours=5)).date()  # CDT fallback
+
+
+def _published_week_shift_rows(db, emp_id, weeks):
+    """The employee's PUBLISHED shifts (per-shift published_at set) inside
+    PUBLISHED schedules for `weeks`, expanded with the legacy Saturday key. The
+    SINGLE selection used by BOTH the JSON endpoint and the server-rendered
+    Shifts page, so the two can never disagree. Returns (rows ordered by
+    start_at, {schedule_id: week_start})."""
+    scheds = (db.query(Schedule)
+                .filter(Schedule.week_start.in_(_weeks_with_legacy(weeks)),
+                        Schedule.status == "published").all())
+    week_by_sched = {s.id: s.week_start for s in scheds}
+    if not week_by_sched:
+        return [], {}
+    rows = (db.query(Shift)
+              .filter(Shift.employee_id == emp_id,
+                      Shift.schedule_id.in_(list(week_by_sched.keys())),
+                      Shift.published_at.isnot(None))   # per-shift publish gate
+              .order_by(Shift.start_at).all())
+    return rows, week_by_sched
+
+
+def _date_label(dt):
+    return dt.strftime("%a, %b ") + str(dt.day)          # "Sat, Jun 13"
+
+
+def _time_label(dt):
+    return dt.strftime("%I:%M %p").lstrip("0")            # "4:00 PM"
+
+
+def employee_schedule_rows(db, emp_id):
+    """Server-render-ready shift rows for the employee Shifts PAGE: this + next
+    week, store-local, PUBLISHED only, with human labels. Mirrors the
+    /employee/my-schedule/shifts JSON selection -- the Shifts tab is
+    server-rendered (no client fetch), so the page renders these directly."""
+    this_week, next_week = _week_bounds(_store_today())
+    rows, _ = _published_week_shift_rows(db, emp_id, [this_week, next_week])
+    if not rows:
+        return []
+    pos_ids = {sh.position_id for sh in rows if sh.position_id}
+    pos_name = ({p.id: p.name for p in
+                 db.query(Position).filter(Position.id.in_(pos_ids)).all()}
+                if pos_ids else {})
+    out = []
+    for sh in rows:
+        if sh.start_at and sh.end_at:
+            time_label = f"{_time_label(sh.start_at)} - {_time_label(sh.end_at)}"
+        elif sh.start_at:
+            time_label = _time_label(sh.start_at)
+        else:
+            time_label = ""
+        out.append({
+            "date_label": _date_label(sh.start_at) if sh.start_at else "Scheduled",
+            "time_label": time_label,
+            "position_name": pos_name.get(sh.position_id),
+            "status_label": (sh.status or "assigned").replace("_", " ").title(),
+        })
     return out
 
 
@@ -160,7 +236,7 @@ def emp_my_schedule_shifts():
     if err:
         return err
 
-    this_week, next_week = _week_bounds(datetime.utcnow().date())
+    this_week, next_week = _week_bounds(_store_today())
     allowed = {this_week, next_week}
     wk = (request.args.get("week") or "").strip()
     if wk:
@@ -179,22 +255,9 @@ def emp_my_schedule_shifts():
         if not weeks:
             return jsonify({"ok": True, "employee": emp_out, "shifts": []}), 200
 
-        scheds = (db.query(Schedule)
-                    .filter(Schedule.week_start.in_(_weeks_with_legacy(weeks)),
-                            Schedule.status == "published").all())
-        week_by_sched = {s.id: s.week_start for s in scheds}
-        if not week_by_sched:
+        rows, week_by_sched = _published_week_shift_rows(db, emp_id, weeks)
+        if not rows:
             return jsonify({"ok": True, "employee": emp_out, "shifts": []}), 200
-
-        rows = (db.query(Shift)
-                  .filter(Shift.employee_id == emp_id,
-                          Shift.schedule_id.in_(list(week_by_sched.keys())),
-                          # per-shift publish: only PUBLISHED shifts are visible to the
-                          # employee -- new/edited-but-unpublished shifts stay hidden until
-                          # the manager publishes them. (1a backfilled existing published
-                          # weeks, so no regression.)
-                          Shift.published_at.isnot(None))
-                  .order_by(Shift.start_at).all())
         shift_ids = [sh.id for sh in rows]
 
         pos_ids = {sh.position_id for sh in rows if sh.position_id}

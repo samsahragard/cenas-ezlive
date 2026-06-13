@@ -10,6 +10,8 @@ import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
+from sqlalchemy import or_
+
 from app.models import (
     CANONICAL_POSITIONS,
     CenaToastLink,
@@ -19,6 +21,11 @@ from app.models import (
     Position,
     Schedule,
     Shift,
+    ShiftAcceptance,
+    ShiftAlarm,
+    ShiftOffer,
+    ShiftSwap,
+    ShiftTag,
     TimeOffRequest,
 )
 
@@ -183,6 +190,34 @@ def _timeoff_conflict(db, employee_id: int | None, on_date: date) -> str | None:
     return f"{who} has approved time off {row.start_date.isoformat()} to {row.end_date.isoformat()}"
 
 
+def _clear_schedule_rows(db, schedules: list[Schedule]) -> dict:
+    """Delete schedules and shift-dependent rows for an authorized replacement."""
+    schedule_ids = [s.id for s in schedules if s and s.id is not None]
+    if not schedule_ids:
+        return {"schedules": 0, "shifts": 0}
+    shift_ids = [
+        sid for (sid,) in db.query(Shift.id).filter(Shift.schedule_id.in_(schedule_ids)).all()
+    ]
+    if shift_ids:
+        db.query(ShiftTag).filter(ShiftTag.shift_id.in_(shift_ids)).delete(synchronize_session=False)
+        db.query(ShiftAcceptance).filter(
+            ShiftAcceptance.shift_id.in_(shift_ids)
+        ).delete(synchronize_session=False)
+        db.query(ShiftAlarm).filter(
+            ShiftAlarm.shift_id.in_(shift_ids)
+        ).delete(synchronize_session=False)
+        db.query(ShiftOffer).filter(ShiftOffer.shift_id.in_(shift_ids)).delete(synchronize_session=False)
+        db.query(ShiftSwap).filter(
+            or_(
+                ShiftSwap.from_shift_id.in_(shift_ids),
+                ShiftSwap.to_shift_id.in_(shift_ids),
+            )
+        ).delete(synchronize_session=False)
+        db.query(Shift).filter(Shift.id.in_(shift_ids)).delete(synchronize_session=False)
+    db.query(Schedule).filter(Schedule.id.in_(schedule_ids)).delete(synchronize_session=False)
+    return {"schedules": len(schedule_ids), "shifts": len(shift_ids)}
+
+
 def _prepare_records(records: list[dict], week_start: date) -> tuple[list[dict], list[dict]]:
     prepared: list[dict] = []
     errors: list[dict] = []
@@ -230,6 +265,7 @@ def import_draft_records(
     week_start: date,
     actor_id: int | None,
     commit: bool = False,
+    replace_existing: bool = False,
 ) -> dict:
     """Validate and optionally insert unpublished draft shifts.
 
@@ -245,6 +281,7 @@ def import_draft_records(
     target_stores = sorted({r["store"] for r in prepared})
     blockers = []
     schedules: dict[str, Schedule] = {}
+    existing_by_store: dict[str, list[Schedule]] = {}
     for store in target_stores:
         existing = (
             db.query(Schedule)
@@ -252,8 +289,11 @@ def import_draft_records(
             .order_by(Schedule.week_start.desc())
             .all()
         )
+        existing_by_store[store] = existing
         for sched in existing:
             shift_count = db.query(Shift).filter_by(schedule_id=sched.id).count()
+            if replace_existing:
+                continue
             if shift_count:
                 blockers.append({
                     "store": store,
@@ -288,8 +328,15 @@ def import_draft_records(
     mapped_roles: Counter[str] = Counter()
     per_store: Counter[str] = Counter()
     per_position: Counter[str] = Counter()
+    cleared = {"schedules": 0, "shifts": 0}
 
     if commit:
+        if replace_existing:
+            for store in target_stores:
+                removed = _clear_schedule_rows(db, existing_by_store.get(store, []))
+                cleared["schedules"] += removed["schedules"]
+                cleared["shifts"] += removed["shifts"]
+            schedules = {}
         for store in target_stores:
             if store not in schedules:
                 sched = Schedule(
@@ -364,4 +411,14 @@ def import_draft_records(
         "per_position": dict(per_position),
         "schedule_ids": {store: schedules[store].id for store in schedules} if commit else {},
         "published_shifts": 0,
+        "replace_existing": bool(replace_existing),
+        "cleared": cleared if commit else {
+            "schedules": sum(len(existing_by_store.get(store, [])) for store in target_stores),
+            "shifts": sum(
+                db.query(Shift)
+                .filter(Shift.schedule_id.in_([s.id for s in existing_by_store.get(store, [])]))
+                .count()
+                for store in target_stores
+            ),
+        },
     }

@@ -537,12 +537,13 @@ _DRAFT_IMPORT_FORM = """<!doctype html>
 <title>Draft schedule import</title>
 <body style="font-family: system-ui, sans-serif; max-width: 860px; margin: 32px auto;">
   <h1>Draft schedule import</h1>
-  <p>Partner-only utility. Imports unpublished draft shifts and refuses weeks that already have shifts.</p>
+  <p>Partner-only utility. Imports unpublished draft shifts. Replace mode clears existing target-week schedule rows first.</p>
   <form method="post">
     <textarea name="payload" rows="22" style="width:100%; font-family: ui-monospace, monospace;" required></textarea>
     <p>
       <button name="commit" value="0" type="submit">Dry run</button>
       <button name="commit" value="1" type="submit">Import draft shifts</button>
+      <button name="commit" value="replace" type="submit">Replace existing with draft shifts</button>
     </p>
   </form>
 </body>
@@ -566,13 +567,16 @@ def sv2_draft_import():
     if request.is_json:
         payload = request.get_json(silent=True) or {}
         commit = bool(payload.get("commit"))
+        replace_existing = bool(payload.get("replace_existing"))
     else:
         raw_payload = request.form.get("payload") or ""
         try:
             payload = json.loads(raw_payload)
         except Exception as exc:  # noqa: BLE001
             return jsonify({"ok": False, "error": f"bad payload JSON: {exc}"}), 400
-        commit = request.form.get("commit") == "1" or bool(payload.get("commit"))
+        form_commit = request.form.get("commit")
+        commit = form_commit in ("1", "replace") or bool(payload.get("commit"))
+        replace_existing = form_commit == "replace" or bool(payload.get("replace_existing"))
 
     try:
         week_start = _date.fromisoformat(str(payload.get("week_start") or "").strip())
@@ -593,6 +597,7 @@ def sv2_draft_import():
             week_start=week_start,
             actor_id=current_user_id(),
             commit=commit,
+            replace_existing=replace_existing,
         )
         status = 200 if summary.get("ok") else 409
         return jsonify(summary), status

@@ -121,3 +121,60 @@ def test_draft_import_refuses_week_with_existing_shifts(db_session):
     assert summary["ok"] is False
     assert "already has schedule data" in summary["error"]
     assert db_session.query(Shift).count() == 1
+
+
+def test_draft_import_replace_clears_legacy_week_and_imports_only_payload(db_session):
+    _seed_schedulable_employee(db_session)
+    legacy = Schedule(
+        id=100,
+        store_key="tomball",
+        week_start=date(2026, 6, 13),
+        status="published",
+        published_at=datetime(2026, 6, 6, 12, 0),
+        created_by=1,
+    )
+    db_session.add(legacy)
+    db_session.add(Shift(
+        id=200,
+        schedule_id=100,
+        employee_id=20,
+        position_id=10,
+        start_at=datetime(2026, 6, 13, 16, 0),
+        end_at=datetime(2026, 6, 13, 22, 0),
+        break_minutes=0,
+        status="assigned",
+        published_at=datetime(2026, 6, 6, 12, 0),
+    ))
+    db_session.commit()
+
+    summary = import_draft_records(
+        [{
+            "employee_name": "Alex Martinez",
+            "store_key": "tomball",
+            "shift_date": "2026-06-14",
+            "start": "9:00 AM",
+            "end": "5:00 PM",
+            "position_name": "Cook",
+        }],
+        db_session,
+        week_start=date(2026, 6, 14),
+        actor_id=1,
+        commit=True,
+        replace_existing=True,
+    )
+
+    assert summary["ok"] is True
+    assert summary["replace_existing"] is True
+    assert summary["cleared"] == {"schedules": 1, "shifts": 1}
+    assert db_session.query(Schedule).filter_by(week_start=date(2026, 6, 13)).count() == 0
+    schedules = db_session.query(Schedule).all()
+    assert len(schedules) == 1
+    assert schedules[0].store_key == "tomball"
+    assert schedules[0].week_start == date(2026, 6, 14)
+    assert schedules[0].status == "draft"
+    assert schedules[0].published_at is None
+    shifts = db_session.query(Shift).all()
+    assert len(shifts) == 1
+    assert shifts[0].id != 200
+    assert shifts[0].published_at is None
+    assert shifts[0].start_at == datetime(2026, 6, 14, 9, 0)

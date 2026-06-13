@@ -1,20 +1,8 @@
 {# ============================================================
    schedules_v2_marketplace.html - Schedules V2 / Block 9
-   Manager MARKETPLACE APPROVAL QUEUE: offers a teammate took + proposed swaps
-   awaiting manager approval. Approve moves the shift(s); deny rejects.
-
-   FRONTEND-ONLY (ck). Client-rendered: the page route hands a config blob
-   (store label + endpoint URLs); JS fetches the lists + posts approve/deny.
-   Contract (ckai B9, rich rows #1998/#1999):
-     GET <offers_list>[?status] -> {ok, offers:[{id,status,restricted,expires_at,
-            offered_by:{id,name}, taken_by:{id,name}|null,
-            shift:{id,start_at,end_at,position_name,store}}]}
-     GET <swaps_list>[?status]  -> {ok, swaps:[{id,status,expires_at,
-            from_employee:{id,name}, to_employee:{id,name},
-            from_shift:{..shift..}, to_shift:{..shift..}}]}
-     POST <offer_action>/<id>/approve|deny ; POST <swap_action>/<id>/approve|deny
-   MANAGER-GATED page (require_level foh_manager); a cross-store gm -> 302/403 ->
-   friendly access notice, never a broken list.
+   Manager MARKETPLACE DASHBOARD: richer Operations -> Team -> Market shell
+   for shift pickups + swaps. Client-rendered from the existing live B9 JSON
+   endpoints, with approve/deny still handled by the existing manager APIs.
    ============================================================ #}
 {% extends "base_dashboard.html" %}
 {% set active = 'schedules_v2_marketplace' %}
@@ -22,88 +10,106 @@
 {% block title %}Marketplace - Cenas Kitchen{% endblock %}
 {% block page_module %}SCHEDULES{% endblock %}
 {% block page_title %}Marketplace{% endblock %}
-{% block page_subtitle %}{{ store_label }} - approve shift offers &amp; swaps (V2){% endblock %}
+{% block page_subtitle %}{{ store_label }} - approve shift offers &amp; swaps{% endblock %}
 
 {% block content %}
 <style>
   .sv2-mk{
-    --sk-red:#c8302a; --sk-red-deep:#8a1d18; --sk-blue:#15205c; --sk-blue-deep:#0a1340;
-    --sk-cream:#f4e7d0; --sk-ink:#14205c; --sk-ok:#2f8f57; --sk-ok-deep:#1f6b3e; --sk-amber:#b8801f; --sk-grey:#6b7280;
-    position:relative; color:var(--sk-ink); font-family:'Manrope','Segoe UI',Arial,sans-serif;
-    background:#fbf4e7; border-radius:14px; padding:18px; max-width:820px;
-    box-shadow:0 0 0 1px rgba(20,32,92,0.10), 0 8px 22px rgba(0,0,0,0.10);
+    --mk-bg:#0d0805; --mk-panel:#1c140c; --mk-panel2:#241a10;
+    --mk-line:rgba(214,148,63,.32); --mk-line-soft:rgba(214,148,63,.16);
+    --mk-gold:#e2a44e; --mk-gold-dim:#b9863f; --mk-gold-bright:#f0bd6a;
+    --mk-cream:#f4ead6; --mk-cream-line:#e4d3ad; --mk-ink:#2a1d10;
+    --mk-ink-soft:#5f4a31; --mk-muted:#b29371; --mk-muted-dark:#86694a;
+    --mk-red:#c0392b; --mk-green:#5a9a52; --mk-amber:#e0922f; --mk-gray:#8a7a66;
+    position:relative; color:var(--mk-cream); font-family:'Manrope','Segoe UI',Arial,sans-serif;
+    background:linear-gradient(180deg,#100a06,#0a0604 70%);
+    border:1px solid var(--mk-line-soft); border-radius:14px; padding:22px;
+    box-shadow:0 14px 40px rgba(0,0,0,.35);
   }
-  .sv2-mk *{ box-sizing:border-box; }
-  .sv2-mk .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
-  .sv2-mk .filters{ display:inline-flex; gap:6px; background:rgba(20,32,92,0.06); border-radius:11px; padding:4px; }
-  .sv2-mk .filt{ border:none; background:transparent; color:rgba(20,32,92,0.6); font:inherit; font-weight:700; font-size:13px; padding:7px 15px; border-radius:9px; cursor:pointer; }
-  .sv2-mk .filt.active{ background:#fff; color:var(--sk-blue-deep); box-shadow:0 1px 3px rgba(0,0,0,0.12); }
+  .sv2-mk *{box-sizing:border-box}
+  .sv2-mk .mk-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}
+  .sv2-mk .mk-stat{background:linear-gradient(180deg,var(--mk-panel2),var(--mk-panel));border:1px solid var(--mk-line-soft);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden;min-height:78px}
+  .sv2-mk .mk-stat:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--mk-gold)}
+  .sv2-mk .mk-stat.warn:before{background:var(--mk-amber)}
+  .sv2-mk .mk-stat.go:before{background:var(--mk-green)}
+  .sv2-mk .mk-stat.no:before{background:var(--mk-red)}
+  .sv2-mk .mk-stat .n{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:800;line-height:1;color:var(--mk-cream)}
+  .sv2-mk .mk-stat .l{font-size:10.5px;letter-spacing:.12em;color:var(--mk-muted);text-transform:uppercase;margin-top:8px;font-weight:700}
 
-  .sv2-mk .sec{ font-size:12px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:var(--sk-blue-deep); margin:16px 2px 10px; }
-  .sv2-mk .sec:first-of-type{ margin-top:4px; }
-  .sv2-mk .sec .n{ color:var(--sk-red-deep); }
+  .sv2-mk .mk-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .sv2-mk .mk-chip{background:#15100a;border:1px solid var(--mk-line-soft);color:var(--mk-muted);font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;display:inline-flex;align-items:center;gap:7px}
+  .sv2-mk .mk-chip.active{background:var(--mk-gold);color:#1a1006;border-color:var(--mk-gold)}
+  .sv2-mk .mk-chip .ct{background:rgba(0,0,0,.18);border-radius:999px;padding:0 7px;font-size:11px}
 
-  .sv2-mk .item{ background:#fff; border-radius:12px; padding:13px 15px; margin-bottom:11px; border-left:5px solid #5BCAC5;
-    box-shadow:0 0 0 1px rgba(20,32,92,0.08), 0 3px 9px rgba(0,0,0,0.07); }
-  .sv2-mk .item.swap{ border-left-color:#C98BDB; }
-  .sv2-mk .ihead{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-  .sv2-mk .when{ font-size:16px; font-weight:800; color:var(--sk-blue-deep); }
-  .sv2-mk .pos{ font-size:13px; font-weight:700; color:var(--sk-blue); margin-top:3px; }
-  .sv2-mk .meta{ font-size:13px; color:rgba(20,32,92,0.78); margin-top:6px; line-height:1.45; }
-  .sv2-mk .meta b{ color:var(--sk-blue-deep); }
-  .sv2-mk .person-link{ color:var(--sk-blue-deep); font-weight:800; text-decoration:none; }
-  .sv2-mk .person-link:hover{ text-decoration:underline; text-underline-offset:2px; }
-  .sv2-mk .arrow{ color:var(--sk-red); font-weight:800; margin:0 6px; }
-  .sv2-mk .badge{ flex:0 0 auto; font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; padding:4px 10px; border-radius:999px; border:1.5px solid; }
-  .sv2-mk .badge.pending,.sv2-mk .badge.taken{ color:var(--sk-amber); background:rgba(184,128,31,0.12); border-color:rgba(184,128,31,0.4); }
-  .sv2-mk .badge.approved{ color:var(--sk-ok-deep); background:rgba(47,143,87,0.14); border-color:rgba(47,143,87,0.45); }
-  .sv2-mk .badge.denied,.sv2-mk .badge.cancelled,.sv2-mk .badge.expired{ color:var(--sk-grey); background:rgba(107,114,128,0.12); border-color:rgba(107,114,128,0.4); }
-  .sv2-mk .exp{ font-size:11px; color:rgba(20,32,92,0.5); margin-top:6px; }
-  .sv2-mk .acts{ display:flex; gap:9px; margin-top:11px; padding-top:11px; border-top:1px solid rgba(20,32,92,0.10); }
-  .sv2-mk .btn{ flex:1 1 0; border:none; border-radius:10px; padding:10px 12px; font:inherit; font-weight:800; font-size:13.5px; cursor:pointer; transition:filter 120ms, transform 80ms; }
-  .sv2-mk .btn:active{ transform:translateY(1px); } .sv2-mk .btn:disabled{ opacity:0.55; cursor:default; }
-  .sv2-mk .btn-ok{ background:var(--sk-ok); color:#fff; box-shadow:0 2px 0 var(--sk-ok-deep); }
-  .sv2-mk .btn-ok:hover{ filter:brightness(1.07); }
-  .sv2-mk .btn-no{ background:rgba(200,48,42,0.10); color:var(--sk-red-deep); border:1.5px solid rgba(200,48,42,0.45); }
-  .sv2-mk .btn-no:hover{ background:rgba(200,48,42,0.18); }
-  .sv2-mk .none{ font-size:13px; color:rgba(20,32,92,0.5); padding:2px 2px 6px; }
+  .sv2-mk .mk-filters{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:16px}
+  .sv2-mk .mk-filters select,.sv2-mk .mk-filters input{
+    background:#15100a;border:1px solid var(--mk-line-soft);color:var(--mk-cream);
+    font:inherit;font-size:12px;padding:7px 10px;border-radius:8px;min-height:34px
+  }
+  .sv2-mk .mk-filters input::placeholder{color:var(--mk-muted-dark)}
 
-  .sv2-mk .state{ text-align:center; padding:28px 18px; color:rgba(20,32,92,0.7); }
-  .sv2-mk .state[hidden]{ display:none; }
-  .sv2-mk .state .s-title{ font-size:16px; font-weight:800; color:var(--sk-blue-deep); }
-  .sv2-mk .state .s-body{ font-size:13.5px; margin-top:7px; line-height:1.5; }
-  .sv2-mk .loading{ text-align:center; padding:28px; font-weight:700; letter-spacing:1px; color:rgba(20,32,92,0.6); }
-  .sv2-mk .loading[hidden]{ display:none; }
-  .sv2-mk #mk-body[hidden]{ display:none; }
+  .sv2-mk .mk-surface{background:var(--mk-cream);border:1px solid var(--mk-cream-line);border-radius:14px;color:var(--mk-ink);overflow:hidden;box-shadow:0 12px 34px rgba(0,0,0,.42);margin-bottom:14px}
+  .sv2-mk .mk-pad{padding:18px 20px;overflow-x:auto}
+  .sv2-mk .mk-section{font-size:11px;letter-spacing:.16em;color:var(--mk-ink-soft);text-transform:uppercase;font-weight:800;margin:4px 0 12px}
+  .sv2-mk table{width:100%;border-collapse:collapse;font-size:13px;min-width:850px}
+  .sv2-mk thead th{text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mk-ink-soft);font-weight:800;padding:0 12px 9px;border-bottom:1px solid var(--mk-cream-line)}
+  .sv2-mk tbody td{padding:12px;border-bottom:1px solid #ead9b4;vertical-align:middle}
+  .sv2-mk tbody tr:last-child td{border-bottom:0}
+  .sv2-mk tbody tr:hover{background:#efe1c4}
+  .sv2-mk .mk-empty-row{text-align:center;color:var(--mk-ink-soft);font-weight:700;padding:28px 12px}
+  .sv2-mk .who{font-weight:800;color:var(--mk-ink)}
+  .sv2-mk .sub2{color:var(--mk-ink-soft);font-size:11.5px}
+  .sv2-mk .arrow{color:var(--mk-gold-dim);font-weight:800;margin:0 6px}
+  .sv2-mk .money{font-weight:800;font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+  .sv2-mk .money.free{color:var(--mk-ink-soft);font-weight:600}
+  .sv2-mk .waiting{color:var(--mk-red);font-weight:800;font-size:12px}
+  .sv2-mk .person-link{color:inherit;text-decoration:none;font-weight:800}
+  .sv2-mk .person-link:hover{text-decoration:underline;text-underline-offset:2px}
 
-  .sv2-mk .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:60; max-width:440px; width:calc(100% - 36px);
-    background:var(--sk-blue-deep); color:var(--sk-cream); border-radius:12px; padding:12px 16px; font-size:13.5px; font-weight:600; text-align:center;
-    box-shadow:0 10px 26px rgba(0,0,0,0.5); opacity:0; pointer-events:none; transition:opacity 180ms, transform 180ms; }
-  .sv2-mk .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
-  .sv2-mk .toast.err{ background:var(--sk-red-deep); }
+  .sv2-mk .badge{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:800;letter-spacing:.04em;padding:3px 9px;border-radius:999px;text-transform:uppercase;white-space:nowrap}
+  .sv2-mk .badge:before{content:"";width:6px;height:6px;border-radius:50%}
+  .sv2-mk .b-available{background:#f3e6c2;color:#8a6512}.sv2-mk .b-available:before{background:var(--mk-gold-dim)}
+  .sv2-mk .b-pending{background:#f6e2c4;color:#9a5a12}.sv2-mk .b-pending:before{background:var(--mk-amber)}
+  .sv2-mk .b-approved{background:#dcecd2;color:#3c6b32}.sv2-mk .b-approved:before{background:var(--mk-green)}
+  .sv2-mk .b-denied{background:#f1d5cf;color:#9c3528}.sv2-mk .b-denied:before{background:var(--mk-red)}
+  .sv2-mk .b-muted{background:#e6ded0;color:#6c5c46}.sv2-mk .b-muted:before{background:var(--mk-gray)}
+
+  .sv2-mk .actions{display:flex;gap:6px;justify-content:flex-end;align-items:center}
+  .sv2-mk .btn{border:1px solid var(--mk-cream-line);background:#fff;color:var(--mk-ink);font-size:12px;font-weight:800;padding:6px 12px;border-radius:7px;white-space:nowrap}
+  .sv2-mk .btn:hover{background:#fff8ec}
+  .sv2-mk .btn.go{background:var(--mk-green);border-color:#4a8442;color:#fff}
+  .sv2-mk .btn.no{background:#fff;border-color:#e2b8b0;color:var(--mk-red)}
+  .sv2-mk .btn:disabled{opacity:.5;cursor:default}
+
+  .sv2-mk .mk-empty{padding:34px 8px;text-align:center}
+  .sv2-mk .mk-empty .big{font-size:15px;font-weight:800;color:var(--mk-ink)}
+  .sv2-mk .mk-empty .sub{font-size:13px;color:var(--mk-ink-soft);margin-top:6px;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5}
+  .sv2-mk .mk-ledger-note{background:#15100a;border:1px solid var(--mk-line-soft);border-radius:10px;color:var(--mk-muted);padding:10px 12px;margin-bottom:14px;font-size:12.5px;font-weight:700}
+
+  .sv2-mk .state,.sv2-mk .loading{text-align:center;padding:28px;color:var(--mk-muted);font-weight:700}
+  .sv2-mk .state[hidden],.sv2-mk .loading[hidden],.sv2-mk #mk-body[hidden]{display:none}
+  .sv2-mk .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);z-index:60;max-width:440px;width:calc(100% - 36px);background:#0a1340;color:#f4e7d0;border-radius:12px;padding:12px 16px;font-size:13.5px;font-weight:700;text-align:center;box-shadow:0 10px 26px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity 180ms,transform 180ms}
+  .sv2-mk .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .sv2-mk .toast.err{background:#8a1d18}
+  @media (max-width: 780px){
+    .sv2-mk{padding:16px}
+    .sv2-mk .mk-stats{grid-template-columns:1fr 1fr}
+    .sv2-mk table{min-width:760px}
+  }
 </style>
 
 <div class="sv2-mk" id="sv2-mk-root">
-  <div class="toolbar">
-    <div class="filters">
-      <button class="filt active" data-status="pending" type="button">Pending</button>
-      <button class="filt" data-status="all" type="button">All</button>
-    </div>
-  </div>
-
   <div class="loading" id="mk-loading">Loading marketplace&hellip;</div>
   <div class="state" id="mk-access" hidden>
-    <div class="s-title">No access to this store</div>
-    <div class="s-body">You can only review marketplace activity for your own store.</div>
+    <div>No access to this store</div>
+    <div class="sub2" style="margin-top:6px;color:var(--mk-muted)">You can only review marketplace activity for your own store.</div>
   </div>
-
   <div id="mk-body" hidden>
-    <div class="sec">Shift offers <span class="n" id="off-count"></span></div>
-    <div id="off-list"></div>
-    <div class="sec">Swaps <span class="n" id="swp-count"></span></div>
-    <div id="swp-list"></div>
+    <div class="mk-stats" id="mk-stats"></div>
+    <div class="mk-chips" id="mk-chips"></div>
+    <div class="mk-filters" id="mk-filters"></div>
+    <div id="mk-content"></div>
   </div>
-
   <div class="toast" id="mk-toast"></div>
 </div>
 
@@ -113,81 +119,205 @@
   "use strict";
   var CFG = JSON.parse(document.getElementById("sv2-mk-config").textContent);
   var $ = function(id){ return document.getElementById(id); };
-  var state = { status:"pending", busy:false };
+  var state = { tab:"Pending", busy:false, offers:[], swaps:[], filters:{position:"",status:"",employee:"",money:"",type:"",date:""} };
 
   function show(el){ el.hidden=false; } function hide(el){ el.hidden=true; }
   function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+  function jsonHeaders(){ return {"Content-Type":"application/json","Accept":"application/json"}; }
+  function parseJsonOrThrow(r){ var ct=r.headers.get("content-type")||""; if(ct.indexOf("application/json")===-1){ var e1=new Error("non-json"); e1.status=(r.status===200?403:r.status); throw e1; } return r.json().then(function(j){ if(!r.ok||(j&&j.ok===false)){ var e2=new Error("bad"); e2.status=r.status; e2.error=(j&&j.error)?j.error:null; throw e2; } return j; }); }
+  function showAccess(){ hide($("mk-loading")); hide($("mk-body")); show($("mk-access")); }
   var DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   function isoToDate(s){ if(!s) return null; var d=String(s).split("T")[0].split("-"); if(d.length<3) return null; return new Date(+d[0],(+d[1])-1,+d[2]); }
   function hm(iso){ var t=String(iso||"").split("T")[1]||"00:00"; var p=t.split(":"); return {h:+p[0]||0,m:+p[1]||0}; }
   function fmtT(iso){ var x=hm(iso),h=x.h; var ap=h>=12?"p":"a"; var hh=h%12; if(hh===0)hh=12; return x.m?(hh+":"+(x.m<10?"0"+x.m:x.m)+ap):(hh+ap); }
-  function shiftLine(sh){ if(!sh) return ""; var d=isoToDate(sh.start_at); var day=d?(DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()):""; return day+" "+fmtT(sh.start_at)+"-"+fmtT(sh.end_at); }
+  function dateLabel(iso){ var d=isoToDate(iso); return d ? (DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()) : ""; }
+  function shiftDate(sh){ return dateLabel(sh && sh.start_at); }
+  function shiftHours(sh){ return sh ? (fmtT(sh.start_at)+"-"+fmtT(sh.end_at)) : ""; }
   function nm(p){ return (p&&p.name)?p.name:(p&&p.id?("#"+p.id):"someone"); }
-  function personLink(p){
-    var label = esc(nm(p));
-    if(p && p.id && CFG.profileBaseUrl){
-      return '<a class="person-link" href="'+esc(CFG.profileBaseUrl)+encodeURIComponent(p.id)+'" target="_top">'+label+'</a>';
-    }
-    return '<b>'+label+'</b>';
+  function personLink(p){ var label=esc(nm(p)); if(p&&p.id&&CFG.profileBaseUrl){ return '<a class="person-link" href="'+esc(CFG.profileBaseUrl)+encodeURIComponent(p.id)+'" target="_top">'+label+'</a>'; } return '<span class="who">'+label+'</span>'; }
+  function money(){ return '<span class="money free">&mdash;</span>'; }
+  function whenText(row, fallbackShift){ return dateLabel(row.reviewed_at || row.updated_at || row.created_at || (fallbackShift && fallbackShift.start_at)); }
+  function isThisWeek(row, fallbackShift){
+    var d = isoToDate(row.reviewed_at || row.updated_at || row.created_at || (fallbackShift && fallbackShift.start_at));
+    if(!d) return false;
+    var now = new Date(), start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    start.setDate(start.getDate() - start.getDay());
+    var end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+    return d >= start && d < end;
   }
-  var toastTimer=null;
-  function toast(msg,isErr){ var t=$("mk-toast"); t.textContent=msg; t.classList.toggle("err",!!isErr); t.classList.add("show"); if(toastTimer)clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove("show");},3400); }
-  function jsonHeaders(){ return {"Content-Type":"application/json","Accept":"application/json"}; }
-  function parseJsonOrThrow(r){ var ct=r.headers.get("content-type")||""; if(ct.indexOf("application/json")===-1){ var e1=new Error("non-json"); e1.status=(r.status===200?403:r.status); throw e1; } return r.json().then(function(j){ if(!r.ok||(j&&j.ok===false)){ var e2=new Error("bad"); e2.status=r.status; e2.error=(j&&j.error)?j.error:null; throw e2; } return j; }); }
-  function showAccess(){ hide($("mk-loading")); hide($("mk-body")); show($("mk-access")); }
 
-  function actionable(st){ return st==="pending" || st==="taken"; }
-
-  function offerHtml(o){
-    var sh=o.shift||{}; var st=(o.status||"").toLowerCase();
-    var p=[]; p.push('<div class="item" data-offer="'+(+o.id)+'">');
-    p.push('<div class="ihead"><div class="when">'+esc(shiftLine(sh))+'</div><span class="badge '+esc(st)+'">'+esc(st)+'</span></div>');
-    if(sh.position_name) p.push('<div class="pos">'+esc(sh.position_name)+(sh.store?' &middot; '+esc(sh.store):'')+'</div>');
-    p.push('<div class="meta">'+personLink(o.offered_by)+' offered'+(o.taken_by?(' &middot; '+personLink(o.taken_by)+' wants it'):' &middot; not taken yet')+(o.restricted?' &middot; same store+role':'')+'</div>');
-    if(o.expires_at) p.push('<div class="exp">Expires '+esc(shiftLine({start_at:o.expires_at}))+'</div>');
-    if(actionable(st) && o.taken_by){ p.push('<div class="acts"><button class="btn btn-ok" data-act="approve">Approve</button><button class="btn btn-no" data-act="deny">Deny</button></div>'); }
-    p.push('</div>'); return p.join("");
+  function statusInfo(kind, raw){
+    var s=(raw||"").toLowerCase();
+    var map = kind==="swap" ? {
+      proposed:["Waiting on employee","b-pending"], accepted:["Pending Manager","b-pending"], approved:["Approved","b-approved"], denied:["Denied","b-denied"], cancelled:["Cancelled","b-muted"], expired:["Expired","b-muted"]
+    } : {
+      open:["Available","b-available"], taken:["Pending Manager","b-pending"], approved:["Approved","b-approved"], denied:["Denied","b-denied"], cancelled:["Cancelled","b-muted"], expired:["Expired","b-muted"]
+    };
+    return map[s] || [s || "Unknown","b-muted"];
   }
-  function swapHtml(s){
+  function statusBadge(kind, raw){ var m=statusInfo(kind,raw); return '<span class="badge '+m[1]+'">'+esc(m[0])+'</span>'; }
+  function actionable(kind, st){ st=(st||"").toLowerCase(); return kind==="offer" ? st==="taken" : st==="accepted"; }
+
+  function counts(){
+    var O=state.offers, S=state.swaps;
+    return {
+      pending: O.filter(function(o){return o.status==="taken";}).length + S.filter(function(s){return s.status==="accepted";}).length,
+      available: O.filter(function(o){return o.status==="open";}).length,
+      swapsOpen: S.filter(function(s){return s.status==="proposed" || s.status==="accepted";}).length,
+      moneyPending: 0,
+      approved: O.filter(function(o){return o.status==="approved" && isThisWeek(o,o.shift);}).length + S.filter(function(s){return s.status==="approved" && isThisWeek(s,s.from_shift);}).length,
+      denied: O.filter(function(o){return o.status==="denied" && isThisWeek(o,o.shift);}).length + S.filter(function(s){return s.status==="denied" && isThisWeek(s,s.from_shift);}).length,
+      swaps: S.length,
+      history: O.length + S.length,
+      ledger: 0
+    };
+  }
+  function renderStats(){
+    var c=counts();
+    $("mk-stats").innerHTML = [
+      ["warn",c.pending,"Pending Approval"],["",c.available,"Available Shifts"],["",c.swapsOpen,"Swap Requests"],
+      ["warn",c.moneyPending,"Money Offers Pending"],["go",c.approved,"Approved This Week"],["no",c.denied,"Denied This Week"]
+    ].map(function(x){ return '<div class="mk-stat '+x[0]+'"><div class="n">'+x[1]+'</div><div class="l">'+x[2]+'</div></div>'; }).join("");
+  }
+  function renderChips(){
+    var c=counts();
+    var chips = [["Pending",c.pending],["Available",c.available],["Swaps",c.swaps],["Approved",c.approved],["Denied",c.denied],["History",c.history],["Ledger",c.ledger]];
+    $("mk-chips").innerHTML = chips.map(function(x){
+      return '<button type="button" class="mk-chip '+(state.tab===x[0]?'active':'')+'" data-tab="'+x[0]+'">'+x[0]+(x[1] ? '<span class="ct">'+x[1]+'</span>' : '')+'</button>';
+    }).join("");
+  }
+  function uniq(arr){ var seen={}; return arr.filter(function(x){ x=(x||"").trim(); if(!x||seen[x]) return false; seen[x]=true; return true; }).sort(); }
+  function renderFilters(){
+    var positions = uniq(state.offers.map(function(o){return o.shift&&o.shift.position_name;}).concat(state.swaps.map(function(s){return s.from_shift&&s.from_shift.position_name;}).concat(state.swaps.map(function(s){return s.to_shift&&s.to_shift.position_name;}))));
+    var employees = uniq(state.offers.map(function(o){return nm(o.offered_by);}).concat(state.offers.map(function(o){return o.taken_by?nm(o.taken_by):"";}).concat(state.swaps.map(function(s){return nm(s.from_employee);}).concat(state.swaps.map(function(s){return nm(s.to_employee);})))));
+    function opts(items, selected){ return items.map(function(x){ return '<option value="'+esc(x)+'" '+(selected===x?'selected':'')+'>'+esc(x)+'</option>'; }).join(""); }
+    $("mk-filters").innerHTML =
+      '<select data-filter="position"><option value="">All positions</option>'+opts(positions,state.filters.position)+'</select>'+
+      '<select data-filter="status"><option value="">All statuses</option>'+opts(["Pending","Available","Approved","Denied","Cancelled","Expired"],state.filters.status)+'</select>'+
+      '<select data-filter="employee"><option value="">All employees</option>'+opts(employees,state.filters.employee)+'</select>'+
+      '<select data-filter="money"><option value="">Money: All</option><option value="with" '+(state.filters.money==="with"?'selected':'')+'>With money</option><option value="free" '+(state.filters.money==="free"?'selected':'')+'>Free</option></select>'+
+      '<select data-filter="type"><option value="">Type: All</option><option value="pickup" '+(state.filters.type==="pickup"?'selected':'')+'>Pickup</option><option value="swap" '+(state.filters.type==="swap"?'selected':'')+'>Swap</option></select>'+
+      '<input data-filter="date" type="text" placeholder="Date range" value="'+esc(state.filters.date)+'">';
+  }
+
+  function offerMatches(o){
+    var f=state.filters, sh=o.shift||{}, st=statusInfo("offer",o.status)[0];
+    if(f.position && sh.position_name!==f.position) return false;
+    if(f.status && st.indexOf(f.status)!==0) return false;
+    if(f.employee && nm(o.offered_by)!==f.employee && (!o.taken_by || nm(o.taken_by)!==f.employee)) return false;
+    if(f.money==="with") return false;
+    if(f.type==="swap") return false;
+    if(f.date && (shiftDate(sh)+" "+shiftHours(sh)).toLowerCase().indexOf(f.date.toLowerCase())===-1) return false;
+    return true;
+  }
+  function swapMatches(s){
+    var f=state.filters, st=statusInfo("swap",s.status)[0];
+    if(f.position && (!s.from_shift || s.from_shift.position_name!==f.position) && (!s.to_shift || s.to_shift.position_name!==f.position)) return false;
+    if(f.status && st.indexOf(f.status)!==0) return false;
+    if(f.employee && nm(s.from_employee)!==f.employee && nm(s.to_employee)!==f.employee) return false;
+    if(f.money==="with") return false;
+    if(f.type==="pickup") return false;
+    if(f.date && ((shiftDate(s.from_shift)+" "+shiftDate(s.to_shift)).toLowerCase().indexOf(f.date.toLowerCase())===-1)) return false;
+    return true;
+  }
+  function tabRows(){
+    var tab=state.tab, offers=state.offers.slice(), swaps=state.swaps.slice();
+    if(tab==="Pending"){ offers=offers.filter(function(o){return o.status==="taken";}); swaps=swaps.filter(function(s){return s.status==="accepted";}); }
+    else if(tab==="Available"){ offers=offers.filter(function(o){return o.status==="open";}); swaps=[]; }
+    else if(tab==="Swaps"){ offers=[]; }
+    else if(tab==="Approved"){ offers=offers.filter(function(o){return o.status==="approved";}); swaps=swaps.filter(function(s){return s.status==="approved";}); }
+    else if(tab==="Denied"){ offers=offers.filter(function(o){return o.status==="denied";}); swaps=swaps.filter(function(s){return s.status==="denied";}); }
+    else if(tab==="Ledger"){ offers=[]; swaps=[]; }
+    return {offers:offers.filter(offerMatches), swaps:swaps.filter(swapMatches)};
+  }
+
+  function offerRow(o){
+    var sh=o.shift||{}, st=(o.status||"").toLowerCase();
+    var wait = st==="taken" ? '<span class="waiting">'+esc(whenText(o,sh))+'</span>' : '<span class="sub2">'+esc(whenText(o,sh))+'</span>';
+    return '<tr data-offer="'+(+o.id)+'">'+
+      '<td>'+statusBadge("offer",st)+'</td>'+
+      '<td><div class="who">'+esc(shiftDate(sh)||"Shift")+'</div><div class="sub2">'+esc(shiftHours(sh))+'</div></td>'+
+      '<td>'+esc(sh.store||CFG.storeLabel||"")+'</td>'+
+      '<td>'+esc(sh.position_name||"Shift")+'</td>'+
+      '<td>'+personLink(o.offered_by)+'</td>'+
+      '<td>'+(o.taken_by?personLink(o.taken_by):'<span class="sub2">&mdash;</span>')+'</td>'+
+      '<td>'+money()+'</td>'+
+      '<td>'+wait+'</td>'+
+      '<td class="actions"><button class="btn" data-view="offer">View</button>'+(actionable("offer",st)?'<button class="btn go" data-act="approve">Approve</button><button class="btn no" data-act="deny">Deny</button>':'')+'</td>'+
+    '</tr>';
+  }
+  function swapRow(s){
     var st=(s.status||"").toLowerCase();
-    var p=[]; p.push('<div class="item swap" data-swap="'+(+s.id)+'">');
-    p.push('<div class="ihead"><div class="when">Swap</div><span class="badge '+esc(st)+'">'+esc(st)+'</span></div>');
-    p.push('<div class="meta">'+personLink(s.from_employee)+' '+esc(shiftLine(s.from_shift))+'<span class="arrow">&#8644;</span>'+personLink(s.to_employee)+' '+esc(shiftLine(s.to_shift))+'</div>');
-    if(s.expires_at) p.push('<div class="exp">Expires '+esc(shiftLine({start_at:s.expires_at}))+'</div>');
-    if(actionable(st)){ p.push('<div class="acts"><button class="btn btn-ok" data-act="approve">Approve</button><button class="btn btn-no" data-act="deny">Deny</button></div>'); }
-    p.push('</div>'); return p.join("");
+    return '<tr data-swap="'+(+s.id)+'">'+
+      '<td>'+statusBadge("swap",st)+'</td>'+
+      '<td><div class="who">'+personLink(s.from_employee)+'</div><div class="sub2">'+esc((s.from_shift&&s.from_shift.position_name)||"Shift")+' &middot; '+esc(shiftDate(s.from_shift))+'</div></td>'+
+      '<td><span class="arrow">&#8644;</span></td>'+
+      '<td><div class="who">'+personLink(s.to_employee)+'</div><div class="sub2">'+esc((s.to_shift&&s.to_shift.position_name)||"Shift")+' &middot; '+esc(shiftDate(s.to_shift))+'</div></td>'+
+      '<td>'+esc((s.from_shift&&s.from_shift.store)||CFG.storeLabel||"")+'</td>'+
+      '<td>'+(st==="proposed"?'<span class="waiting">Awaiting employee</span>':'<span class="sub2">'+esc(whenText(s,s.from_shift))+'</span>')+'</td>'+
+      '<td class="actions"><button class="btn" data-view="swap">View</button>'+(actionable("swap",st)?'<button class="btn go" data-act="approve">Approve</button><button class="btn no" data-act="deny">Deny</button>':'')+'</td>'+
+    '</tr>';
   }
-
-  function load(){
-    show($("mk-loading")); hide($("mk-access"));
-    var q = state.status==="all" ? "?status=all" : "?status=pending";
-    var pOff = fetch(CFG.offersListUrl+q,{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow);
-    var pSwp = fetch(CFG.swapsListUrl+q,{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow);
-    Promise.all([pOff,pSwp]).then(function(res){
-      hide($("mk-loading")); show($("mk-body"));
-      var offers=(res[0]&&res[0].offers)||[]; var swaps=(res[1]&&res[1].swaps)||[];
-      $("off-count").textContent = offers.length ? "("+offers.length+")" : "";
-      $("swp-count").textContent = swaps.length ? "("+swaps.length+")" : "";
-      $("off-list").innerHTML = offers.length ? offers.map(offerHtml).join("") : '<div class="none">No offers'+(state.status==="pending"?" awaiting approval":"")+'.</div>';
-      $("swp-list").innerHTML = swaps.length ? swaps.map(swapHtml).join("") : '<div class="none">No swaps'+(state.status==="pending"?" awaiting approval":"")+'.</div>';
-    }).catch(function(e){ if(e&&(e.status===401||e.status===403)){ showAccess(); return; } hide($("mk-loading")); show($("mk-body")); toast("Could not load the marketplace. Try again.", true); });
+  function table(title, heads, rows){
+    return '<div class="mk-surface"><div class="mk-pad"><div class="mk-section">'+esc(title)+'</div><table><thead><tr>'+heads.map(function(h){return '<th>'+esc(h)+'</th>';}).join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div></div>';
   }
-
-  function review(kind, id, act, btns){
+  function emptyRow(cols, msg){ return '<tr><td class="mk-empty-row" colspan="'+cols+'">'+esc(msg)+'</td></tr>'; }
+  function emptyCard(big, sub){ return '<div class="mk-surface"><div class="mk-empty"><div class="big">'+esc(big)+'</div><div class="sub">'+esc(sub)+'</div></div></div>'; }
+  function renderContent(){
+    var rows=tabRows(), html="";
+    var pickupHeads = ["Status","Shift date","Location","Position","Original","Pickup","Offer","When",""];
+    var swapHeads = ["Status","Employee A","","Employee B","Location","Acceptance",""];
+    if(state.tab==="Ledger"){
+      $("mk-content").innerHTML = '<div class="mk-ledger-note">Market offer only - not payroll. The live shift-market data model does not yet include money-offer amounts, so ledger counts stay empty until that backend field exists.</div>'+emptyCard("No money offers yet.","When staff attach money to a shift, the agreement will be tracked here separately from payroll.");
+      return;
+    }
+    if(rows.offers.length){
+      html += table("Shift pickups", pickupHeads, rows.offers.map(offerRow).join(""));
+    }
+    if(rows.swaps.length){
+      html += table("Swaps", swapHeads, rows.swaps.map(swapRow).join(""));
+    }
+    if(!html){
+      var copy = {
+        Pending:["No pending approvals.","Pickups and swaps will appear here for review before any schedule changes."],
+        Available:["No available shifts.","When staff put a shift on the market, it shows up here for qualified employees to pick up."],
+        Swaps:["No swap requests.","Staff-initiated swaps appear here. Both employees must accept before you approve."],
+        Approved:["Nothing approved yet.","Approved pickups and swaps will be listed here with their audit trail."],
+        Denied:["Nothing denied.","Denied items keep their reason and audit trail here."],
+        History:["No market activity yet.","Staff can list shifts here. Managers approve pickups and swaps before the schedule changes."]
+      }[state.tab] || ["No market activity.",""];
+      html = state.tab==="Swaps"
+        ? table("Swaps", swapHeads, emptyRow(swapHeads.length, copy[0]))
+        : table("Shift pickups", pickupHeads, emptyRow(pickupHeads.length, copy[0]));
+    }
+    $("mk-content").innerHTML = html;
+  }
+  function render(){ renderStats(); renderChips(); renderFilters(); renderContent(); }
+  function toast(msg,isErr){ var t=$("mk-toast"); t.textContent=msg; t.classList.toggle("err",!!isErr); t.classList.add("show"); clearTimeout(toast._timer); toast._timer=setTimeout(function(){t.classList.remove("show");},3400); }
+  function review(kind, id, act, row){
     if(state.busy) return; state.busy=true;
-    for(var i=0;i<btns.length;i++) btns[i].disabled=true;
+    row.querySelectorAll("button").forEach(function(b){ b.disabled=true; });
     var base = kind==="offer" ? CFG.offerActionBase : CFG.swapActionBase;
     fetch(base+"/"+id+"/"+act,{method:"POST",headers:jsonHeaders(),credentials:"same-origin",body:"{}"}).then(parseJsonOrThrow).then(function(){
       state.busy=false; toast((kind==="offer"?"Offer ":"Swap ")+(act==="approve"?"approved.":"denied.")); load();
-    }).catch(function(e){ state.busy=false; for(var i=0;i<btns.length;i++) btns[i].disabled=false; if(e&&(e.status===401||e.status===403)){ showAccess(); return; } toast((e&&e.error)?e.error:"Could not save. Try again.", true); });
+    }).catch(function(e){ state.busy=false; row.querySelectorAll("button").forEach(function(b){ b.disabled=false; }); if(e&&(e.status===401||e.status===403)){ showAccess(); return; } toast((e&&e.error)?e.error:"Could not save. Try again.", true); });
   }
-
-  // ---- wire ----
-  var filtBtns=document.querySelectorAll(".sv2-mk .filt");
-  for(var i=0;i<filtBtns.length;i++){ filtBtns[i].addEventListener("click", function(ev){ var b=ev.currentTarget; if(b.classList.contains("active")) return; for(var k=0;k<filtBtns.length;k++) filtBtns[k].classList.remove("active"); b.classList.add("active"); state.status=b.getAttribute("data-status"); load(); }); }
-  $("off-list").addEventListener("click", function(ev){ var btn=ev.target.closest("[data-act]"); if(!btn) return; var c=ev.target.closest("[data-offer]"); if(!c) return; review("offer", +c.getAttribute("data-offer"), btn.getAttribute("data-act"), c.querySelectorAll(".btn")); });
-  $("swp-list").addEventListener("click", function(ev){ var btn=ev.target.closest("[data-act]"); if(!btn) return; var c=ev.target.closest("[data-swap]"); if(!c) return; review("swap", +c.getAttribute("data-swap"), btn.getAttribute("data-act"), c.querySelectorAll(".btn")); });
-
+  function load(){
+    show($("mk-loading")); hide($("mk-access"));
+    var pOff = fetch(CFG.offersListUrl+"?status=all",{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow);
+    var pSwp = fetch(CFG.swapsListUrl+"?status=all",{credentials:"same-origin",headers:{Accept:"application/json"}}).then(parseJsonOrThrow);
+    Promise.all([pOff,pSwp]).then(function(res){
+      state.offers=(res[0]&&res[0].offers)||[]; state.swaps=(res[1]&&res[1].swaps)||[];
+      hide($("mk-loading")); show($("mk-body")); render();
+    }).catch(function(e){ if(e&&(e.status===401||e.status===403)){ showAccess(); return; } hide($("mk-loading")); show($("mk-body")); toast("Could not load the marketplace. Try again.", true); });
+  }
+  $("mk-body").addEventListener("click", function(ev){
+    var chip=ev.target.closest("[data-tab]"); if(chip){ state.tab=chip.getAttribute("data-tab"); render(); return; }
+    var btn=ev.target.closest("[data-act]"); if(btn){ var row=btn.closest("[data-offer],[data-swap]"); if(!row) return; var kind=row.hasAttribute("data-offer")?"offer":"swap"; var id=+(row.getAttribute("data-offer")||row.getAttribute("data-swap")); review(kind,id,btn.getAttribute("data-act"),row); return; }
+    var view=ev.target.closest("[data-view]"); if(view){ toast("Details are shown in the row. Approve or deny when ready."); }
+  });
+  $("mk-body").addEventListener("change", function(ev){ var el=ev.target.closest("[data-filter]"); if(!el) return; state.filters[el.getAttribute("data-filter")]=el.value; renderContent(); renderChips(); });
+  $("mk-body").addEventListener("input", function(ev){ var el=ev.target.closest('[data-filter="date"]'); if(!el) return; state.filters.date=el.value; renderContent(); });
   load();
 })();
 </script>

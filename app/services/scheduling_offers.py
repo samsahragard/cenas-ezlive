@@ -179,6 +179,9 @@ def offer_card(db, o, *, include_employee_ids: bool = False) -> dict:
     person_ref = manager_emp_ref if include_employee_ids else emp_ref
     return {"id": o.id, "status": o.status, "restricted": o.restricted,
             "expires_at": o.expires_at.isoformat() if o.expires_at else None,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+            "updated_at": o.updated_at.isoformat() if o.updated_at else None,
+            "reviewed_at": o.reviewed_at.isoformat() if o.reviewed_at else None,
             "offered_by": person_ref(db, o.offered_by_employee_id),
             "taken_by": person_ref(db, o.taken_by_employee_id),
             "shift": shift_card(db, o.shift_id)}
@@ -189,6 +192,9 @@ def swap_card(db, s, *, include_employee_ids: bool = False) -> dict:
     person_ref = manager_emp_ref if include_employee_ids else emp_ref
     return {"id": s.id, "status": s.status,
             "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            "reviewed_at": s.reviewed_at.isoformat() if s.reviewed_at else None,
             "from_employee": person_ref(db, s.from_employee_id),
             "to_employee": person_ref(db, s.to_employee_id),
             "from_shift": shift_card(db, s.from_shift_id),

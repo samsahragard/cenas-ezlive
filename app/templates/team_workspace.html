@@ -500,7 +500,7 @@
         var k = doc.createElement("style");
         k.textContent = "html,body{background-image:none!important;background-color:#241610!important}body::before,body::after,html::before,html::after{display:none!important;content:none!important}";
         if (isMarketFrame) {
-          k.textContent += ".ck-page-body>.sv2-mk:only-child{flex:0 0 auto!important;min-height:0!important}.sv2-mk{height:auto!important;min-height:0!important}";
+          k.textContent += "html,body{height:auto!important;min-height:0!important}.layout,main.main,.ck-page-body{height:auto!important;min-height:0!important}.ck-page-body>.sv2-mk,.sv2-mk{display:block!important;flex:0 0 auto!important;height:auto!important;min-height:0!important}";
         }
         (doc.head || doc.documentElement).appendChild(k);
       } catch (e) {}
@@ -508,25 +508,25 @@
       if (lay) { lay.style.setProperty("grid-template-columns", "1fr", "important"); lay.style.setProperty("display", "block", "important"); }
       var m = doc.querySelector("main.main");
       if (m) { m.style.setProperty("margin", "0", "important"); m.style.setProperty("padding", "0", "important"); m.style.setProperty("width", "100%", "important"); m.style.setProperty("max-width", "100%", "important"); }
+      if (isMarketFrame) {
+        frame.style.setProperty("height", "78vh", "important");
+        frame.style.removeProperty("min-height");
+        reveal(frame);
+        return;
+      }
       // Sam #2888: grow the embed to its CONTENT height so EVERY schedule row is
       // visible by scrolling the page -- no cramped 78vh inner scrollbar. Re-measure
       // on inner re-render (week switch / row sort) via ResizeObserver (same-origin).
       try {
-        var fitTarget = isMarketFrame ? doc.querySelector(".sv2-mk") : null;
         var fit = function () {
           var h = 0;
-          if (fitTarget && fitTarget.getBoundingClientRect) {
-            var rect = fitTarget.getBoundingClientRect();
-            h = Math.ceil(rect.bottom + ((doc.defaultView && doc.defaultView.scrollY) || 0));
-          } else {
-            h = (doc.body ? doc.body.scrollHeight : 0);
-          }
+          h = (doc.body ? doc.body.scrollHeight : 0);
           var target = h + 24;
           var current = parseFloat(frame.style.height) || 0;
           if (target > 0 && Math.abs(target - current) > 2) frame.style.setProperty("height", target + "px", "important");
         };
         fit(); setTimeout(fit, 400); setTimeout(fit, 1200);
-        if (window.ResizeObserver && doc.body) { try { new ResizeObserver(fit).observe(fitTarget || doc.body); } catch (e) {} }
+        if (window.ResizeObserver && doc.body) { try { new ResizeObserver(fit).observe(doc.body); } catch (e) {} }
       } catch (e) {}
     }
     reveal(frame);

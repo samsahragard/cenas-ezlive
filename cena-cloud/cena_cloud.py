@@ -36,6 +36,15 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# Make the vendored CENA L3 engine importable. cena_engine/ is a sibling package
+# next to this script; ensure the script's own directory is on sys.path so
+# `import cena_engine.cena_sql_orchestrator` resolves regardless of CWD. The
+# engine itself is imported lazily inside the /assistant/answer handler so a
+# missing/broken engine never blocks the data-receiver routes or /healthz.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
 # --- Env-only config (Render injects PORT; disk is mounted at /var/data). --
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("PORT") or 10000)
@@ -298,6 +307,8 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             return self._sync_file_post()       # raw body, not JSON
         if route == "/sync/tombstone":
             return self._sync_tombstone()
+        if route == "/assistant/answer":
+            return self._assistant_answer()
         self._json({"ok": False, "error": "not_found"}, 404)
 
     # -- sync endpoints -------------------------------------------------------
@@ -459,6 +470,41 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             conn.close()
         self._json({"ok": True, "relpath": rel, "known": known,
                     "quarantined": bool(quarantined)})
+
+    # -- assistant endpoint --------------------------------------------------
+    # POST /assistant/answer  body {"question": "...", "principal": {...?},
+    # "context": {...?}} -> runs the vendored CENA L3 engine against the DB
+    # snapshots already on disk and returns its bubble dict as JSON. Behind the
+    # same Basic auth as every other route (the auth wall ran in do_POST). The
+    # engine is imported here (lazy) and the whole call is wrapped so ANY engine
+    # failure yields a clean 200 {"ok": false, "error": "..."} - never a 500
+    # with a traceback, never a leaked stack.
+    def _assistant_answer(self):
+        body = self._body()
+        question = str(body.get("question") or "").strip()
+        if not question:
+            return self._json({"ok": False, "error": "missing 'question'"}, 400)
+        principal = body.get("principal")
+        if not isinstance(principal, dict):
+            # Default to a partner-level principal (full read of the analytics
+            # surface). The L3 orchestrator currently routes on the question +
+            # context, not principal, so this is forward-looking metadata.
+            principal = {"role": "partner", "source": "cena-cloud"}
+        context = body.get("context")
+        if not isinstance(context, dict):
+            context = None
+        try:
+            from cena_engine.cena_sql_orchestrator import answer_question
+            result = answer_question(question, principal, context)
+            if not isinstance(result, dict):
+                return self._json(
+                    {"ok": False, "error": "engine returned no result"}, 200)
+            return self._json(result, 200)
+        except Exception as e:  # never 500 with a traceback into the response
+            return self._json(
+                {"ok": False,
+                 "error": "engine failure: %s: %s" % (type(e).__name__, e)},
+                200)
 
     @staticmethod
     def _cleanup(path):

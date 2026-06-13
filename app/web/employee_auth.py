@@ -1081,6 +1081,10 @@ def performance_center():
                 # tip keys ONLY for tipped roles (sales-clean: tips $ + ratios)
                 money["tips"] = tips
                 money["tips_per_hour"] = (round(tips / hours, 4) if hours > 0 else None)
+                # avg tip $ per shift (Sam 2026-06-13): total tips / # shifts in
+                # the period -- the dollar "Avg Tip" the dashboard hero shows.
+                money["avg_tip"] = (round(tips / money["shifts"], 2)
+                                    if money["shifts"] else None)
                 if tips_live:
                     money["tip_pct"] = (round(float(live_tip_pct), 1)
                                         if live_tip_pct is not None else None)

@@ -170,7 +170,7 @@
       $("cfp-hg-l1").textContent = "Tips / Hr";
       $("cfp-hg-tiphr").textContent = money(m.tips_per_hour);
       $("cfp-hg-l2").textContent = "Avg Tip";
-      $("cfp-hg-tippct").textContent = pct(m.tip_pct,0);
+      $("cfp-hg-tippct").textContent = money(m.avg_tip);   // $ per shift (tip % lives in the Tip % card)
     } else {
       $("cfp-hg-l1").textContent = "Eff / Hr";
       $("cfp-hg-tiphr").textContent = money(m.effective_hourly);
@@ -197,6 +197,7 @@
     var cards = [];
     cards.push(mcard("Base pay so far", money(m.base_pay), (Number(m.hours||0).toFixed(1))+" hours"));
     if(tipped) cards.push(mcard("Tips / hour", money(m.tips_per_hour), m.hours?"actual hours":"no hours yet", true));
+    if(tipped) cards.push(mcard("Avg tip / shift", money(m.avg_tip), (Number(m.shifts||0))+" shift"+(Number(m.shifts||0)===1?"":"s"), true));
     cards.push(mcard("Effective hourly", money(m.effective_hourly), tipped ? "base + tips" : "per hour worked"));
     if(tipped) cards.push(mcard("Tip %", pct(m.tip_pct,0), m.tips_live?"live":"credit card tips"));
     cards.push(mcard("Shifts", String(m.shifts||0), rangeLabel(range)));

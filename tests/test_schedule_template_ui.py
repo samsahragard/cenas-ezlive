@@ -100,3 +100,13 @@ def test_link_tab_sorts_cena_profile_column_before_rendering_each_store_panel():
     assert "var linked = _sortByCenaName(d.confirmed_links, function (m) { return m.cena_name; });" in template
     assert "var sugg = _sortByCenaName(d.suggestions, function (m) { return m.cena_name; });" in template
     assert "var uc = _sortByCenaName(d.unmatched_cena, function (c) { return c.name; });" in template
+
+
+def test_market_iframe_uses_stable_content_height_target():
+    template = _read("team_workspace.html")
+
+    assert 'var isMarketFrame = frameKey.indexOf("market-") === 0;' in template
+    assert "doc.querySelector(\".sv2-mk\")" in template
+    assert ".ck-page-body>.sv2-mk:only-child{flex:0 0 auto!important" in template
+    assert "new ResizeObserver(fit).observe(fitTarget || doc.body)" in template
+    assert "Math.abs(target - current) > 2" in template

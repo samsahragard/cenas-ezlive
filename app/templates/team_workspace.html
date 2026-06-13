@@ -493,10 +493,15 @@
     var doc = null;
     try { doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document); } catch (e) { doc = null; }
     if (doc) {
+      var frameKey = frame.getAttribute("data-embed-frame") || "";
+      var isMarketFrame = frameKey.indexOf("market-") === 0;
       [".sidebar", ".sidebar-overlay", ".dash-role-badge-bar", ".topbar", ".subnav-row", ".wordmark", ".ck-bnav"].forEach(function (s) { hideEl(doc, s); });
       try {
         var k = doc.createElement("style");
         k.textContent = "html,body{background-image:none!important;background-color:#241610!important}body::before,body::after,html::before,html::after{display:none!important;content:none!important}";
+        if (isMarketFrame) {
+          k.textContent += ".ck-page-body>.sv2-mk:only-child{flex:0 0 auto!important;min-height:0!important}.sv2-mk{height:auto!important;min-height:0!important}";
+        }
         (doc.head || doc.documentElement).appendChild(k);
       } catch (e) {}
       var lay = doc.querySelector(".layout");
@@ -507,12 +512,21 @@
       // visible by scrolling the page -- no cramped 78vh inner scrollbar. Re-measure
       // on inner re-render (week switch / row sort) via ResizeObserver (same-origin).
       try {
+        var fitTarget = isMarketFrame ? doc.querySelector(".sv2-mk") : null;
         var fit = function () {
-          var h = (doc.body ? doc.body.scrollHeight : 0);
-          if (h > 0) frame.style.setProperty("height", (h + 24) + "px", "important");
+          var h = 0;
+          if (fitTarget && fitTarget.getBoundingClientRect) {
+            var rect = fitTarget.getBoundingClientRect();
+            h = Math.ceil(rect.bottom + ((doc.defaultView && doc.defaultView.scrollY) || 0));
+          } else {
+            h = (doc.body ? doc.body.scrollHeight : 0);
+          }
+          var target = h + 24;
+          var current = parseFloat(frame.style.height) || 0;
+          if (target > 0 && Math.abs(target - current) > 2) frame.style.setProperty("height", target + "px", "important");
         };
         fit(); setTimeout(fit, 400); setTimeout(fit, 1200);
-        if (window.ResizeObserver && doc.body) { try { new ResizeObserver(fit).observe(doc.body); } catch (e) {} }
+        if (window.ResizeObserver && doc.body) { try { new ResizeObserver(fit).observe(fitTarget || doc.body); } catch (e) {} }
       } catch (e) {}
     }
     reveal(frame);

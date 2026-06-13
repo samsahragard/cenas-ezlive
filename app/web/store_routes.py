@@ -4056,7 +4056,7 @@ def _prep_list_v3_post(db, store_scope, user):
 # ---- Manager dashboard (tabbed entry layer, Sam 2026-05-21, samai) --
 # Structural twin of the Catering dashboard. The bottom-nav Manager tab
 # no longer opens a sub-option popover — it links straight here. This
-# route renders manager_dashboard.html: a tab strip across the seven
+# route renders manager_dashboard.html: a grouped tab strip across the
 # manager pages, defaulting to the Daily Log tab.
 #
 # DESIGN-CHANGE rework (Sam 2026-05-21, samai): each tab no longer shows
@@ -4069,21 +4069,54 @@ def _prep_list_v3_post(db, store_scope, user):
 
 # Ordered tab spec: (tab key, caption). The key matches the active_tab
 # values manager_dashboard.html expects. First entry is the default
-# tab. The per-tab url is built per-request by _manager_dash_full_url
-# since six tabs point at store-scoped /manager/<slug> routes and one
-# (interview) is a flat /partner route.
+# leaf tab. The per-tab url is built per-request by
+# _manager_dash_full_url since several tabs point at store-scoped
+# /manager/<slug> routes and interview is a flat /partner route.
 _MANAGER_DASH_TABS = [
     ("log",         "Daily Log"),
-    ("incidents",   "Incidents"),
     ("attendance",  "Attendance"),
+    ("counseling",  "Counseling"),
+    ("incidents",   "Incidents"),
+    ("interview",   "Interview"),
     ("training",    "Training"),
     ("maintenance", "Maintenance"),
-    ("counseling",  "Counseling"),
-    ("interview",   "Interview"),
     # Sports Board (Sam 2026-06-13): the "What's On" sports tracker — six
     # category sub-tabs (Today / Live / Upcoming / Completed / Previous /
     # Favorites) rendered inside the tab's iframe by store.sports_dashboard.
     ("sports",      "Sports"),
+]
+
+_MANAGER_DASH_GROUPS = [
+    {
+        "key": "daily",
+        "label": "Daily",
+        "icon": "log",
+        "tabs": ("log", "attendance"),
+    },
+    {
+        "key": "hr",
+        "label": "HR",
+        "icon": "counseling",
+        "tabs": ("counseling", "incidents"),
+    },
+    {
+        "key": "onboarding",
+        "label": "On boarding",
+        "icon": "interview",
+        "tabs": ("interview", "training"),
+    },
+    {
+        "key": "maintenance",
+        "label": "Maintenance",
+        "icon": "maintenance",
+        "tabs": ("maintenance",),
+    },
+    {
+        "key": "sports",
+        "label": "Sports",
+        "icon": "sports",
+        "tabs": ("sports",),
+    },
 ]
 
 
@@ -4128,10 +4161,10 @@ def manager_dashboard():
     Each tab embeds the real, fully-functional manager page inline in
     an iframe. Structural twin of catering_dashboard.
 
-    This route is now a thin shell: it builds only the tab list (key,
-    label, url) the template needs to point each iframe at its page. No
-    DB session is opened — the iframed pages run their own queries when
-    the browser loads them."""
+    This route is now a thin shell: it builds the leaf tab list (key,
+    label, url) plus the grouped parent navigation the template needs.
+    No DB session is opened — the iframed pages run their own queries
+    when the browser loads them."""
     if not _manager_dashboard_ok():
         abort(403)
     valid = {key for key, _ in _MANAGER_DASH_TABS}
@@ -4146,6 +4179,22 @@ def manager_dashboard():
         }
         for key, caption in _MANAGER_DASH_TABS
     ]
+    tab_lookup = {tab["key"]: tab for tab in tabs}
+    tab_groups = []
+    active_group = "daily"
+    for group in _MANAGER_DASH_GROUPS:
+        children = [tab_lookup[key] for key in group["tabs"] if key in tab_lookup]
+        if not children:
+            continue
+        if active_tab in group["tabs"]:
+            active_group = group["key"]
+        tab_groups.append({
+            "key": group["key"],
+            "label": group["label"],
+            "icon": group["icon"],
+            "children": children,
+            "default_tab": children[0]["key"],
+        })
     label = g.store_label or "Cenas Kitchen"
     # Portable "Wed, May 21" — no %-d / %#d (platform-specific).
     today_label = _today_label()
@@ -4155,6 +4204,8 @@ def manager_dashboard():
         store_label=label,
         today_label=today_label,
         active_tab=active_tab,
+        active_group=active_group,
+        tab_groups=tab_groups,
         tabs=tabs,
     )
 

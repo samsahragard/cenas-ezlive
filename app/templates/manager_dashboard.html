@@ -3,19 +3,19 @@
    samai build, structural twin of catering_dashboard.html (the
    just-shipped Catering dashboard). Per Sam: the bottom-nav Manager
    tab no longer opens a popover — it links straight here, and this
-   page is a tab strip across the seven manager pages, defaulting
+   page is a grouped tab strip across the manager pages, defaulting
    to Daily Log.
 
    DESIGN-CHANGE rework (Sam 2026-05-21, samai): each tab no longer
    shows a short preview + an "Open full page" link. Each tab now
    embeds the REAL, fully-functional manager page inline in an
    <iframe> — click a tab and the actual working page is right there
-   (Daily Log -> /<store>/manager/daily-log, Incidents -> .../
-   incident-reports, Attendance -> .../attendance, Training -> .../
-   training, Maintenance -> .../maintenance, Counseling -> .../
-   counseling, Interview Tracker -> /partner/interview-tracker). All
-   existing manager functionality is left as-is — the pages are simply
-   iframed, not rewritten.
+   (Daily Log -> /<store>/manager/daily-log, Attendance -> .../
+   attendance, Counseling -> .../counseling, Incidents -> .../
+   incident-reports, Interview Tracker -> /partner/interview-tracker,
+   Training -> .../training, Maintenance -> .../maintenance, Sports ->
+   .../sports). All existing manager functionality is left as-is — the
+   pages are simply iframed, not rewritten.
 
    The iframed pages are themselves full base_dashboard pages, so each
    one carries its own sidebar / topbar / bottom-nav / role badge. The
@@ -40,9 +40,17 @@
      active        -> 'manager_dashboard'
      store_label   -> str (store display name)
      today_label   -> str, e.g. "Wed, May 21"
-     active_tab    -> one of: log | incidents | attendance | training |
-                      maintenance | counseling | interview
+     active_tab    -> one of: log | attendance | counseling | incidents |
+                      interview | training | maintenance | sports
                       (default 'log'; from ?tab=, validated)
+     active_group  -> one of: daily | hr | onboarding | maintenance |
+                      sports
+     tab_groups    -> ordered list[dict], one per parent tab:
+       key         (str)  — parent tab id
+       label       (str)  — parent tab caption
+       icon        (str)  — icon key from _mgd_icons
+       default_tab (str)  — leaf tab to open when parent is clicked
+       children    (list) — leaf tab dicts in that parent
      tabs          -> ordered list[dict], one per tab:
        key   (str)  — tab id, matches active_tab values
        label (str)  — tab strip caption
@@ -267,6 +275,47 @@
   }
   .mgrdash .mgd-tab.active .mgd-tab-icon { opacity: 1; }
 
+  .mgrdash .mgd-subtab-bank {
+    background: rgba(0, 0, 0, 0.18);
+    border-top: 0.5px solid rgba(217, 164, 54, 0.12);
+    position: relative;
+    z-index: 1;
+  }
+  .mgrdash .mgd-subtab-bank.hidden { display: none; }
+  .mgrdash .mgd-subtabs {
+    display: flex;
+    gap: 8px;
+    padding: 9px 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .mgrdash .mgd-subtabs::-webkit-scrollbar { display: none; }
+  .mgrdash .mgd-subtabs.hidden { display: none; }
+  .mgrdash .mgd-subtab {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border: 0.5px solid var(--mgd-border);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--mgd-cream-dim);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .mgrdash .mgd-subtab:hover {
+    color: var(--mgd-cream);
+    border-color: var(--mgd-border-active);
+  }
+  .mgrdash .mgd-subtab.active {
+    color: #1a0d08;
+    background: var(--mgd-accent);
+    border-color: var(--mgd-accent);
+  }
+
   /* TAB CONTENT — one panel per tab; the inactive ones are hidden.
      Each panel is just a frame holding ONE iframe of the real page. */
   .mgrdash .mgd-content-wrap { margin-top: 18px; }
@@ -345,6 +394,8 @@
     .mgrdash .mgd-tabs { padding: 0 8px; }
     .mgrdash .mgd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .mgrdash .mgd-tab-icon { width: 12px; height: 12px; }
+    .mgrdash .mgd-subtabs { padding: 8px; gap: 6px; }
+    .mgrdash .mgd-subtab { padding: 8px 10px; font-size: 11px; }
     .mgrdash .mgd-content-wrap { margin-top: 14px; }
     .mgrdash .mgd-panel { border-radius: 12px; }
     .mgrdash .mgd-embed-frame {
@@ -397,18 +448,45 @@
       <div class="mgd-rule"></div>
     </div>
 
-    {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;
-       JS upgrades them to in-page panel swaps. #}
+    {# PARENT TAB STRIP — real anchors to each group's default ?tab=KEY
+       so it works without JS; JS upgrades them to in-page panel swaps. #}
     <div class="mgd-tabs" id="mgdTabs" role="tablist">
-      {% for t in tabs %}
-      <a class="mgd-tab{% if t.key == active_tab %} active{% endif %}"
-         href="?tab={{ t.key }}"
+      {% for grp in tab_groups %}
+      <a class="mgd-tab mgd-group-tab{% if grp.key == active_group %} active{% endif %}"
+         href="?tab={{ grp.default_tab }}"
          role="tab"
-         data-tab="{{ t.key }}"
-         aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
-        <svg class="mgd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _mgd_icons.get(t.key, _mgd_icons['log'])|safe }}</svg>
-        <span class="mgd-tab-label">{{ t.label }}</span>
+         data-tab-group="{{ grp.key }}"
+         data-tab-default="{{ grp.default_tab }}"
+         aria-selected="{{ 'true' if grp.key == active_group else 'false' }}">
+        <svg class="mgd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _mgd_icons.get(grp.icon, _mgd_icons['log'])|safe }}</svg>
+        <span class="mgd-tab-label">{{ grp.label }}</span>
       </a>
+      {% endfor %}
+    </div>
+
+    {# CHILD TAB STRIP — shown only for grouped parent tabs. Maintenance
+       and Sports stay as single top-level tabs with no extra row. #}
+    {% set _active_has_subtabs = namespace(value=false) %}
+    {% for grp in tab_groups if grp.key == active_group and grp.children|length > 1 %}
+      {% set _active_has_subtabs.value = true %}
+    {% endfor %}
+    <div class="mgd-subtab-bank{% if not _active_has_subtabs.value %} hidden{% endif %}" id="mgdSubtabBank">
+      {% for grp in tab_groups if grp.children|length > 1 %}
+      <div class="mgd-subtabs{% if grp.key != active_group %} hidden{% endif %}"
+           data-subtabs="{{ grp.key }}"
+           role="tablist"
+           aria-label="{{ grp.label }} tabs">
+        {% for child in grp.children %}
+        <a class="mgd-subtab mgd-leaf-tab{% if child.key == active_tab %} active{% endif %}"
+           href="?tab={{ child.key }}"
+           role="tab"
+           data-tab="{{ child.key }}"
+           data-parent-group="{{ grp.key }}"
+           aria-selected="{{ 'true' if child.key == active_tab else 'false' }}">
+          <span class="mgd-subtab-label">{{ child.label }}</span>
+        </a>
+        {% endfor %}
+      </div>
       {% endfor %}
     </div>
 
@@ -450,12 +528,12 @@
   /* Manager dashboard — tab switching plus iframe lazy-load and the
      per-iframe chrome strip.
 
-     The tabs are real <a href="?tab=KEY"> links, so with JS off the
-     route serves the right tab server-side. With JS on, clicking a tab
-     swaps the visible panel in place (no navigation).
+     The parent and child tabs are real <a href="?tab=KEY"> links, so
+     with JS off the route serves the right tab server-side. With JS on,
+     clicking a tab swaps the visible panel in place (no navigation).
 
      Each tab's panel holds ONE iframe of the real, fully-functional
-     manager page. The iframe carries data-src, not src — so the seven
+     manager page. The iframe carries data-src, not src — so the
      manager pages do not all load at once. The default tab's iframe
      is loaded immediately; every other iframe loads the first time its
      tab is activated.
@@ -476,7 +554,9 @@
 
   var root = document.getElementById("mgrdash");
   if (!root) return;
-  var tabs = root.querySelectorAll(".mgd-tab");
+  var groupTabs = root.querySelectorAll(".mgd-group-tab");
+  var leafTabs = root.querySelectorAll(".mgd-leaf-tab");
+  var subtabRows = root.querySelectorAll(".mgd-subtabs");
   var panels = root.querySelectorAll(".mgd-panel");
   var loaded = {};   // tab key -> true once its iframe src has been set
 
@@ -577,12 +657,41 @@
     frame.setAttribute("src", src);
   }
 
+  function groupForKey(key) {
+    var leaf = root.querySelector('.mgd-leaf-tab[data-tab="' + key + '"]');
+    if (leaf) return leaf.getAttribute("data-parent-group");
+    var group = root.querySelector('.mgd-group-tab[data-tab-default="' + key + '"]');
+    return group ? group.getAttribute("data-tab-group") : null;
+  }
+
+  function syncUrl(key) {
+    /* Keep the URL in sync so a refresh / share lands on the same tab,
+       without adding a history entry per tap. */
+    try {
+      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
+    } catch (err) { /* history API unavailable — panel swap still works */ }
+  }
+
   function activate(key) {
-    tabs.forEach(function (t) {
+    var groupKey = groupForKey(key);
+    var hasSubtabs = false;
+    groupTabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab-group") === groupKey;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    leafTabs.forEach(function (t) {
       var on = t.getAttribute("data-tab") === key;
       t.classList.toggle("active", on);
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
+    subtabRows.forEach(function (row) {
+      var on = row.getAttribute("data-subtabs") === groupKey;
+      row.classList.toggle("hidden", !on);
+      hasSubtabs = hasSubtabs || on;
+    });
+    var subtabBank = root.querySelector("#mgdSubtabBank");
+    if (subtabBank) subtabBank.classList.toggle("hidden", !hasSubtabs);
     panels.forEach(function (p) {
       p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
     });
@@ -590,24 +699,32 @@
   }
 
   root.querySelector("#mgdTabs").addEventListener("click", function (e) {
-    var tab = e.target.closest(".mgd-tab");
+    var tab = e.target.closest(".mgd-group-tab");
     if (!tab) return;
     e.preventDefault();
-    var key = tab.getAttribute("data-tab");
+    var key = tab.getAttribute("data-tab-default");
     activate(key);
-    /* Keep the URL in sync so a refresh / share lands on the same tab,
-       without adding a history entry per tap. */
-    try {
-      history.replaceState(null, "", "?tab=" + encodeURIComponent(key));
-    } catch (err) { /* history API unavailable — panel swap still works */ }
+    syncUrl(key);
   });
+
+  var subtabBankEl = root.querySelector("#mgdSubtabBank");
+  if (subtabBankEl) {
+    subtabBankEl.addEventListener("click", function (e) {
+      var tab = e.target.closest(".mgd-leaf-tab");
+      if (!tab) return;
+      e.preventDefault();
+      var key = tab.getAttribute("data-tab");
+      activate(key);
+      syncUrl(key);
+    });
+  }
 
   /* Load the iframe for the tab that is active on page load (the
      default tab, log, unless ?tab= deep-linked another). The
-     other six iframes stay unloaded until their tab is clicked. */
+     other iframes stay unloaded until their tab is clicked. */
   var startTab = (function () {
-    var activeTabEl = root.querySelector(".mgd-tab.active");
-    return activeTabEl ? activeTabEl.getAttribute("data-tab") : null;
+    var activePanel = root.querySelector(".mgd-panel:not(.hidden)");
+    return activePanel ? activePanel.getAttribute("data-tab-panel") : null;
   })();
   if (startTab) loadFrame(startTab);
 })();

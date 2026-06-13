@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 
@@ -83,6 +84,49 @@ def _tab_keys(html: str) -> set[str]:
         start = end + 1
 
 
+def _attr_values(html: str, attr: str) -> list[str]:
+    values: list[str] = []
+    marker = f'{attr}="'
+    start = 0
+    while True:
+        idx = html.find(marker, start)
+        if idx == -1:
+            return values
+        idx += len(marker)
+        end = html.find('"', idx)
+        values.append(html[idx:end])
+        start = end + 1
+
+
+def _active_manager_group(html: str) -> str:
+    match = re.search(r'class="mgd-tab mgd-group-tab active"[^>]*data-tab-group="([^"]+)"', html)
+    assert match is not None
+    return match.group(1)
+
+
+def _active_manager_leaf(html: str) -> str | None:
+    match = re.search(r'class="mgd-subtab mgd-leaf-tab active"[^>]*data-tab="([^"]+)"', html)
+    return match.group(1) if match else None
+
+
+def _manager_panel_class(html: str, key: str) -> str:
+    match = re.search(
+        rf'<div class="([^"]*)"[^>]*data-tab-panel="{re.escape(key)}"',
+        html,
+    )
+    assert match is not None
+    return match.group(1)
+
+
+def _manager_frame_src(html: str, key: str) -> str:
+    match = re.search(
+        rf'<iframe class="mgd-embed-frame"[^>]*data-embed-frame="{re.escape(key)}"[^>]*data-src="([^"]+)"',
+        html,
+    )
+    assert match is not None
+    return match.group(1)
+
+
 def test_expo_today_and_operations_are_limited_to_allowed_tabs(dashboard_app):
     flask_app, db = dashboard_app
     expo = _seed_actor(db, uid=101, role="expo", position="Expo")
@@ -123,6 +167,78 @@ def test_km_gets_manager_and_full_operations_tabs(dashboard_app):
     assert {"team", "corp-order", "sales", "labor", "performance"}.issubset(
         _tab_keys(ops.get_data(as_text=True))
     )
+
+
+def test_manager_dashboard_groups_existing_pages_without_dropping_sports(dashboard_app):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=107, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    resp = client.get("/dos/manager")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert _attr_values(html, "data-tab-group") == [
+        "daily",
+        "hr",
+        "onboarding",
+        "maintenance",
+        "sports",
+    ]
+    assert _attr_values(html, "data-tab-default")[:5] == [
+        "log",
+        "counseling",
+        "interview",
+        "maintenance",
+        "sports",
+    ]
+    assert _attr_values(html, "data-subtabs") == ["daily", "hr", "onboarding"]
+    assert _active_manager_group(html) == "daily"
+    assert _active_manager_leaf(html) == "log"
+    assert "hidden" not in _manager_panel_class(html, "log")
+    assert _manager_frame_src(html, "sports") == "/dos/sports"
+
+
+@pytest.mark.parametrize(
+    ("tab", "group", "leaf", "src"),
+    [
+        ("attendance", "daily", "attendance", "/dos/manager/attendance"),
+        ("incidents", "hr", "incidents", "/dos/manager/incident-reports"),
+        ("training", "onboarding", "training", "/dos/manager/training"),
+        ("maintenance", "maintenance", None, "/dos/manager/maintenance"),
+        ("sports", "sports", None, "/dos/sports"),
+    ],
+)
+def test_manager_dashboard_leaf_deep_links_select_the_right_group(
+    dashboard_app, tab, group, leaf, src
+):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=108, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    resp = client.get(f"/dos/manager?tab={tab}")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert _active_manager_group(html) == group
+    assert _active_manager_leaf(html) == leaf
+    assert "hidden" not in _manager_panel_class(html, tab)
+    assert _manager_frame_src(html, tab) == src
+    assert ('id="mgdSubtabBank"') in html
+
+
+def test_manager_dashboard_invalid_deep_link_falls_back_to_daily_log(dashboard_app):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=109, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    resp = client.get("/dos/manager?tab=not-real")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    assert _active_manager_group(html) == "daily"
+    assert _active_manager_leaf(html) == "log"
+    assert "hidden" not in _manager_panel_class(html, "log")
 
 
 def test_cook_keeps_kitchen_but_not_manager_or_operations(dashboard_app):

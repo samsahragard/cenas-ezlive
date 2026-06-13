@@ -500,7 +500,7 @@
         var k = doc.createElement("style");
         k.textContent = "html,body{background-image:none!important;background-color:#241610!important}body::before,body::after,html::before,html::after{display:none!important;content:none!important}";
         if (isMarketFrame) {
-          k.textContent += "html,body{height:auto!important;min-height:0!important}.layout,main.main,.ck-page-body{height:auto!important;min-height:0!important}.ck-page-body>.sv2-mk,.sv2-mk{display:block!important;flex:0 0 auto!important;height:auto!important;min-height:0!important}";
+          k.textContent += "html,body{height:auto!important;min-height:0!important;overflow-x:hidden!important}.layout,main.main,.ck-page-body{height:auto!important;min-height:0!important;max-width:100%!important;overflow-x:hidden!important}.ck-page-body>.sv2-mk,.sv2-mk{display:block!important;flex:0 0 auto!important;height:auto!important;min-height:0!important;max-width:100%!important;overflow-x:hidden!important}";
         }
         (doc.head || doc.documentElement).appendChild(k);
       } catch (e) {}

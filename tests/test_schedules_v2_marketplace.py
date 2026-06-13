@@ -146,6 +146,19 @@ def test_marketplace_profile_links_are_access_gated():
     assert "CFG.profileBaseUrl" in template
 
 
+def test_marketplace_has_mobile_card_table_layout():
+    template = open("app/templates/schedules_v2_marketplace.html", encoding="utf-8").read()
+
+    assert "@media (max-width: 780px)" in template
+    assert ".sv2-mk table{min-width:0" in template
+    assert ".sv2-mk thead{display:none}" in template
+    assert "content:attr(data-label)" in template
+    assert 'data-label="Shift"' in template
+    assert 'data-label="Employee A"' in template
+    assert 'class="swap-arrow"' in template
+    assert "@media (max-width: 430px)" in template
+
+
 def test_offer_eligibility_requires_active_linked_store_and_position(db_session):
     db = db_session
     server = Position(name="Server", store_key=None)

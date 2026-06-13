@@ -94,7 +94,34 @@
   @media (max-width: 780px){
     .sv2-mk{padding:16px}
     .sv2-mk .mk-stats{grid-template-columns:1fr 1fr}
-    .sv2-mk table{min-width:760px}
+    .sv2-mk .mk-chips{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:4px;margin-right:-6px}
+    .sv2-mk .mk-chip{flex:0 0 auto}
+    .sv2-mk .mk-filters{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .sv2-mk .mk-filters select,.sv2-mk .mk-filters input{width:100%;min-width:0}
+    .sv2-mk .mk-pad{padding:14px;overflow-x:visible}
+    .sv2-mk table{min-width:0;font-size:12.5px}
+    .sv2-mk thead{display:none}
+    .sv2-mk tbody,.sv2-mk tr,.sv2-mk td{display:block;width:100%}
+    .sv2-mk tbody tr{background:#fff8ec;border:1px solid #ead9b4;border-radius:10px;margin-bottom:10px;padding:10px 12px;box-shadow:0 2px 0 rgba(42,29,16,.05)}
+    .sv2-mk tbody tr:last-child{margin-bottom:0}
+    .sv2-mk tbody td{border-bottom:1px solid #ead9b4;padding:8px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;text-align:right}
+    .sv2-mk tbody td::before{content:attr(data-label);flex:0 0 86px;text-align:left;color:var(--mk-ink-soft);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+    .sv2-mk tbody td:last-child{border-bottom:0}
+    .sv2-mk td.swap-arrow{display:none}
+    .sv2-mk tbody td.actions{display:flex;justify-content:flex-start;gap:8px;padding-top:10px;text-align:left}
+    .sv2-mk tbody td.actions::before{display:none}
+    .sv2-mk .actions .btn{flex:1 1 auto;padding:8px 10px}
+    .sv2-mk .mk-empty-row{display:block;text-align:center;padding:24px 8px}
+    .sv2-mk .mk-empty-row::before{display:none}
+  }
+  @media (max-width: 430px){
+    .sv2-mk{padding:12px;border-radius:10px;box-shadow:none}
+    .sv2-mk .mk-stats{gap:8px;margin-bottom:12px}
+    .sv2-mk .mk-stat{min-height:82px;padding:12px 11px}
+    .sv2-mk .mk-stat .n{font-size:26px}
+    .sv2-mk .mk-stat .l{font-size:10px;line-height:1.35;letter-spacing:.1em}
+    .sv2-mk .mk-filters{grid-template-columns:1fr}
+    .sv2-mk .mk-surface{border-radius:10px}
   }
 </style>
 
@@ -235,27 +262,27 @@
     var sh=o.shift||{}, st=(o.status||"").toLowerCase();
     var wait = st==="taken" ? '<span class="waiting">'+esc(whenText(o,sh))+'</span>' : '<span class="sub2">'+esc(whenText(o,sh))+'</span>';
     return '<tr data-offer="'+(+o.id)+'">'+
-      '<td>'+statusBadge("offer",st)+'</td>'+
-      '<td><div class="who">'+esc(shiftDate(sh)||"Shift")+'</div><div class="sub2">'+esc(shiftHours(sh))+'</div></td>'+
-      '<td>'+esc(sh.store||CFG.storeLabel||"")+'</td>'+
-      '<td>'+esc(sh.position_name||"Shift")+'</td>'+
-      '<td>'+personLink(o.offered_by)+'</td>'+
-      '<td>'+(o.taken_by?personLink(o.taken_by):'<span class="sub2">&mdash;</span>')+'</td>'+
-      '<td>'+money()+'</td>'+
-      '<td>'+wait+'</td>'+
-      '<td class="actions"><button class="btn" data-view="offer">View</button>'+(actionable("offer",st)?'<button class="btn go" data-act="approve">Approve</button><button class="btn no" data-act="deny">Deny</button>':'')+'</td>'+
+      '<td data-label="Status">'+statusBadge("offer",st)+'</td>'+
+      '<td data-label="Shift"><div class="who">'+esc(shiftDate(sh)||"Shift")+'</div><div class="sub2">'+esc(shiftHours(sh))+'</div></td>'+
+      '<td data-label="Location">'+esc(sh.store||CFG.storeLabel||"")+'</td>'+
+      '<td data-label="Position">'+esc(sh.position_name||"Shift")+'</td>'+
+      '<td data-label="Original">'+personLink(o.offered_by)+'</td>'+
+      '<td data-label="Pickup">'+(o.taken_by?personLink(o.taken_by):'<span class="sub2">&mdash;</span>')+'</td>'+
+      '<td data-label="Offer">'+money()+'</td>'+
+      '<td data-label="When">'+wait+'</td>'+
+      '<td class="actions" data-label="Actions"><button class="btn" data-view="offer">View</button>'+(actionable("offer",st)?'<button class="btn go" data-act="approve">Approve</button><button class="btn no" data-act="deny">Deny</button>':'')+'</td>'+
     '</tr>';
   }
   function swapRow(s){
     var st=(s.status||"").toLowerCase();
     return '<tr data-swap="'+(+s.id)+'">'+
-      '<td>'+statusBadge("swap",st)+'</td>'+
-      '<td><div class="who">'+personLink(s.from_employee)+'</div><div class="sub2">'+esc((s.from_shift&&s.from_shift.position_name)||"Shift")+' &middot; '+esc(shiftDate(s.from_shift))+'</div></td>'+
-      '<td><span class="arrow">&#8644;</span></td>'+
-      '<td><div class="who">'+personLink(s.to_employee)+'</div><div class="sub2">'+esc((s.to_shift&&s.to_shift.position_name)||"Shift")+' &middot; '+esc(shiftDate(s.to_shift))+'</div></td>'+
-      '<td>'+esc((s.from_shift&&s.from_shift.store)||CFG.storeLabel||"")+'</td>'+
-      '<td>'+(st==="proposed"?'<span class="waiting">Awaiting employee</span>':'<span class="sub2">'+esc(whenText(s,s.from_shift))+'</span>')+'</td>'+
-      '<td class="actions"><button class="btn" data-view="swap">View</button>'+(actionable("swap",st)?'<button class="btn go" data-act="approve">Approve</button><button class="btn no" data-act="deny">Deny</button>':'')+'</td>'+
+      '<td data-label="Status">'+statusBadge("swap",st)+'</td>'+
+      '<td data-label="Employee A"><div class="who">'+personLink(s.from_employee)+'</div><div class="sub2">'+esc((s.from_shift&&s.from_shift.position_name)||"Shift")+' &middot; '+esc(shiftDate(s.from_shift))+'</div></td>'+
+      '<td class="swap-arrow"><span class="arrow">&#8644;</span></td>'+
+      '<td data-label="Employee B"><div class="who">'+personLink(s.to_employee)+'</div><div class="sub2">'+esc((s.to_shift&&s.to_shift.position_name)||"Shift")+' &middot; '+esc(shiftDate(s.to_shift))+'</div></td>'+
+      '<td data-label="Location">'+esc((s.from_shift&&s.from_shift.store)||CFG.storeLabel||"")+'</td>'+
+      '<td data-label="Acceptance">'+(st==="proposed"?'<span class="waiting">Awaiting employee</span>':'<span class="sub2">'+esc(whenText(s,s.from_shift))+'</span>')+'</td>'+
+      '<td class="actions" data-label="Actions"><button class="btn" data-view="swap">View</button>'+(actionable("swap",st)?'<button class="btn go" data-act="approve">Approve</button><button class="btn no" data-act="deny">Deny</button>':'')+'</td>'+
     '</tr>';
   }
   function table(title, heads, rows){

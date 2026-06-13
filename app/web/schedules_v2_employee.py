@@ -68,6 +68,33 @@ def _week_bounds(today):
     return this_sun, this_sun + timedelta(days=7)
 
 
+def _legacy_saturday_week_start(week_start):
+    """Given a canonical SUNDAY week_start, return its pre-migration SATURDAY
+    key (the day before), else None. Schedules were re-keyed Saturday->Sunday
+    (WEEK_START_DOW 6->0); old rows still carry Saturday week_starts. Mirrors
+    schedules_v2._schedule_for_week()'s compat shim so the employee portal stays
+    in lock-step with the manager board."""
+    if week_start.weekday() != 6:  # Python weekday(): Sunday == 6
+        return None
+    return week_start - timedelta(days=1)
+
+
+def _weeks_with_legacy(weeks):
+    """Expand canonical Sunday week_starts to ALSO include their legacy Saturday
+    keys. Without this a current week still keyed to Saturday matches zero
+    PUBLISHED schedules and the employee sees no shifts even though the manager
+    published them -- the manager board already applies this shim (via
+    _schedule_for_week), so the employee endpoint must match or the two views
+    disagree. Order/dedup don't matter: the result feeds a `week_start IN (...)`
+    filter."""
+    out = list(weeks)
+    for w in weeks:
+        legacy = _legacy_saturday_week_start(w)
+        if legacy is not None:
+            out.append(legacy)
+    return out
+
+
 def _serialize_shift(sh, week_start, position_name, tag_names, response, offer=None):
     """One shift as the API dict the client expects. `response` is the legacy
     accept/decline state (kept for back-compat; no longer surfaced in the UI).
@@ -153,7 +180,7 @@ def emp_my_schedule_shifts():
             return jsonify({"ok": True, "employee": emp_out, "shifts": []}), 200
 
         scheds = (db.query(Schedule)
-                    .filter(Schedule.week_start.in_(weeks),
+                    .filter(Schedule.week_start.in_(_weeks_with_legacy(weeks)),
                             Schedule.status == "published").all())
         week_by_sched = {s.id: s.week_start for s in scheds}
         if not week_by_sched:

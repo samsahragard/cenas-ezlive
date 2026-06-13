@@ -174,20 +174,31 @@ def emp_ref(db, employee_id) -> dict | None:
     return {"name": (e.full_name if e else None)}
 
 
-def offer_card(db, o) -> dict:
+def offer_card(db, o, *, include_employee_ids: bool = False) -> dict:
     """An offer enriched for display (names + the shift card)."""
+    person_ref = manager_emp_ref if include_employee_ids else emp_ref
     return {"id": o.id, "status": o.status, "restricted": o.restricted,
             "expires_at": o.expires_at.isoformat() if o.expires_at else None,
-            "offered_by": emp_ref(db, o.offered_by_employee_id),
-            "taken_by": emp_ref(db, o.taken_by_employee_id),
+            "offered_by": person_ref(db, o.offered_by_employee_id),
+            "taken_by": person_ref(db, o.taken_by_employee_id),
             "shift": shift_card(db, o.shift_id)}
 
 
-def swap_card(db, s) -> dict:
+def swap_card(db, s, *, include_employee_ids: bool = False) -> dict:
     """A swap enriched for display (both employees + both shift cards)."""
+    person_ref = manager_emp_ref if include_employee_ids else emp_ref
     return {"id": s.id, "status": s.status,
             "expires_at": s.expires_at.isoformat() if s.expires_at else None,
-            "from_employee": emp_ref(db, s.from_employee_id),
-            "to_employee": emp_ref(db, s.to_employee_id),
+            "from_employee": person_ref(db, s.from_employee_id),
+            "to_employee": person_ref(db, s.to_employee_id),
             "from_shift": shift_card(db, s.from_shift_id),
             "to_shift": shift_card(db, s.to_shift_id)}
+
+
+def manager_emp_ref(db, employee_id) -> dict | None:
+    """Manager-only display reference, used where profile links are allowed."""
+    ref = emp_ref(db, employee_id)
+    if ref is None:
+        return None
+    ref["id"] = employee_id
+    return ref

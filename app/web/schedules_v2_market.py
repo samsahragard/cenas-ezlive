@@ -28,7 +28,7 @@ from flask import g, jsonify, request
 from app.db import SessionLocal
 from app.models import Schedule, Shift, ShiftOffer, ShiftSwap
 from app.services import scheduling_offers, scheduling_timeoff
-from app.web.permissions import current_user_id, require_level
+from app.web.permissions import current_user_id, level_at_least, require_level
 from app.web.store_routes import store_bp
 
 _MGR = "foh_manager"
@@ -75,6 +75,11 @@ def _list_status(raw_status, kind):
     return status
 
 
+def _include_profile_ids() -> bool:
+    user = getattr(g, "current_user", None)
+    return bool(user and level_at_least(getattr(user, "permission_level", None), "corporate"))
+
+
 # ------------------------------------------------------------------ OFFERS
 @store_bp.route("/schedules-v2/offers/list", methods=["GET"])
 @require_level(_MGR)
@@ -90,7 +95,11 @@ def sv2_offers_list():
         if status:
             q = q.filter(ShiftOffer.status == status)
         offers = q.order_by(ShiftOffer.created_at.desc()).all()
-        return jsonify({"ok": True, "offers": [scheduling_offers.offer_card(db, o) for o in offers]}), 200
+        include_profile_ids = _include_profile_ids()
+        return jsonify({"ok": True, "offers": [
+            scheduling_offers.offer_card(db, o, include_employee_ids=include_profile_ids)
+            for o in offers
+        ]}), 200
     finally:
         db.close()
 
@@ -169,7 +178,11 @@ def sv2_swaps_list():
         if status:
             q = q.filter(ShiftSwap.status == status)
         swaps = q.order_by(ShiftSwap.created_at.desc()).all()
-        return jsonify({"ok": True, "swaps": [scheduling_offers.swap_card(db, s) for s in swaps]}), 200
+        include_profile_ids = _include_profile_ids()
+        return jsonify({"ok": True, "swaps": [
+            scheduling_offers.swap_card(db, s, include_employee_ids=include_profile_ids)
+            for s in swaps
+        ]}), 200
     finally:
         db.close()
 

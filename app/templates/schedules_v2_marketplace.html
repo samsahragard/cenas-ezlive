@@ -51,6 +51,8 @@
   .sv2-mk .pos{ font-size:13px; font-weight:700; color:var(--sk-blue); margin-top:3px; }
   .sv2-mk .meta{ font-size:13px; color:rgba(20,32,92,0.78); margin-top:6px; line-height:1.45; }
   .sv2-mk .meta b{ color:var(--sk-blue-deep); }
+  .sv2-mk .person-link{ color:var(--sk-blue-deep); font-weight:800; text-decoration:none; }
+  .sv2-mk .person-link:hover{ text-decoration:underline; text-underline-offset:2px; }
   .sv2-mk .arrow{ color:var(--sk-red); font-weight:800; margin:0 6px; }
   .sv2-mk .badge{ flex:0 0 auto; font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; padding:4px 10px; border-radius:999px; border:1.5px solid; }
   .sv2-mk .badge.pending,.sv2-mk .badge.taken{ color:var(--sk-amber); background:rgba(184,128,31,0.12); border-color:rgba(184,128,31,0.4); }
@@ -121,6 +123,13 @@
   function fmtT(iso){ var x=hm(iso),h=x.h; var ap=h>=12?"p":"a"; var hh=h%12; if(hh===0)hh=12; return x.m?(hh+":"+(x.m<10?"0"+x.m:x.m)+ap):(hh+ap); }
   function shiftLine(sh){ if(!sh) return ""; var d=isoToDate(sh.start_at); var day=d?(DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()):""; return day+" "+fmtT(sh.start_at)+"-"+fmtT(sh.end_at); }
   function nm(p){ return (p&&p.name)?p.name:(p&&p.id?("#"+p.id):"someone"); }
+  function personLink(p){
+    var label = esc(nm(p));
+    if(p && p.id && CFG.profileBaseUrl){
+      return '<a class="person-link" href="'+esc(CFG.profileBaseUrl)+encodeURIComponent(p.id)+'" target="_top">'+label+'</a>';
+    }
+    return '<b>'+label+'</b>';
+  }
   var toastTimer=null;
   function toast(msg,isErr){ var t=$("mk-toast"); t.textContent=msg; t.classList.toggle("err",!!isErr); t.classList.add("show"); if(toastTimer)clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove("show");},3400); }
   function jsonHeaders(){ return {"Content-Type":"application/json","Accept":"application/json"}; }
@@ -134,7 +143,7 @@
     var p=[]; p.push('<div class="item" data-offer="'+(+o.id)+'">');
     p.push('<div class="ihead"><div class="when">'+esc(shiftLine(sh))+'</div><span class="badge '+esc(st)+'">'+esc(st)+'</span></div>');
     if(sh.position_name) p.push('<div class="pos">'+esc(sh.position_name)+(sh.store?' &middot; '+esc(sh.store):'')+'</div>');
-    p.push('<div class="meta"><b>'+esc(nm(o.offered_by))+'</b> offered'+(o.taken_by?(' &middot; <b>'+esc(nm(o.taken_by))+'</b> wants it'):' &middot; not taken yet')+(o.restricted?' &middot; same store+role':'')+'</div>');
+    p.push('<div class="meta">'+personLink(o.offered_by)+' offered'+(o.taken_by?(' &middot; '+personLink(o.taken_by)+' wants it'):' &middot; not taken yet')+(o.restricted?' &middot; same store+role':'')+'</div>');
     if(o.expires_at) p.push('<div class="exp">Expires '+esc(shiftLine({start_at:o.expires_at}))+'</div>');
     if(actionable(st) && o.taken_by){ p.push('<div class="acts"><button class="btn btn-ok" data-act="approve">Approve</button><button class="btn btn-no" data-act="deny">Deny</button></div>'); }
     p.push('</div>'); return p.join("");
@@ -143,7 +152,7 @@
     var st=(s.status||"").toLowerCase();
     var p=[]; p.push('<div class="item swap" data-swap="'+(+s.id)+'">');
     p.push('<div class="ihead"><div class="when">Swap</div><span class="badge '+esc(st)+'">'+esc(st)+'</span></div>');
-    p.push('<div class="meta"><b>'+esc(nm(s.from_employee))+'</b> '+esc(shiftLine(s.from_shift))+'<span class="arrow">&#8644;</span><b>'+esc(nm(s.to_employee))+'</b> '+esc(shiftLine(s.to_shift))+'</div>');
+    p.push('<div class="meta">'+personLink(s.from_employee)+' '+esc(shiftLine(s.from_shift))+'<span class="arrow">&#8644;</span>'+personLink(s.to_employee)+' '+esc(shiftLine(s.to_shift))+'</div>');
     if(s.expires_at) p.push('<div class="exp">Expires '+esc(shiftLine({start_at:s.expires_at}))+'</div>');
     if(actionable(st)){ p.push('<div class="acts"><button class="btn btn-ok" data-act="approve">Approve</button><button class="btn btn-no" data-act="deny">Deny</button></div>'); }
     p.push('</div>'); return p.join("");

@@ -29,7 +29,7 @@ import json
 
 from flask import g, render_template
 
-from app.web.permissions import require_level
+from app.web.permissions import level_at_least, load_current_user, require_level
 from app.web.store_routes import store_bp
 
 _MGR = "foh_manager"  # mirror schedules_v2.py's manager gate
@@ -111,12 +111,21 @@ def sv2_marketplace_page():
     ckai's lists are at <base>/offers/list + <base>/swaps/list (#1996)."""
     slug = g.current_store
     base = f"/{slug}/schedules-v2"
+    user = getattr(g, "current_user", None) or load_current_user()
+    profile_base_url = ""
+    if user and level_at_least(getattr(user, "permission_level", None), "corporate"):
+        profile_base_url = (
+            "/partner/profile-lab/employee/"
+            if getattr(user, "permission_level", None) == "partner"
+            else "/corporate/profile-lab/employee/"
+        )
     config = {
         "storeLabel": g.store_label,
         "offersListUrl": f"{base}/offers/list",   # ckai (B9): GET[?status] -> {ok, offers:[offer]}
         "swapsListUrl": f"{base}/swaps/list",      # ckai (B9): GET[?status] -> {ok, swaps:[swap]}
         "offerActionBase": f"{base}/offers",       # ckai (B9): POST <base>/<id>/approve | <base>/<id>/deny
         "swapActionBase": f"{base}/swaps",         # ckai (B9): POST <base>/<id>/approve | <base>/<id>/deny
+        "profileBaseUrl": profile_base_url,
     }
     return render_template(
         "schedules_v2_marketplace.html",

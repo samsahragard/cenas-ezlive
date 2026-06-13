@@ -177,7 +177,10 @@ def emp_ref(db, employee_id) -> dict | None:
 def offer_card(db, o, *, include_employee_ids: bool = False) -> dict:
     """An offer enriched for display (names + the shift card)."""
     person_ref = manager_emp_ref if include_employee_ids else emp_ref
+    cents = getattr(o, "incentive_cents", None)
     return {"id": o.id, "status": o.status, "restricted": o.restricted,
+            "incentive_cents": cents,
+            "incentive": (round(cents / 100, 2) if cents else None),  # dollars, for display
             "expires_at": o.expires_at.isoformat() if o.expires_at else None,
             "created_at": o.created_at.isoformat() if o.created_at else None,
             "updated_at": o.updated_at.isoformat() if o.updated_at else None,

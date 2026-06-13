@@ -154,6 +154,17 @@ def employee_schedule_rows(db, emp_id):
     pos_name = ({p.id: p.name for p in
                  db.query(Position).filter(Position.id.in_(pos_ids)).all()}
                 if pos_ids else {})
+    # THIS employee's active release per shift (open = on the market, taken = a
+    # teammate grabbed it pending manager approval) -- powers the Release / "On
+    # the market" / Cancel affordance on each shift row.
+    shift_ids = [sh.id for sh in rows]
+    offer_by_shift = {}
+    if shift_ids:
+        for o in (db.query(ShiftOffer)
+                    .filter(ShiftOffer.offered_by_employee_id == emp_id,
+                            ShiftOffer.shift_id.in_(shift_ids),
+                            ShiftOffer.status.in_(["open", "taken"])).all()):
+            offer_by_shift[o.shift_id] = o
     out = []
     for sh in rows:
         if sh.start_at and sh.end_at:
@@ -162,11 +173,17 @@ def employee_schedule_rows(db, emp_id):
             time_label = _time_label(sh.start_at)
         else:
             time_label = ""
+        o = offer_by_shift.get(sh.id)
         out.append({
+            "shift_id": sh.id,
             "date_label": _date_label(sh.start_at) if sh.start_at else "Scheduled",
             "time_label": time_label,
             "position_name": pos_name.get(sh.position_id),
             "status_label": (sh.status or "assigned").replace("_", " ").title(),
+            "offer_id": (o.id if o else None),
+            "offer_status": (o.status if o else None),
+            "incentive": (round(o.incentive_cents / 100, 2)
+                          if (o and o.incentive_cents) else None),
         })
     return out
 

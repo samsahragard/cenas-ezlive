@@ -50,9 +50,28 @@ def _parse_exp(v):
         return None, "expires_at must be ISO datetime (YYYY-MM-DDTHH:MM)"
 
 
+def _parse_incentive(v):
+    """Optional cash incentive in DOLLARS -> (cents|None, None) or (None, errmsg).
+    Empty/None = no money. Bounded $0..$500 to catch typos. A displayed
+    incentive only -- the app never moves money (employees settle offline)."""
+    if v is None or str(v).strip() == "":
+        return None, None
+    try:
+        dollars = float(str(v).strip().lstrip("$"))
+    except ValueError:
+        return None, "incentive must be a dollar amount"
+    if dollars < 0:
+        return None, "incentive cannot be negative"
+    if dollars > 500:
+        return None, "incentive cannot exceed $500"
+    cents = int(round(dollars * 100))
+    return (cents if cents > 0 else None), None
+
+
 def _ser_offer(o):
     return {"id": o.id, "shift_id": o.shift_id,
             "status": o.status, "restricted": o.restricted,
+            "incentive_cents": o.incentive_cents,
             "expires_at": o.expires_at.isoformat() if o.expires_at else None}
 
 
@@ -77,6 +96,9 @@ def emp_offer_create():
     if e1:
         return jsonify({"ok": False, "error": e1}), 400
     unrestricted = bool(data.get("unrestricted", False))
+    incentive_cents, e2 = _parse_incentive(data.get("incentive"))
+    if e2:
+        return jsonify({"ok": False, "error": e2}), 400
     now = datetime.utcnow()
     db = SessionLocal()
     try:
@@ -93,8 +115,8 @@ def emp_offer_create():
         if dup is not None:
             return jsonify({"ok": False, "error": "this shift already has an active offer"}), 409
         o = ShiftOffer(shift_id=shift_id, offered_by_employee_id=emp_id, status="open",
-                       restricted=not unrestricted, expires_at=exp,
-                       created_at=now, updated_at=now)
+                       restricted=not unrestricted, incentive_cents=incentive_cents,
+                       expires_at=exp, created_at=now, updated_at=now)
         db.add(o)
         db.commit()
         return jsonify({"ok": True, "offer": _ser_offer(o)}), 201

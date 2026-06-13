@@ -76,12 +76,17 @@ def my_schedule_page():
         "shiftActionBase": "/employee/shifts",        # aick: POST <base>/<id>/accept | <base>/<id>/decline
         "dashboardUrl": "/employee/dashboard",
         "loginUrl": "/employee/login",
+        # Shift marketplace (B9): release one of my shifts (optionally with a $
+        # incentive), browse teammates' released shifts, take one. The Market
+        # segment fetches marketUrl; release/cancel/take POST to these.
+        "offerBase": "/employee/shift-offers",        # POST {shift_id, incentive?} ; POST <id>/cancel ; POST <id>/take
+        "marketUrl": "/employee/shift-marketplace/list",  # GET -> {ok, offers:[offer_card]}
     }
 
     # active_section drives the segmented control; the time-off form posts to
     # its backend when that lands.
     section = (request.args.get("view") or "shifts").lower()
-    if section not in ("shifts", "timeoff"):
+    if section not in ("shifts", "timeoff", "market"):
         section = "shifts"
     return render_template(
         "employee_schedule.html",

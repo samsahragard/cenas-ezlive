@@ -457,6 +457,25 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("employee_setup_tokens column backfill failed (non-fatal)")
 
+    # Shift-market money offers (Sam 2026-06-13): add shift_offers.incentive_cents
+    # (NULL = no cash attached). create_all() won't ALTER the existing shift_offers
+    # table, so add it here, gated on absence -- safe + idempotent on every boot.
+    try:
+        from sqlalchemy import inspect as _sa_inspect_so, text as _sa_text_so
+        from app.db import engine as _eng_so
+        if _eng_so is not None:
+            insp = _sa_inspect_so(_eng_so)
+            if "shift_offers" in insp.get_table_names():
+                _socols = {c["name"] for c in insp.get_columns("shift_offers")}
+                if "incentive_cents" not in _socols:
+                    with _eng_so.begin() as conn:
+                        conn.execute(_sa_text_so(
+                            "ALTER TABLE shift_offers ADD COLUMN incentive_cents INTEGER"))
+                    logging.getLogger(__name__).info(
+                        "shift_offers table: backfilled missing column incentive_cents")
+    except Exception:
+        logging.getLogger(__name__).exception("shift_offers column backfill failed (non-fatal)")
+
     # Sam #2872: add shifts.display_name (historical import shows a former, no-record
     # employee's name struck-through). create_all() won't ALTER the existing shifts
     # table, so add it here, gated on absence -- safe + idempotent on every boot.

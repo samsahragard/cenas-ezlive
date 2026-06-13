@@ -1,8 +1,10 @@
 {# Cenas Floor Pulse - Shifts tab.
-   My shifts + time-off request, on the ink-navy console look. When no shifts
-   are posted the panel shows the honest empty state. The time-off form shows an
-   optimistic success state until its backend wiring lands; validation runs
-   client-side for fast feedback.
+   My shifts (server-rendered) + time-off request + Market. From My shifts an
+   employee can RELEASE a shift (optionally attaching a cash incentive); the
+   Market segment lists teammates' released shifts to pick up. Money is a
+   DISPLAYED incentive only -- the app never moves money; employees settle
+   offline. Release/cancel reload the page (My shifts is server-rendered); Take
+   re-fetches the market list. All actions go through the B9 offer endpoints.
 #}
 {% extends "employee_console_base.html" %}
 {% from "_floor_macros.html" import segmented, empty_state %}
@@ -11,22 +13,59 @@
 
 {% block employee_hero %}
 <div class="cf-eyebrow">Your schedule</div>
-{{ segmented('schedule-section', [('shifts', 'My shifts'), ('timeoff', 'Time off')], active_section, 'Schedule section') }}
+{{ segmented('schedule-section', [('shifts', 'My shifts'), ('timeoff', 'Time off'), ('market', 'Market')], active_section, 'Schedule section') }}
 {% endblock %}
 
 {% block employee_content %}
+<style>
+  .mk-actions{ display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+  .mk-state{ color:var(--cf-faint); font-size:11px; }
+  .mk-link{ background:none; border:none; color:var(--cf-accent,#d9a436); font-weight:700;
+            font-size:12px; cursor:pointer; padding:2px 0; text-decoration:underline; }
+  .mk-form{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 2px 14px;
+            border-bottom:1px solid rgba(255,255,255,0.06); }
+  .mk-form input{ width:150px; border:1.5px solid rgba(217,164,54,0.30); border-radius:10px;
+                  padding:9px 11px; font-family:inherit; font-size:14px; color:var(--cf-text,#eee);
+                  background:rgba(0,0,0,0.3); color-scheme:dark; }
+  .mk-form .cf-primary{ width:auto; padding:9px 16px; }
+  .mk-card{ display:flex; justify-content:space-between; align-items:center; gap:10px;
+            padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
+  .mk-card .who{ font-weight:800; color:var(--cf-text,#eee); }
+  .mk-card .sub{ color:var(--cf-faint); font-size:12px; margin-top:2px; }
+  .mk-bounty{ color:#5bd6a0; font-weight:800; font-size:13px; }
+  .mk-muted{ color:var(--cf-faint); font-size:13px; padding:18px 0; text-align:center; }
+</style>
 
 <section id="cf-pane-shifts" data-pane="shifts"{% if active_section != 'shifts' %} hidden{% endif %}>
   {% if shifts %}
     <div class="cf-block">
       {% for shift in shifts %}
-        <div class="cf-bigrow">
+        <div class="cf-bigrow" style="flex-wrap:wrap;">
           <span>
             <strong style="display:block;color:var(--cf-text);font-weight:800;">{{ shift.date_label or 'Scheduled' }}</strong>
             <small style="color:var(--cf-faint);font-size:11px;">{{ shift.time_label or '' }}{% if shift.position_name %} &middot; {{ shift.position_name }}{% endif %}</small>
           </span>
-          <strong>{{ shift.status_label or shift.response or 'assigned' }}</strong>
+          <span class="mk-actions">
+            <strong>{{ shift.status_label or shift.response or 'assigned' }}</strong>
+            {% if shift.offer_status == 'open' %}
+              <span class="mk-state">On the market{% if shift.incentive %} &middot; +${{ '%.2f'|format(shift.incentive) }}{% endif %}</span>
+              <button type="button" class="mk-link" data-cancel-offer="{{ shift.offer_id }}">cancel offer</button>
+            {% elif shift.offer_status == 'taken' %}
+              <span class="mk-state">Picked up &middot; pending approval{% if shift.incentive %} &middot; +${{ '%.2f'|format(shift.incentive) }}{% endif %}</span>
+              <button type="button" class="mk-link" data-cancel-offer="{{ shift.offer_id }}">cancel</button>
+            {% elif shift.shift_id %}
+              <button type="button" class="mk-link" data-release="{{ shift.shift_id }}">release / offer $</button>
+            {% endif %}
+          </span>
         </div>
+        {% if shift.shift_id and not shift.offer_status %}
+        <div class="mk-form" id="mk-form-{{ shift.shift_id }}" hidden>
+          <input type="number" min="0" max="500" step="1" inputmode="decimal" id="mk-amt-{{ shift.shift_id }}" placeholder="$ incentive (optional)" />
+          <button type="button" class="cf-primary" data-post="{{ shift.shift_id }}">Post to market</button>
+          <button type="button" class="mk-link" data-release-cancel="{{ shift.shift_id }}">cancel</button>
+          <span class="cf-error" id="mk-err-{{ shift.shift_id }}" hidden></span>
+        </div>
+        {% endif %}
       {% endfor %}
     </div>
   {% else %}
@@ -63,13 +102,37 @@
   </form>
 </section>
 
+<section id="cf-pane-market" data-pane="market"{% if active_section != 'market' %} hidden{% endif %}>
+  <div class="cf-eyebrow" style="margin-top:0;">Shifts up for grabs</div>
+  <div id="mk-market-list"><div class="mk-muted">Loading shifts…</div></div>
+</section>
+
+<script type="application/json" id="cf-sched-config">{{ config_json | safe }}</script>
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function(){
   "use strict";
-  // Segmented control swaps panes.
+  var CFG = {};
+  try { CFG = JSON.parse(document.getElementById('cf-sched-config').textContent) || {}; } catch(e){}
+
+  function $(id){ return document.getElementById(id); }
+  function post(url){
+    return fetch(url, {method:'POST', credentials:'same-origin',
+                       headers:{'Content-Type':'application/json', Accept:'application/json'},
+                       body: (arguments[1] ? JSON.stringify(arguments[1]) : undefined)})
+           .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); });
+  }
+
+  var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function isoDate(s){ if(!s) return null; var d=new Date(s.replace(' ','T')); return isNaN(d)?null:d; }
+  function fmtT(s){ var d=isoDate(s); if(!d) return ''; var h=d.getHours()%12||12; var m=('0'+d.getMinutes()).slice(-2); return h+':'+m+(d.getHours()<12?' AM':' PM'); }
+  function shiftLine(sh){ if(!sh) return ''; var d=isoDate(sh.start_at); var day=d?(DOW[d.getDay()]+' '+MON[d.getMonth()]+' '+d.getDate()):''; return (day+'  '+fmtT(sh.start_at)+' - '+fmtT(sh.end_at)).trim(); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  // ---- Segmented control swaps panes; entering Market loads the feed.
   document.addEventListener('click', function(ev){
     var btn = ev.target.closest('button[data-seg="schedule-section"]');
     if(!btn) return;
@@ -82,28 +145,92 @@
     document.querySelectorAll('[data-pane]').forEach(function(p){
       p.hidden = (p.getAttribute('data-pane') !== value);
     });
+    if(value === 'market') loadMarket();
   });
 
-  // Time-off form: matching client-side validation. The route does the real
-  // check; we keep this only to avoid a round-trip on obvious mistakes.
-  var form = document.getElementById('cf-timeoff');
+  // ---- Release / offer-money + cancel (My shifts). These change the
+  // server-rendered pane, so reload after a successful write.
+  document.addEventListener('click', function(ev){
+    var rel = ev.target.closest('[data-release]');
+    if(rel){ var f=$('mk-form-'+rel.getAttribute('data-release')); if(f){ f.hidden=false; rel.hidden=true; } return; }
+    var rc = ev.target.closest('[data-release-cancel]');
+    if(rc){ var sid=rc.getAttribute('data-release-cancel'); var f2=$('mk-form-'+sid); if(f2) f2.hidden=true; var rl=document.querySelector('[data-release="'+sid+'"]'); if(rl) rl.hidden=false; return; }
+
+    var po = ev.target.closest('[data-post]');
+    if(po){
+      var sid2 = po.getAttribute('data-post');
+      var amtEl = $('mk-amt-'+sid2); var errEl = $('mk-err-'+sid2);
+      if(errEl){ errEl.hidden=true; }
+      po.disabled = true;
+      var body = { shift_id: parseInt(sid2,10) };
+      var amt = amtEl ? amtEl.value.trim() : '';
+      if(amt !== '') body.incentive = amt;
+      post(CFG.offerBase, body).then(function(res){
+        if(res.ok){ location.reload(); }
+        else { po.disabled=false; if(errEl){ errEl.textContent = (res.j && res.j.error) || 'Could not post offer.'; errEl.hidden=false; } }
+      }).catch(function(){ po.disabled=false; if(errEl){ errEl.textContent='Network error.'; errEl.hidden=false; } });
+      return;
+    }
+
+    var cx = ev.target.closest('[data-cancel-offer]');
+    if(cx){
+      cx.disabled = true;
+      post(CFG.offerBase + '/' + cx.getAttribute('data-cancel-offer') + '/cancel').then(function(res){
+        if(res.ok) location.reload(); else { cx.disabled=false; alert((res.j && res.j.error) || 'Could not cancel.'); }
+      }).catch(function(){ cx.disabled=false; });
+      return;
+    }
+
+    // ---- Take a teammate's released shift (Market pane).
+    var tk = ev.target.closest('[data-take-offer]');
+    if(tk){
+      tk.disabled = true; tk.textContent = 'Taking…';
+      post(CFG.offerBase + '/' + tk.getAttribute('data-take-offer') + '/take').then(function(res){
+        if(res.ok){ loadMarket(); }
+        else { tk.disabled=false; tk.textContent='Take this shift'; alert((res.j && res.j.error) || 'Could not take this shift.'); }
+      }).catch(function(){ tk.disabled=false; tk.textContent='Take this shift'; });
+      return;
+    }
+  });
+
+  // ---- Market feed: teammates' OPEN released shifts this employee can take.
+  var marketLoaded = false;
+  function loadMarket(force){
+    if(marketLoaded && !force) return;
+    var box = $('mk-market-list');
+    if(!box || !CFG.marketUrl) return;
+    box.innerHTML = '<div class="mk-muted">Loading shifts…</div>';
+    fetch(CFG.marketUrl, {credentials:'same-origin', headers:{Accept:'application/json'}})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        marketLoaded = true;
+        var offers = (j && j.offers) || [];
+        if(!offers.length){ box.innerHTML = '<div class="mk-muted">No shifts are up for grabs right now.</div>'; return; }
+        box.innerHTML = offers.map(function(o){
+          var sh = o.shift || {};
+          var who = (o.offered_by && o.offered_by.name) || 'A teammate';
+          var bounty = (o.incentive ? '<div class="mk-bounty">+$' + Number(o.incentive).toFixed(2) + ' to take</div>' : '');
+          return '<div class="mk-card"><div>'
+               + '<div class="who">' + esc(shiftLine(sh)) + '</div>'
+               + '<div class="sub">' + esc(sh.position_name || 'Shift') + (sh.store ? ' &middot; ' + esc(sh.store) : '') + ' &middot; ' + esc(who) + '</div>'
+               + bounty
+               + '</div><button type="button" class="cf-primary" style="width:auto;padding:9px 14px;" data-take-offer="' + (+o.id) + '">Take this shift</button></div>';
+        }).join('');
+      })
+      .catch(function(){ box.innerHTML = '<div class="mk-muted">Could not load the market. Pull to refresh.</div>'; });
+  }
+  if(document.querySelector('[data-pane="market"]') && !$('cf-pane-market').hidden) loadMarket();
+
+  // ---- Time-off form (unchanged): client-side validation only.
+  var form = $('cf-timeoff');
   if(form){
     form.addEventListener('submit', function(ev){
       ev.preventDefault();
-      var start = document.getElementById('cf-start').value;
-      var end   = document.getElementById('cf-end').value;
-      var err   = document.getElementById('cf-timeoff-error');
-      var ok    = document.getElementById('cf-timeoff-success');
+      var start = $('cf-start').value, end = $('cf-end').value;
+      var err = $('cf-timeoff-error'), ok = $('cf-timeoff-success');
       err.hidden = true; ok.hidden = true;
-      if(!start || !end){
-        err.textContent = 'Start and end dates are required.';
-        err.hidden = false; return;
-      }
-      if(end < start){
-        err.textContent = 'End date cannot be before start date.';
-        err.hidden = false; return;
-      }
-      // Optimistic success state; the time-off backend wiring lands separately.
+      if(!start || !end){ err.textContent='Start and end dates are required.'; err.hidden=false; return; }
+      if(end < start){ err.textContent='End date cannot be before start date.'; err.hidden=false; return; }
       ok.hidden = false;
     });
   }

@@ -165,7 +165,10 @@
   function shiftHours(sh){ return sh ? (fmtT(sh.start_at)+"-"+fmtT(sh.end_at)) : ""; }
   function nm(p){ return (p&&p.name)?p.name:(p&&p.id?("#"+p.id):"someone"); }
   function personLink(p){ var label=esc(nm(p)); if(p&&p.id&&CFG.profileBaseUrl){ return '<a class="person-link" href="'+esc(CFG.profileBaseUrl)+encodeURIComponent(p.id)+'" target="_top">'+label+'</a>'; } return '<span class="who">'+label+'</span>'; }
-  function money(){ return '<span class="money free">&mdash;</span>'; }
+  function money(o){
+    if(o && o.incentive){ return '<span class="money">+$'+Number(o.incentive).toFixed(2)+'</span>'; }
+    return '<span class="money free">&mdash;</span>';
+  }
   function whenText(row, fallbackShift){ return dateLabel(row.reviewed_at || row.updated_at || row.created_at || (fallbackShift && fallbackShift.start_at)); }
   function isThisWeek(row, fallbackShift){
     var d = isoToDate(row.reviewed_at || row.updated_at || row.created_at || (fallbackShift && fallbackShift.start_at));
@@ -194,12 +197,12 @@
       pending: O.filter(function(o){return o.status==="taken";}).length + S.filter(function(s){return s.status==="accepted";}).length,
       available: O.filter(function(o){return o.status==="open";}).length,
       swapsOpen: S.filter(function(s){return s.status==="proposed" || s.status==="accepted";}).length,
-      moneyPending: 0,
+      moneyPending: O.filter(function(o){return o.status==="taken" && o.incentive;}).length,
       approved: O.filter(function(o){return o.status==="approved" && isThisWeek(o,o.shift);}).length + S.filter(function(s){return s.status==="approved" && isThisWeek(s,s.from_shift);}).length,
       denied: O.filter(function(o){return o.status==="denied" && isThisWeek(o,o.shift);}).length + S.filter(function(s){return s.status==="denied" && isThisWeek(s,s.from_shift);}).length,
       swaps: S.length,
       history: O.length + S.length,
-      ledger: 0
+      ledger: O.filter(function(o){return o.incentive;}).length
     };
   }
   function renderStats(){
@@ -235,7 +238,8 @@
     if(f.position && sh.position_name!==f.position) return false;
     if(f.status && st.indexOf(f.status)!==0) return false;
     if(f.employee && nm(o.offered_by)!==f.employee && (!o.taken_by || nm(o.taken_by)!==f.employee)) return false;
-    if(f.money==="with") return false;
+    if(f.money==="with" && !o.incentive) return false;
+    if(f.money==="free" && o.incentive) return false;
     if(f.type==="swap") return false;
     if(f.date && (shiftDate(sh)+" "+shiftHours(sh)).toLowerCase().indexOf(f.date.toLowerCase())===-1) return false;
     return true;
@@ -257,7 +261,7 @@
     else if(tab==="Swaps"){ offers=[]; }
     else if(tab==="Approved"){ offers=offers.filter(function(o){return o.status==="approved";}); swaps=swaps.filter(function(s){return s.status==="approved";}); }
     else if(tab==="Denied"){ offers=offers.filter(function(o){return o.status==="denied";}); swaps=swaps.filter(function(s){return s.status==="denied";}); }
-    else if(tab==="Ledger"){ offers=[]; swaps=[]; }
+    else if(tab==="Ledger"){ offers=offers.filter(function(o){return o.incentive;}); swaps=[]; }
     return {offers:offers.filter(offerMatches), swaps:swaps.filter(swapMatches)};
   }
 
@@ -271,7 +275,7 @@
       '<td data-label="Position">'+esc(sh.position_name||"Shift")+'</td>'+
       '<td data-label="Original">'+personLink(o.offered_by)+'</td>'+
       '<td data-label="Pickup">'+(o.taken_by?personLink(o.taken_by):'<span class="sub2">&mdash;</span>')+'</td>'+
-      '<td data-label="Offer">'+money()+'</td>'+
+      '<td data-label="Offer">'+money(o)+'</td>'+
       '<td data-label="When">'+wait+'</td>'+
       '<td class="actions" data-label="Actions"><button class="btn" data-view="offer">View</button>'+(actionable("offer",st)?'<button class="btn go" data-act="approve">Approve</button><button class="btn no" data-act="deny">Deny</button>':'')+'</td>'+
     '</tr>';
@@ -298,7 +302,10 @@
     var pickupHeads = ["Status","Shift date","Location","Position","Original","Pickup","Offer","When",""];
     var swapHeads = ["Status","Employee A","","Employee B","Location","Acceptance",""];
     if(state.tab==="Ledger"){
-      $("mk-content").innerHTML = '<div class="mk-ledger-note">Market offer only - not payroll. The live shift-market data model does not yet include money-offer amounts, so ledger counts stay empty until that backend field exists.</div>'+emptyCard("No money offers yet.","When staff attach money to a shift, the agreement will be tracked here separately from payroll.");
+      var note='<div class="mk-ledger-note">Market incentive only &mdash; NOT payroll. Employees settle the cash between themselves; this is a record of who offered what on a shift pickup.</div>';
+      $("mk-content").innerHTML = note + (rows.offers.length
+        ? table("Money offers", pickupHeads, rows.offers.map(offerRow).join(""))
+        : emptyCard("No money offers yet.","When staff attach money to a shift, the offer shows here."));
       return;
     }
     if(rows.offers.length){

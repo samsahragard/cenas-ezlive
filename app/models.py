@@ -3915,6 +3915,11 @@ class ShiftOffer(Base):
     )
     status: Mapped[str] = mapped_column(String(12), default="open", nullable=False)  # open|taken|approved|denied|cancelled|expired
     restricted: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)  # taker must match store+position
+    # Cash incentive the offerer attaches to sweeten the pickup (Sam 2026-06-13).
+    # Integer CENTS to avoid float money bugs; NULL = no money offered. DISPLAYED
+    # incentive only -- the app never moves money; the two employees settle offline.
+    # Surfaced on the browse cards + the manager Market dashboard.
+    incentive_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)  # manager User.id
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

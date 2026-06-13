@@ -228,7 +228,10 @@
   .d-team .score{font-family:var(--mono); font-weight:700; font-size:30px; letter-spacing:-.04em}
   .d-team.win .nm,.d-team.win .score{color:var(--amber)}
   .d-team.lose .nm,.d-team.lose .score{color:var(--txt-2)}
-  .d-status{display:flex; align-items:center; gap:9px; margin:16px 0 4px}
+  .d-status{display:flex; align-items:center; gap:9px; margin:16px 0 4px; flex-wrap:wrap}
+  .d-verify{font-family:var(--mono); font-size:10.5px; letter-spacing:.04em; color:#7fe3ad;
+    background:var(--field-dim); border:1px solid #1f6b3f; border-radius:999px; padding:3px 9px;
+    display:inline-flex; align-items:center; gap:5px}
 
   .d-info{display:grid; grid-template-columns:auto 1fr; gap:9px 14px; margin-top:18px;
     padding-top:16px; border-top:1px solid var(--line-soft); font-size:13.5px}
@@ -702,7 +705,7 @@ function openDrawer(id){
         ${g.away?`<div class="d-team ${ac}"><span class="mono-logo" style="background:${esc(g.away.color)}">${esc(g.away.abbr)}</span>
           <span class="nm">${esc(g.away.name)}</span><span class="score">${g.away.score==null?"":g.away.score}</span></div>`:""}
       </div>
-      <div class="d-status">${statusPill(g)}</div>
+      <div class="d-status">${statusPill(g)}${g.verified?`<span class="d-verify">&#10003; Score verified &middot; ${esc(g.verify_src||"official")}</span>`:""}</div>
       <dl class="d-info">
         <dt>Start</dt><dd>${esc(g.label)}</dd>
         <dt>Venue</dt><dd>${esc(g.venue||"—")}${g.city?` · ${esc(g.city)}`:""}</dd>
@@ -741,6 +744,7 @@ function tickClock(){
   const p = fmtParts(new Date(),{hour:"numeric",minute:"2-digit",second:"2-digit",timeZoneName:"short"});
   document.getElementById("clock").textContent = `${p.hour}:${p.minute}:${p.second} ${p.dayPeriod}`;
   document.getElementById("clockzone").textContent = `Houston · ${p.timeZoneName}`;
+  updateFreshness();
 }
 
 /* ---- events ---- */
@@ -770,11 +774,19 @@ document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeDrawer(); })
    slate instantly, then swaps to live as soon as the feed answers, and
    refreshes every 60s. If the feed ever fails, the sample slate stays up. */
 const FEED_URL = (window.SPORTS_FEED_URL) || (location.pathname.replace(/\/+$/,"") + "/data.json");
-function setLiveBanner(count){
+let lastFetch = 0, lastMeta = null;
+function setLiveBanner(count, meta){
   const el = document.querySelector(".sample");
   if(!el) return;
   el.classList.add("islive");
-  el.innerHTML = `<span class="livedot"></span> <b>LIVE</b> · ${count} games on now &amp; upcoming · all times Houston · auto-updates`;
+  const v = (meta && meta.verified) ? ` · <b>${meta.verified}</b> score-verified` : "";
+  el.innerHTML = `<span class="livedot"></span> <b>LIVE</b> · ${count} games${v} · <span id="freshness">updated just now</span>`;
+}
+function updateFreshness(){
+  const f = document.getElementById("freshness");
+  if(!f || !lastFetch) return;
+  const s = Math.max(0, Math.round((Date.now()-lastFetch)/1000));
+  f.textContent = s < 3 ? "updated just now" : `updated ${s}s ago`;
 }
 async function loadLive(){
   try{
@@ -783,8 +795,9 @@ async function loadLive(){
     const j = await r.json();
     if(!j || !j.ok || !Array.isArray(j.games) || !j.games.length) return;
     GAMES = buildGames(j.games);
+    lastFetch = Date.now(); lastMeta = j.meta || null;
     renderFilters(); render();
-    setLiveBanner(j.games.length);
+    setLiveBanner(j.games.length, lastMeta);
   }catch(e){ /* keep the sample slate */ }
 }
 

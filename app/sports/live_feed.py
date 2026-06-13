@@ -306,6 +306,14 @@ def _sweep(days_back=2, days_fwd=4, max_games=600):
     deduped.sort(key=lambda g: (g.get("start_utc") or ""))
     if len(deduped) > max_games:
         deduped = deduped[:max_games]
+    # Cross-check scores/state against each league's OWN official free API
+    # (MLB/WNBA/NBA/NHL): adopt the authoritative value + flag `verified`.
+    # Best-effort — never lets verification break the live feed.
+    try:
+        from app.sports import verify_feed
+        verify_feed.reconcile(deduped)
+    except Exception as e:
+        log.debug("sports live: reconcile skipped: %s", e)
     return deduped
 
 
@@ -321,11 +329,15 @@ def get_live_games(ttl=_TTL, force=False):
     it warms (never blocks more than one sweep at a time)."""
     import time
     now = time.time()
+    def _meta(cached):
+        served = _CACHE["games"]
+        return {"cached": cached, "age": round(now - _CACHE["at"], 1),
+                "count": len(served), "generated": round(_CACHE["at"], 1),
+                "verified": sum(1 for g in served if g.get("verified"))}
     with _LOCK:
         fresh = (not force) and (now - _CACHE["at"] < ttl) and _CACHE["games"]
         if fresh:
-            return _CACHE["games"], {"cached": True, "age": round(now - _CACHE["at"], 1),
-                                     "count": len(_CACHE["games"])}
+            return _CACHE["games"], _meta(True)
     # refresh outside the lock so concurrent readers aren't blocked
     games = _sweep()
     with _LOCK:
@@ -333,7 +345,7 @@ def get_live_games(ttl=_TTL, force=False):
             _CACHE["at"] = now
             _CACHE["games"] = games
         served = _CACHE["games"]
-    return served, {"cached": False, "age": 0.0, "count": len(served)}
+    return served, _meta(False)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ from app.web.briefs import briefs_bp
 from app.web.tasks import tasks_bp
 from app.web.team_reports import team_reports_bp
 from app.web.floor_routes import floor_bp  # Sections/Floor: map setup + section assignment + host seating + reservations (ck Gate 2; self-contained /floor blueprint, see docs/floor_contract.md)
+from app.web.worldcup import worldcup_bp  # PUBLIC no-login /worldcup page (World Cup only); exempted in auth.py EXEMPT_PREFIXES
 from app.web import auth as ezauth
 from app.web import keypad_auth as ezkeypad
 from app.web import employee_auth as ezempauth
@@ -152,6 +153,7 @@ def create_app():
     app.register_blueprint(reports_bp)
     app.register_blueprint(store_bp)
     app.register_blueprint(floor_bp)  # Sections/Floor pages + /floor/api/* (ck Gate 2)
+    app.register_blueprint(worldcup_bp)  # PUBLIC /worldcup (no login) — World Cup board
     app.register_blueprint(dev_chat_bp)
     app.register_blueprint(perms_admin_bp)  # PERMISSIONS admin page (partner-only, Sam #1676)
     # Interview Tracker (Sam #5:48) — partner-only candidate hiring

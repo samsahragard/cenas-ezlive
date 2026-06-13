@@ -351,6 +351,10 @@
    Favorites live in memory; in production they persist via the API.
    ==================================================================== */
 const TZ = "America/Chicago";
+/* worldcup mode = the public /worldcup page (World Cup only, branded, no
+   sport-filter chips). Server sets it via render_template(worldcup=True);
+   every other route renders it false. */
+const WORLDCUP_MODE = ({{ 'true' if worldcup else 'false' }});
 
 /* ---- broadcast mapping (mirror of sports_broadcast.py) ---- */
 /* DirecTV — HOUSTON market. Numbers verified June 2026 against two
@@ -801,7 +805,22 @@ async function loadLive(){
   }catch(e){ /* keep the sample slate */ }
 }
 
+/* worldcup mode — public /worldcup page: brand for the World Cup, scope to
+   the one league, and hide the (single-league) sport-filter chips. */
+function applyWorldCupMode(){
+  const eb=document.querySelector(".eyebrow"); if(eb) eb.textContent="FIFA World Cup";
+  const h1=document.querySelector(".brand h1"); if(h1) h1.textContent="World Cup";
+  const sub=document.querySelector(".sub"); if(sub) sub.textContent="Live scores & where to watch · Houston time";
+  const f=document.getElementById("filters"); if(f) f.style.display="none";
+  state.league="FIFA World Cup";
+  // start the public page with a clean favorites slate (the demo state
+  // pre-favorites the World Cup league, which would star every game here).
+  state.favLeagues.clear(); state.favTeams.clear(); state.favGames.clear();
+  try{ document.title="World Cup · What’s On"; }catch(e){}
+}
+
 /* ---- init ---- */
+if(WORLDCUP_MODE) applyWorldCupMode();
 renderFilters(); render(); tickClock(); setInterval(tickClock, 1000);
 loadLive(); setInterval(loadLive, 60000);
 </script>

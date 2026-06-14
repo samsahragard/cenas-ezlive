@@ -1,5 +1,6 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'assistant_page' %}
+{% set is_partner = (g.current_user is not none and g.current_user.permission_level == 'partner') %}
 
 {% block title %}Cenas AI — Cena's Kitchen{% endblock %}
 
@@ -670,6 +671,7 @@
 
 <div class="app-container">
   <!-- Collapsible File Explorer Sidebar -->
+  {% if is_partner %}
   <aside class="ide-sidebar closed" id="ideSidebar">
     <div class="ide-sidebar-header">
       <h3>Workspace Files</h3>
@@ -687,6 +689,7 @@
   <button class="ide-settings-btn" id="openSettingsBtn" title="Settings">
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
   </button>
+  {% endif %}
 
   <!-- Chat Content -->
   <main class="chat-container">
@@ -697,7 +700,11 @@
         </div>
       </div>
       <h1 class="welcome-title">hi, {{ g.current_user.full_name if g.current_user else 'User' }}.</h1>
+      {% if is_partner %}
       <p class="welcome-subtitle">Cenas AI is ready to build, edit, and explore your Cena's Kitchen codebase.</p>
+      {% else %}
+      <p class="welcome-subtitle">Cenas AI is here to answer your restaurant operation questions.</p>
+      {% endif %}
     </section>
 
     <!-- Messages Log -->
@@ -723,6 +730,7 @@
 </div>
 
 <!-- Settings Modal Overlay -->
+{% if is_partner %}
 <div class="ide-modal-overlay" id="settingsModal">
   <div class="ide-modal-content">
     <div class="ide-modal-header">
@@ -746,8 +754,10 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <!-- File Modal Overlay -->
+{% if is_partner %}
 <div class="ide-modal-overlay" id="fileModal">
   <div class="ide-modal-content ide-file-viewer-content">
     <div class="ide-modal-header">
@@ -759,6 +769,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <!-- Saved Prompts Modal Overlay -->
 <div class="ide-modal-overlay" id="savedPromptsModal">
@@ -814,42 +825,61 @@ document.addEventListener('DOMContentLoaded', () => {
   const savedPromptsList = document.getElementById('savedPromptsList');
 
   // State Variables
+  const isPartner = {{ 'true' if is_partner else 'false' }};
   let chatHistory = [];
   let apiKey = localStorage.getItem('gemini_api_key') || '';
 
-  if (apiKey) {
+  if (apiKey && apiKeyInput) {
     apiKeyInput.value = apiKey;
   }
 
   // Load Workspace Files
-  loadWorkspaceFiles();
+  if (isPartner) {
+    loadWorkspaceFiles();
+  }
 
   // Sidebar toggler
-  toggleSidebarBtn.addEventListener('click', () => {
-    sidebar.classList.toggle('closed');
-  });
+  if (toggleSidebarBtn) {
+    toggleSidebarBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('closed');
+    });
+  }
 
   // Settings management
-  openSettingsBtn.addEventListener('click', () => openModal(settingsModal));
-  closeSettingsBtn.addEventListener('click', () => closeModal(settingsModal));
-  saveSettingsBtn.addEventListener('click', () => {
-    apiKey = apiKeyInput.value.trim();
-    localStorage.setItem('gemini_api_key', apiKey);
-    closeModal(settingsModal);
-  });
+  if (openSettingsBtn) {
+    openSettingsBtn.addEventListener('click', () => openModal(settingsModal));
+  }
+  if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener('click', () => closeModal(settingsModal));
+  }
+  if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', () => {
+      apiKey = apiKeyInput.value.trim();
+      localStorage.setItem('gemini_api_key', apiKey);
+      closeModal(settingsModal);
+    });
+  }
 
   // Saved Prompts
-  savedBadgeBtn.addEventListener('click', () => openModal(savedPromptsModal));
-  closeSavedModalBtn.addEventListener('click', () => closeModal(savedPromptsModal));
-  savedPromptsList.addEventListener('click', (e) => {
-    if (e.target.tagName === 'LI') {
-      messageInput.value = e.target.textContent.replace(/"/g, '');
-      closeModal(savedPromptsModal);
-      messageInput.focus();
-    }
-  });
+  if (savedBadgeBtn) {
+    savedBadgeBtn.addEventListener('click', () => openModal(savedPromptsModal));
+  }
+  if (closeSavedModalBtn) {
+    closeSavedModalBtn.addEventListener('click', () => closeModal(savedPromptsModal));
+  }
+  if (savedPromptsList) {
+    savedPromptsList.addEventListener('click', (e) => {
+      if (e.target.tagName === 'LI') {
+        messageInput.value = e.target.textContent.replace(/"/g, '');
+        closeModal(savedPromptsModal);
+        messageInput.focus();
+      }
+    });
+  }
 
-  closeFileModalBtn.addEventListener('click', () => closeModal(fileModal));
+  if (closeFileModalBtn) {
+    closeFileModalBtn.addEventListener('click', () => closeModal(fileModal));
+  }
 
   // Chat Form Submission
   chatForm.addEventListener('submit', async (e) => {
@@ -869,7 +899,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setLoadingState(true, 'Bot is planning...');
 
     try {
-      const response = await fetch('/api/ide/chat', {
+      const response = await fetch('/api/assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -968,7 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load file explorer
   async function loadWorkspaceFiles() {
     try {
-      const response = await fetch('/api/ide/files');
+      const response = await fetch('/api/assistant/files');
       const data = await response.json();
       if (!data.success) throw new Error(data.error);
 
@@ -1007,7 +1037,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function openFileViewer(path) {
     try {
-      const response = await fetch(`/api/ide/file-content?path=${encodeURIComponent(path)}`);
+      const response = await fetch(`/api/assistant/file-content?path=${encodeURIComponent(path)}`);
       const data = await response.json();
       if (!data.success) throw new Error(data.error);
 

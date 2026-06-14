@@ -27,6 +27,64 @@ def partner_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Gating decorator: allow general logged-in users, but enforce second-factor for partners
+def assistant_login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        from app.web.permissions import load_current_user
+        user = getattr(g, "current_user", None) or load_current_user()
+        if not user:
+            return redirect(url_for("keypad_auth.login", next=request.path))
+        if getattr(user, "permission_level", None) == "partner":
+            if not session.get("partner_auth_ok"):
+                return redirect(url_for("auth.partner_login", next=request.path))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Helper: Resolve cena_employee_id for the current user safely
+def get_current_employee_id(user) -> int | None:
+    if not user:
+        return None
+    # 1. Check main database for linked employee via user_id
+    try:
+        from app.db import SessionLocal
+        from app.models import Employee
+        db = SessionLocal()
+        try:
+            emp = db.query(Employee).filter(Employee.user_id == user.id).first()
+            if emp:
+                return emp.id
+        except Exception:
+            pass
+        finally:
+            db.close()
+    except Exception:
+        pass
+    
+    # 2. Fallback: Query toastdm.dm_profile inside sqlite file directly to avoid recursion
+    try:
+        toast_webhook_db = os.getenv("TOAST_WEBHOOK_DB") or r"C:\Users\sam\cena-ai-assistant\toast_webhook\toast_webhook.sqlite"
+        cena_l3_data_dir = os.getenv("CENA_L3_DATA_DIR") or r"C:\Users\sam\cena-l3data"
+        toastdm_db = Path(cena_l3_data_dir) / "snapshots" / "toastdm.sqlite"
+        
+        if os.path.exists(toast_webhook_db) and toastdm_db.exists():
+            db_uri = f"file:{Path(toast_webhook_db).resolve().as_posix()}?mode=ro"
+            conn = sqlite3.connect(db_uri, uri=True)
+            try:
+                tdm_uri = f"file:{toastdm_db.resolve().as_posix()}?mode=ro"
+                conn.execute(f"ATTACH DATABASE '{tdm_uri}' AS toastdm")
+                cursor = conn.cursor()
+                cursor.execute("SELECT cena_employee_id FROM toastdm.dm_profile WHERE LOWER(full_name) = ? LIMIT 1", (user.full_name.lower(),))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+            finally:
+                conn.close()
+    except Exception:
+        pass
+    return None
+
 # Helper: Prevent directory traversal outside workspace
 def safe_resolve(relative_path: str) -> Path:
     resolved = (workspace_path / relative_path).resolve()
@@ -102,6 +160,51 @@ def query_sales_db_tool(sqlQuery: str) -> list[dict]:
     Args:
         sqlQuery: The SQL SELECT query to run.
     """
+    # Gating and validation for SQL queries
+    user = None
+    try:
+        from flask import has_request_context, g
+        if has_request_context():
+            user = getattr(g, "current_user", None)
+    except Exception:
+        pass
+
+    if user is not None:
+        user_role = getattr(user, "permission_level", "driver")
+        manager_roles = {"corporate", "corporate_chef", "gm", "manager", "km", "assistant_km", "prep_manager", "foh_manager", "expo"}
+        if user_role == "partner":
+            user_tier = "partner"
+        elif user_role in manager_roles:
+            user_tier = "manager"
+        else:
+            user_tier = "hourly"
+            
+        if user_tier == "manager":
+            query_upper = sqlQuery.upper()
+            forbidden = ["TOAST_LABOR", "DM_TIME_ENTRY", "BASE_PAY", "SQLITE_MASTER", "SQLITE_SCHEMA", "SQLITE_TEMP_MASTER", "PRAGMA"]
+            for word in forbidden:
+                if word in query_upper:
+                    raise PermissionError(f"Access denied: Query contains restricted table or field '{word}' for managers.")
+                    
+        elif user_tier == "hourly":
+            my_emp_id = get_current_employee_id(user)
+            if not my_emp_id:
+                raise PermissionError("Access denied: Could not map user to employee identity.")
+                
+            query_upper = sqlQuery.upper()
+            # 1. No sales tables allowed
+            sales_tables = ["TOAST_CHECK_CURRENT", "TOAST_ORDER_CURRENT", "TOAST_SELECTION_CURRENT", "TOAST_PAYMENT_CURRENT"]
+            for t in sales_tables:
+                if t in query_upper:
+                    raise PermissionError(f"Access denied: Hourly staff is not permitted to query sales table {t}.")
+            
+            # 2. Must filter by their own employee ID
+            if "CENA_EMPLOYEE_ID" not in query_upper:
+                raise PermissionError("Access denied: Hourly staff queries must filter on cena_employee_id.")
+            
+            if str(my_emp_id) not in sqlQuery:
+                raise PermissionError("Access denied: Hourly staff can only query their own records.")
+
     toast_webhook_db = os.getenv("TOAST_WEBHOOK_DB") or r"C:\Users\sam\cena-ai-assistant\toast_webhook\toast_webhook.sqlite"
     is_render = os.getenv("RENDER") == "true"
     
@@ -175,7 +278,7 @@ def query_sales_db_tool(sqlQuery: str) -> list[dict]:
 
 # Flask API Web Routes
 @assistant_bp.route("/assistant", methods=["GET"])
-@partner_required
+@assistant_login_required
 def assistant_page():
     g.current_store = "partner"
     g.store_label = "Partner"
@@ -186,7 +289,7 @@ def assistant_page():
         page_title="Cenas AI",
     )
 
-@assistant_bp.route("/api/ide/files", methods=["GET"])
+@assistant_bp.route("/api/assistant/files", methods=["GET"])
 @partner_required
 def api_list_files():
     try:
@@ -196,7 +299,7 @@ def api_list_files():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@assistant_bp.route("/api/ide/file-content", methods=["GET"])
+@assistant_bp.route("/api/assistant/file-content", methods=["GET"])
 @partner_required
 def api_file_content():
     relative_path = request.args.get("path")
@@ -208,7 +311,7 @@ def api_file_content():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@assistant_bp.route("/api/ide/save-file", methods=["POST"])
+@assistant_bp.route("/api/assistant/save-file", methods=["POST"])
 @partner_required
 def api_save_file():
     body = request.get_json(silent=True) or {}
@@ -222,9 +325,9 @@ def api_save_file():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@assistant_bp.route("/api/ide/chat", methods=["POST"])
-@partner_required
-def api_ide_chat():
+@assistant_bp.route("/api/assistant/chat", methods=["POST"])
+@assistant_login_required
+def api_assistant_chat():
     body = request.get_json(silent=True) or {}
     message = body.get("message")
     history = body.get("history") or []
@@ -239,18 +342,42 @@ def api_ide_chat():
         }), 400
         
     try:
-        # Initialize Google GenAI client
-        client = genai.Client(api_key=resolved_key)
+        user = getattr(g, "current_user", None)
+        if not user:
+            return jsonify({"success": False, "error": "Unauthorized"}), 401
+            
+        user_name = getattr(user, "full_name", "User")
+        user_role = getattr(user, "permission_level", "staff")
         
-        # System Instructions
-        system_instruction = """You are a powerful, intelligent software developer assistant named "IDE Bot" created to manage, build, and debug applications. 
+        # Determine User Tier
+        manager_roles = {"corporate", "corporate_chef", "gm", "manager", "km", "assistant_km", "prep_manager", "foh_manager", "expo"}
+        if user_role == "partner":
+            user_tier = "partner"
+        elif user_role in manager_roles:
+            user_tier = "manager"
+        else:
+            user_tier = "hourly"
+            
+        # Dynamically build tools list based on tier
+        if user_tier == "partner":
+            tools_list = [list_files_tool, read_file_tool, write_file_tool, query_sales_db_tool]
+        else:
+            tools_list = [query_sales_db_tool]
+            
+        # Resolve Employee ID for hourly gating
+        my_emp_id = None
+        if user_tier == "hourly":
+            my_emp_id = get_current_employee_id(user)
+            
+        # Base System Instructions
+        base_instruction = f"""You are CENA, the intelligent and premium AI assistant for Cena's Kitchen.
 Your company is Cena's Kitchen (formerly Aguirre's Tex-Mex), website: https://cenaskitchen.com, app: https://app.cenaskitchen.com.
 Here is key company information you MUST know and can speak about:
 - Cuisine: Authentic Tex-Mex (fajitas, enchiladas, tacos, tostadas, house-made sauces)
-- Locations: [{"city":"Houston","address":"15650 Farm to Market Road 529, Houston, TX 77095","phone":"(281) 815-3294"},{"city":"Tomball","address":"27727 Tomball Parkway, Tomball, TX 77377","phone":"(281) 255-0012"}]
+- Locations: [{{"city":"Houston","address":"15650 Farm to Market Road 529, Houston, TX 77095","phone":"(281) 815-3294"}},{{"city":"Tomball","address":"27727 Tomball Parkway, Tomball, TX 77377","phone":"(281) 255-0012"}}]
 - Settings: Edison-style lighting, festive atmosphere, Frida Kahlo inspired decorations
 - App Features: ["Driver sign in and sign up","Real-time delivery tracking","Order dispatching and routing","Phone-based authentication flow"]
-- Operational Summary: Cena's Kitchen serves high-quality Tex-Mex food in the Greater Houston and Tomball areas. They leverage technology through cenaskitchen.com (ordering and marketing) and app.cenaskitchen.com (their driver portal) to run efficient food delivery operations and provide a seamless customer experience.
+- Operational Summary: Cena's Kitchen serves high-quality Tex-Mex food in the Greater Houston and Tomball areas. They leverage technology through cenaskitchen.com (ordering and marketing) and app.cenaskitchen.com (their driver portal) to run efficient food delivery operations.
 
 Sales Database Details (toast_webhook.sqlite):
 - Business Week: Cena's Kitchen's business week starts on Sunday and ends on Saturday. Therefore, from the perspective of current time (Sunday, June 14, 2026), "last week" is Sunday, June 7, 2026 to Saturday, June 13, 2026 (inclusive). Keep this week boundary in mind for all weekly calculations.
@@ -275,7 +402,6 @@ Sales Database Details (toast_webhook.sqlite):
 - To calculate total gross sales, use: SUM(total_amount) where voided = 0 AND deleted = 0
 - To calculate average check, use: AVG(total_amount) or AVG(amount)
 - IMPORTANT: Time fields (opened_date, closed_date, paid_date) are stored in UTC format with a '+0000' offset suffix (e.g., '2026-06-05T16:09:43.351+0000').
-- Because SQLite's built-in date/time functions do NOT recognize '+0000' as a valid timezone format, they will return NULL when parsing these fields directly.
 - You MUST clean the timezone format in your queries by replacing '+0000' with 'Z' (e.g., replace(opened_date, '+0000', 'Z')).
 - The restaurant operates in Houston (local time: America/Chicago, which is UTC-5 hours for CDT and UTC-6 hours for CST).
 - To query or group by local time (e.g., local hours for lunch/dinner dayparts), you MUST convert the cleaned UTC timestamp to local time using the 'localtime' modifier:
@@ -309,17 +435,6 @@ Labor & Shift Database Details (Attached as toastdm):
   - active (INTEGER) - 1 if active, 0 otherwise
   - primary_store_key (TEXT) - 'copperfield' or 'tomball'
   - positions_json (TEXT, JSON array of canonical position names, e.g. '["Server"]', '["Cook"]')
-- Table 'toastdm.dm_time_entry' contains clock-in / clock-out hours and earnings. Schema:
-  - cena_employee_id (INTEGER)
-  - store_key (TEXT) - 'copperfield' or 'tomball'
-  - business_date (TEXT, YYYY-MM-DD format with hyphens!)
-  - clock_in (TEXT, ISO timestamp)
-  - clock_out (TEXT, ISO timestamp)
-  - reg_hours (REAL) - regular hours worked
-  - ot_hours (REAL) - overtime hours worked
-  - total_hours (REAL) - reg_hours + ot_hours
-  - base_pay (REAL) - actual labor cost (hourly_rate * reg_hours + hourly_rate * 1.5 * ot_hours)
-  - tips (REAL)
 - Table 'toastdm.dm_schedule' contains scheduled hours. Schema:
   - cena_employee_id (INTEGER)
   - shift_uid (TEXT)
@@ -329,40 +444,57 @@ Labor & Shift Database Details (Attached as toastdm):
   - end_at (TEXT, ISO timestamp)
   - status (TEXT) - 'assigned' or 'open'
 
-Common labor query formulations:
-- To compare sales and labor by date, convert the format (e.g. replace(t.business_date, '-', '') to match YYYYMMDD sales date).
-- Labor cost: SUM(base_pay) in toastdm.dm_time_entry
-- Labor hours: SUM(total_hours) in toastdm.dm_time_entry
-- Labor cost percentage: SUM(base_pay) from toastdm.dm_time_entry / SUM(amount) from toast_check_current * 100.0 (where voided=0 and deleted=0)
-- Sales Per Labor Hour (SPLH): SUM(amount) from toast_check_current / SUM(total_hours) from toastdm.dm_time_entry
-- BOH labor: Positions matching 'Cook', 'Prep', 'KM', 'Dish', 'Chop', 'Enchilada', 'Kitchen', 'Chef'
-- FOH labor: Positions matching 'Server', 'Host', 'Cashier', 'Bartender', 'Well', 'Busser', 'Expo', 'Manager'
-- Overtime checks: If SUM(ot_hours) > 0, overtime was run.
-- Scheduled hours: SUM((strftime('%s', end_at) - strftime('%s', start_at)) / 3600.0) from toastdm.dm_schedule where status = 'assigned'
-- To rank servers by net sales performance on a specific date, write an SQL query joining toast_check_current (c), toast_order_current (o), employee_toast_identity_map (m), and toastdm.dm_profile (p) on c.order_guid = o.order_guid, o.server_toast_guid = m.toast_employee_guid, and m.cena_employee_id = p.cena_employee_id. Group by p.full_name and order by net_sales desc.
-- Shift definitions for servers/staff:
-  - "tonight's shift", "tonight", or "PM shift" without a specified date refers to the night shift on the CURRENT date (Sunday, June 14, 2026).
-  - If referencing a past date (e.g. June 10th), "night shift", "PM shift", or "that night" refers to the PM shift on that specific past date.
-  - "night shift" or "PM shift" refers to employees whose scheduled hours fall within the 2:00 PM to 11:00 PM window (specifically: time(s.start_at) >= '14:00:00' AND time(s.end_at) <= '23:00:00' in toastdm.dm_schedule).
-  - "morning shift", "morning staff", or "AM shift" refers to employees whose scheduled hours fall within the 7:00 AM to 5:00 PM window (specifically: time(s.start_at) >= '07:00:00' AND time(s.end_at) <= '17:00:00' in toastdm.dm_schedule).
-  - To identify who is scheduled for a shift on a date and rank them, filter the employee list by joining with toastdm.dm_schedule (s) on s.cena_employee_id = p.cena_employee_id where position_name IN ('Server', 'Bartender') and start_at date matches the query date (e.g., substr(s.start_at, 1, 10) = 'YYYY-MM-DD'), and apply the shift boundaries.
-  - IMPORTANT performance ranking rules for tipped employees (Waiters/Servers and Bartenders): When asked who the "better", "best", "strongest", "weakest", or "worse" waiters (servers) or bartenders are (historically or for an active/today/tonight/future shift), their performance MUST be evaluated and ranked based on their historical credit card tips and transactions over the last 30 days (excluding today).
-    Evaluate them based on these metrics directly calculated from the transaction database:
-    1. Tip % (Primary Performance Indicator for "who is better"): calculated as: (SUM(pay.tip_amount) / SUM(pay.amount)) * 100.0 from toast_payment_current pay where pay.payment_type = 'CREDIT' AND pay.payment_status = 'CAPTURED'.
-    2. CC Tabs (Sales/Tab Volume): SUM(pay.amount) for CREDIT payments.
-    3. CC Tips (Total Tips): SUM(pay.tip_amount) for CREDIT payments.
-    4. Tickets (Ticket/Check Volume): COUNT(DISTINCT c.check_guid).
-    5. Avg Duration (Table turn time): AVG(strftime('%s', replace(c.closed_date, '+0000', 'Z')) - strftime('%s', replace(c.opened_date, '+0000', 'Z'))) / 60.0 in minutes.
-    - When asked to rank scheduled FOH tipped employees, write an SQL query to calculate these metrics over the last 30 days (excluding today) for each scheduled employee, present the results sorted by Tip % descending in a markdown table, and write a summary explaining who is performing better (higher tip percentage and/or volume) and who is not. Do not use today's partial sales.
-
-Rules of operation:
-1. You have tools to read, write, and list files in the local workspace directory.
-2. You have the 'query_sales_db_tool' tool to execute SQL queries on the real toast_webhook.sqlite database.
-3. If the user asks restaurant operations, sales, average checks, covers, or order volume questions, ALWAYS use the 'query_sales_db_tool' tool to fetch the exact numbers from the real POS SQLite database tables (toast_check_current, toast_order_current, etc.). Formulate clean SQL queries using store_key and business_date. Do not guess.
-4. If the user asks you to modify code, create files, or inspect files, ALWAYS use the appropriate tool: 'write_file_tool', 'read_file_tool', or 'list_files_tool'. Do not just say you will do it—DO IT.
-5. Be professional, clean, and write pristine, correct code. Avoid placeholders or unfinished code blocks.
-6. If asked about the company or the app (app.cenaskitchen.com), explain it clearly using the provided details.
+Shift definitions for servers/staff:
+- "tonight's shift", "tonight", or "PM shift" without a specified date refers to the night shift on the CURRENT date (Sunday, June 14, 2026).
+- If referencing a past date (e.g. June 10th), "night shift", "PM shift", or "that night" refers to the PM shift on that specific past date.
+- "night shift" or "PM shift" refers to employees whose scheduled hours fall within the 2:00 PM to 11:00 PM window (specifically: time(s.start_at) >= '14:00:00' AND time(s.end_at) <= '23:00:00' in toastdm.dm_schedule).
+- "morning shift", "morning staff", or "AM shift" refers to employees whose scheduled hours fall within the 7:00 AM to 5:00 PM window (specifically: time(s.start_at) >= '07:00:00' AND time(s.end_at) <= '17:00:00' in toastdm.dm_schedule).
+- To identify who is scheduled for a shift on a date and rank them, filter the employee list by joining with toastdm.dm_schedule (s) on s.cena_employee_id = p.cena_employee_id where position_name IN ('Server', 'Bartender') and start_at date matches the query date (e.g., substr(s.start_at, 1, 10) = 'YYYY-MM-DD'), and apply the shift boundaries.
+- IMPORTANT performance ranking rules for tipped employees (Waiters/Servers and Bartenders): When asked who the "better", "best", "strongest", "weakest", or "worse" waiters (servers) or bartenders are (historically or for an active/today/tonight/future shift), their performance MUST be evaluated and ranked based on their historical credit card tips and transactions over the last 30 days (excluding today).
+  Evaluate them based on these metrics directly calculated from the transaction database:
+  1. Tip % (Primary Performance Indicator for "who is better"): calculated as: (SUM(pay.tip_amount) / SUM(pay.amount)) * 100.0 from toast_payment_current pay where pay.payment_type = 'CREDIT' AND pay.payment_status = 'CAPTURED'.
+  2. CC Tabs (Sales/Tab Volume): SUM(pay.amount) for CREDIT payments.
+  3. CC Tips (Total Tips): SUM(pay.tip_amount) for CREDIT payments.
+  4. Tickets (Ticket/Check Volume): COUNT(DISTINCT c.check_guid).
+  5. Avg Duration (Table turn time): AVG(strftime('%s', replace(c.closed_date, '+0000', 'Z')) - strftime('%s', replace(c.opened_date, '+0000', 'Z'))) / 60.0 in minutes.
+  - When asked to rank scheduled FOH tipped employees, write an SQL query to calculate these metrics over the last 30 days (excluding today) for each scheduled employee, present the results sorted by Tip % descending in a markdown table, and write a summary explaining who is performing better (higher tip percentage and/or volume) and who is not. Do not use today's partial sales.
 """
+
+        if user_tier == "partner":
+            system_instruction = base_instruction + f"""
+IDENTITY VERIFICATION & GATING RULES:
+- You are speaking to {user_name}, who is logged in as a 'partner'.
+- On the first turn of a conversation, you MUST explicitly greet {user_name} by name, state/verify their role as 'partner', and confirm they have full access.
+- As a partner, they have full access to everything: codebase files, database schemas, raw SQL queries, hourly pay rates, and labor costs.
+- You have access to files tools (list_files_tool, read_file_tool, write_file_tool) and query_sales_db_tool.
+- In addition to sales, you have access to the 'toastdm.dm_time_entry' table and the 'toast_labor' database to query labor costs, hourly pay rates, and hours worked.
+"""
+        elif user_tier == "manager":
+            system_instruction = base_instruction + f"""
+IDENTITY VERIFICATION & GATING RULES:
+- You are speaking to {user_name}, who is logged in as a 'manager' (role: {user_role}).
+- On the first turn of a conversation, you MUST explicitly greet {user_name} by name, state/verify their role as '{user_role}', and remind them of their access limits.
+- CRITICAL SECURITY ENFORCEMENT: Since they are NOT a partner, you are strictly prohibited from giving them access to:
+  1. Workspace/codebase files (you do NOT have files tools, and must never discuss or print code files or paths).
+  2. Database schemas, raw SQL queries, or internal table/column structures. Never explain SQL queries or print them.
+  3. Hourly pay rates (individual hourly pay) or total labor costs (labor cost sum, hourly rate avg, base_pay, or total labor spend).
+- If they ask for any codebase, file, schema, raw SQL, or labor cost/pay rate information, you MUST politely refuse, stating that you have verified their role as '{user_role}' and that such information is restricted to Partners only.
+- You have ONLY the query_sales_db_tool to fetch check counts, sales volume, menu selections, and FOH schedules. You MUST NOT query labor costs or hourly pay rates.
+- Do NOT output SQL query text or database names under any circumstance to this user.
+"""
+        else:  # hourly
+            system_instruction = base_instruction + f"""
+IDENTITY VERIFICATION & GATING RULES:
+- You are speaking to {user_name}, who is logged in as a '{user_role}' (hourly/tipped employee).
+- On the first turn of a conversation, you MUST explicitly greet {user_name} by name, state/verify their role as '{user_role}', and confirm they only have access to their own personal records.
+- CRITICAL SECURITY ENFORCEMENT: Since they are an hourly/tipped employee, they are strictly prohibited from receiving ANY company/store-wide information, sales data, schedules of other employees, database schemas, raw SQL, or files.
+- They can ONLY access their own personal schedule and profile information.
+- You have ONLY the query_sales_db_tool. You MUST NOT query any sales tables or other employees' records. Any query you make MUST filter on cena_employee_id = {my_emp_id} (their employee ID).
+- If they ask for any company information, sales, other people's schedules, codebase, or schemas, you MUST politely refuse, stating that you have verified their identity as '{user_name}' ('{user_role}') and that company/manager information is restricted.
+"""
+
+        # Initialize Google GenAI client
+        client = genai.Client(api_key=resolved_key)
 
         # Format history
         chat_history = []
@@ -393,7 +525,6 @@ Rules of operation:
         ]
         model_candidates = [m for m in model_candidates if m]
         
-        tools_list = [list_files_tool, read_file_tool, write_file_tool, query_sales_db_tool]
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
             tools=tools_list,
@@ -407,7 +538,7 @@ Rules of operation:
         
         for candidate in model_candidates:
             try:
-                logger.info(f"[IDE Bot] Generation attempt with {candidate}")
+                logger.info(f"[CENA] Generation attempt with {candidate}")
                 response = client.models.generate_content(
                     model=candidate,
                     contents=contents,
@@ -417,7 +548,7 @@ Rules of operation:
                 success = True
                 break
             except Exception as e:
-                logger.warning(f"[IDE Bot] Candidate {candidate} failed: {e}")
+                logger.warning(f"[CENA] Candidate {candidate} failed: {e}")
                 last_error = e
                 
         if not success:
@@ -430,7 +561,7 @@ Rules of operation:
         
         # Tool Loop
         while response.function_calls:
-            logger.info(f"[IDE Bot] Model {model_used} requested tool execution")
+            logger.info(f"[CENA] Model {model_used} requested tool execution")
             
             # Save model call turn
             contents.append(response.candidates[0].content)
@@ -444,10 +575,16 @@ Rules of operation:
                 outcome = None
                 try:
                     if name == "list_files_tool":
+                        if user_tier != "partner":
+                            raise PermissionError("Access denied: list_files_tool is restricted to partners.")
                         outcome = list_files_tool()
                     elif name == "read_file_tool":
+                        if user_tier != "partner":
+                            raise PermissionError("Access denied: read_file_tool is restricted to partners.")
                         outcome = read_file_tool(**args)
                     elif name == "write_file_tool":
+                        if user_tier != "partner":
+                            raise PermissionError("Access denied: write_file_tool is restricted to partners.")
                         outcome = write_file_tool(**args)
                     elif name == "query_sales_db_tool":
                         outcome = query_sales_db_tool(**args)
@@ -489,5 +626,5 @@ Rules of operation:
         })
         
     except Exception as e:
-        logger.error(f"[IDE Bot] Chat processing failed: {e}")
+        logger.error(f"[CENA] Chat processing failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500

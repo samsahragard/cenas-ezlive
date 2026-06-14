@@ -3,10 +3,10 @@ import json
 import pytest
 from pathlib import Path
 from flask import g, session
+from app.models import User
 
 @pytest.fixture
 def app_with_user(db_session, monkeypatch):
-    from app.models import User
     partner = User(
         id=1, full_name="Sam Sahragard", email="sam@x.test",
         passcode_hash="x", permission_level="partner",
@@ -41,43 +41,42 @@ def app_with_user(db_session, monkeypatch):
 
     yield app, _client_for, db_session
 
-def test_ide_page_gating_unauthorized(app_with_user):
+def test_assistant_page_gating_unauthorized(app_with_user):
     app, client_for, db = app_with_user
-    # 1. No partner_auth_ok session key -> redirect
+    # 1. No partner_auth_ok session key but is partner -> redirect
     c = client_for(1, partner_auth_ok=False)
-    r = c.get("/partner/developer/ide")
+    r = c.get("/assistant")
     assert r.status_code == 302
-    assert "partner-login" in r.headers["Location"] or "login" in r.headers["Location"]
+    assert "partner-login" in r.headers["Location"]
 
-    # 2. Not partner role -> 403
-    c = client_for(2, partner_auth_ok=True)
-    r = c.get("/partner/developer/ide")
-    assert r.status_code == 403
+    # 2. General logged in (non-partner) -> works without partner_auth_ok
+    c = client_for(2, partner_auth_ok=False)
+    r = c.get("/assistant")
+    assert r.status_code == 200
 
-def test_ide_page_accessible_to_partner(app_with_user):
+def test_assistant_page_accessible_to_partner(app_with_user):
     app, client_for, db = app_with_user
     c = client_for(1, partner_auth_ok=True)
-    r = c.get("/partner/developer/ide")
+    r = c.get("/assistant")
     assert r.status_code == 200
-    assert b"IDE Bot" in r.data
+    assert b"Cenas AI" in r.data
     assert b"hi, Sam Sahragard." in r.data
 
 def test_api_list_files(app_with_user):
     app, client_for, db = app_with_user
     c = client_for(1, partner_auth_ok=True)
-    r = c.get("/api/ide/files")
+    r = c.get("/api/assistant/files")
     assert r.status_code == 200
     data = json.loads(r.data.decode("utf-8"))
     assert data["success"] is True
     assert isinstance(data["files"], list)
-    # Check that common files like wsgi.py exist in list
     paths = [f["path"] for f in data["files"]]
     assert "wsgi.py" in paths
 
 def test_api_file_content_success(app_with_user):
     app, client_for, db = app_with_user
     c = client_for(1, partner_auth_ok=True)
-    r = c.get("/api/ide/file-content?path=wsgi.py")
+    r = c.get("/api/assistant/file-content?path=wsgi.py")
     assert r.status_code == 200
     data = json.loads(r.data.decode("utf-8"))
     assert data["success"] is True
@@ -86,38 +85,69 @@ def test_api_file_content_success(app_with_user):
 def test_api_file_content_traversal_denied(app_with_user):
     app, client_for, db = app_with_user
     c = client_for(1, partner_auth_ok=True)
-    r = c.get("/api/ide/file-content?path=../../outside.txt")
+    r = c.get("/api/assistant/file-content?path=../../outside.txt")
     assert r.status_code == 500
     data = json.loads(r.data.decode("utf-8"))
     assert data["success"] is False
     assert "Access denied" in data["error"]
 
 def test_query_sales_db_tool():
-    from app.web.ide_routes import query_sales_db_tool
+    from app.web.assistant_routes import query_sales_db_tool
     # Test a basic SELECT query
     res = query_sales_db_tool("SELECT 1 AS num")
     assert isinstance(res, list)
     assert len(res) == 1
     assert res[0]["num"] == 1
 
-    # Test querying the tables (if databases exist, which they should on this system)
     try:
         checks = query_sales_db_tool("SELECT store_key, count(*) as count FROM toast_check_current GROUP BY store_key")
-        print("Checks in database:", checks)
         assert isinstance(checks, list)
     except Exception as e:
-        print("Could not query toast_check_current (db might not exist or be empty):", e)
+        print("Could not query toast_check_current:", e)
 
-    try:
-        profiles = query_sales_db_tool("SELECT count(*) as count FROM toastdm.dm_profile")
-        print("Profiles in attached toastdm database:", profiles)
-        assert isinstance(profiles, list)
-    except Exception as e:
-        print("Could not query toastdm.dm_profile:", e)
+def test_query_sales_db_tool_gating(app_with_user):
+    app, client_for, db = app_with_user
+    from app.web.assistant_routes import query_sales_db_tool
+    
+    # 1. Partner user: should be able to query labor cost/pay rate
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(permission_level="partner").first()
+        try:
+            # Table might not exist in test env, but it shouldn't raise a PermissionError
+            query_sales_db_tool("SELECT base_pay FROM toastdm.dm_time_entry LIMIT 1")
+        except PermissionError:
+            pytest.fail("Partner should be able to query labor pay/costs.")
+        except Exception:
+            pass
+            
+    # 2. Manager user (non-partner): should NOT be able to query labor pay/costs
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(permission_level="corporate").first()
+        with pytest.raises(PermissionError):
+            query_sales_db_tool("SELECT base_pay FROM toastdm.dm_time_entry LIMIT 1")
+            
+    # 3. Hourly user (e.g. driver): should NOT be able to query sales tables or others' schedules
+    hourly_user = User(
+        id=3, full_name="Hourly Worker", email="hourly@x.test",
+        passcode_hash="x", permission_level="driver",
+        active=True, first_login_done=True,
+    )
+    db.add(hourly_user)
+    db.commit()
+    
+    with app.test_request_context():
+        g.current_user = hourly_user
+        # Querying sales table should raise PermissionError
+        with pytest.raises(PermissionError):
+            query_sales_db_tool("SELECT * FROM toast_check_current")
+            
+        # Querying schedules without filtering on cena_employee_id should raise PermissionError
+        with pytest.raises(PermissionError):
+            query_sales_db_tool("SELECT * FROM toastdm.dm_schedule")
 
 def test_query_sales_db_tool_proxy(monkeypatch):
     import urllib.request
-    from app.web.ide_routes import query_sales_db_tool
+    from app.web.assistant_routes import query_sales_db_tool
     
     monkeypatch.setenv("RENDER", "true")
     monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", "https://cena-cloud-test.onrender.com/assistant/answer")

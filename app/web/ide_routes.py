@@ -343,9 +343,9 @@ Common labor query formulations:
 - Shift definitions for servers/staff:
   - "tonight's shift", "tonight", or "PM shift" without a specified date refers to the night shift on the CURRENT date (Sunday, June 14, 2026).
   - If referencing a past date (e.g. June 10th), "night shift", "PM shift", or "that night" refers to the PM shift on that specific past date.
-  - "night shift" or "PM shift" refers to employees scheduled to start between 2:00 PM (14:00:00) and 11:00 PM (23:00:00) local time (e.g. time(s.start_at) >= '14:00:00' AND time(s.start_at) <= '23:00:00' in toastdm.dm_schedule).
-  - "morning shift", "morning staff", or "AM shift" refers to employees scheduled to start between 7:00 AM (07:00:00) and 5:00 PM (17:00:00) local time (e.g. time(s.start_at) >= '07:00:00' AND time(s.start_at) <= '17:00:00' in toastdm.dm_schedule).
-  - To identify who is scheduled for a shift on a date and rank them, filter the server list by joining with toastdm.dm_schedule (s) on s.cena_employee_id = p.cena_employee_id where position_name = 'Server' and start_at date matches the query date (e.g., substr(s.start_at, 1, 10) = 'YYYY-MM-DD'), and apply these start time boundaries.
+  - "night shift" or "PM shift" refers to employees whose scheduled hours fall within the 2:00 PM to 11:00 PM window (specifically: time(s.start_at) >= '14:00:00' AND time(s.end_at) <= '23:00:00' in toastdm.dm_schedule).
+  - "morning shift", "morning staff", or "AM shift" refers to employees whose scheduled hours fall within the 7:00 AM to 5:00 PM window (specifically: time(s.start_at) >= '07:00:00' AND time(s.end_at) <= '17:00:00' in toastdm.dm_schedule).
+  - To identify who is scheduled for a shift on a date and rank them, filter the server list by joining with toastdm.dm_schedule (s) on s.cena_employee_id = p.cena_employee_id where position_name = 'Server' and start_at date matches the query date (e.g., substr(s.start_at, 1, 10) = 'YYYY-MM-DD'), and apply these boundaries.
 
 Rules of operation:
 1. You have tools to read, write, and list files in the local workspace directory.

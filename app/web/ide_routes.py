@@ -282,7 +282,14 @@ Sales Database Details (toast_webhook.sqlite):
   - Extract local time string: time(replace(opened_date, '+0000', 'Z'), 'localtime')
   - Lunch daypart checks (local time before 16:00:00): time(replace(opened_date, '+0000', 'Z'), 'localtime') < '16:00:00'
   - Dinner daypart checks (local time between 16:00:00 and 22:00:00): time(replace(opened_date, '+0000', 'Z'), 'localtime') >= '16:00:00' AND time(replace(opened_date, '+0000', 'Z'), 'localtime') < '22:00:00'
-- Table 'toast_order_current' contains order headers.
+- Table 'toast_order_current' contains order headers. Schema:
+  - order_guid (TEXT PRIMARY KEY)
+  - store_key (TEXT)
+  - business_date (TEXT)
+  - server_toast_guid (TEXT) - unique Toast GUID of the server
+- Table 'employee_toast_identity_map' maps Toast server GUIDs to corporate employee IDs. Schema:
+  - toast_employee_guid (TEXT) - unique Toast server GUID (matches server_toast_guid)
+  - cena_employee_id (INTEGER) - corporate employee ID (matches toastdm.dm_profile.cena_employee_id)
 - Table 'toast_selection_current' contains items ordered. Schema:
   - selection_guid (TEXT PRIMARY KEY)
   - check_guid (TEXT)
@@ -332,6 +339,7 @@ Common labor query formulations:
 - FOH labor: Positions matching 'Server', 'Host', 'Cashier', 'Bartender', 'Well', 'Busser', 'Expo', 'Manager'
 - Overtime checks: If SUM(ot_hours) > 0, overtime was run.
 - Scheduled hours: SUM((strftime('%s', end_at) - strftime('%s', start_at)) / 3600.0) from toastdm.dm_schedule where status = 'assigned'
+- To rank servers by net sales performance on a specific date, write an SQL query joining toast_check_current (c), toast_order_current (o), employee_toast_identity_map (m), and toastdm.dm_profile (p) on c.order_guid = o.order_guid, o.server_toast_guid = m.toast_employee_guid, and m.cena_employee_id = p.cena_employee_id. Group by p.full_name and order by net_sales desc.
 
 Rules of operation:
 1. You have tools to read, write, and list files in the local workspace directory.

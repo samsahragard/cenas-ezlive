@@ -17,8 +17,12 @@ on shift create/update as no-op stubs now (ckai fills them in B7/B8).
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import os
 from datetime import date as _date, datetime, timedelta
+from pathlib import Path
 
 from flask import abort, g, jsonify, request
 
@@ -550,6 +554,17 @@ _DRAFT_IMPORT_FORM = """<!doctype html>
 </html>"""
 
 
+def _draft_import_chunk_dir(key: str) -> tuple[Path | None, str]:
+    clean = "".join(ch for ch in (key or "") if ch.isalnum() or ch in "-_")[:80]
+    if not clean:
+        return None, ""
+    base = Path(os.getenv("DRAFT_IMPORT_BUFFER_DIR", "/tmp/cenas-draft-import"))
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / clean
+    path.mkdir(parents=True, exist_ok=True)
+    return path, clean
+
+
 @store_bp.route("/schedules-v2/draft-import", methods=["GET", "POST"])
 @require_level("partner")
 def sv2_draft_import():
@@ -602,6 +617,111 @@ def sv2_draft_import():
         )
         status = 200 if summary.get("ok") else 409
         return jsonify(summary), status
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        return jsonify({"ok": False, "error": f"{type(exc).__name__}: {exc}"}), 500
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/draft-import/chunk", methods=["GET"])
+@require_level("partner")
+def sv2_draft_import_chunk():
+    """Partner-only payload buffer for large one-off imports.
+
+    The in-app browser can navigate URLs reliably even when its clipboard/text
+    entry bridge is unavailable. This hidden helper stores urlsafe-base64 chunks
+    under /tmp and the commit route below feeds the normal import service.
+    """
+    if getattr(g, "current_store", None) != "partner":
+        abort(404)
+    try:
+        part = int(request.args.get("part", ""))
+        total = int(request.args.get("total", ""))
+    except ValueError:
+        return jsonify({"ok": False, "error": "part and total are required integers"}), 400
+    if total < 1 or total > 500 or part < 0 or part >= total:
+        return jsonify({"ok": False, "error": "invalid part/total"}), 400
+    data = request.args.get("data") or ""
+    if not data or len(data) > 8000:
+        return jsonify({"ok": False, "error": "data chunk missing or too large"}), 400
+    chunk_dir, clean = _draft_import_chunk_dir(request.args.get("key") or "")
+    if chunk_dir is None:
+        return jsonify({"ok": False, "error": "key required"}), 400
+    (chunk_dir / f"{part:04d}.b64").write_text(data, encoding="ascii")
+    return jsonify({"ok": True, "key": clean, "part": part, "total": total}), 200
+
+
+@store_bp.route("/schedules-v2/draft-import/chunk/commit", methods=["GET"])
+@require_level("partner")
+def sv2_draft_import_chunk_commit():
+    """Reassemble a buffered payload and run the same draft importer."""
+    if getattr(g, "current_store", None) != "partner":
+        abort(404)
+    try:
+        total = int(request.args.get("total", ""))
+    except ValueError:
+        return jsonify({"ok": False, "error": "total is required"}), 400
+    if total < 1 or total > 500:
+        return jsonify({"ok": False, "error": "invalid total"}), 400
+    chunk_dir, clean = _draft_import_chunk_dir(request.args.get("key") or "")
+    if chunk_dir is None:
+        return jsonify({"ok": False, "error": "key required"}), 400
+    parts = []
+    missing = []
+    for part in range(total):
+        path = chunk_dir / f"{part:04d}.b64"
+        if not path.exists():
+            missing.append(part)
+        else:
+            parts.append(path.read_text(encoding="ascii"))
+    if missing:
+        return jsonify({"ok": False, "error": "missing chunks", "missing": missing[:20]}), 400
+    b64 = "".join(parts)
+    try:
+        raw = base64.urlsafe_b64decode(b64 + "=" * ((4 - len(b64) % 4) % 4))
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"bad base64 payload: {exc}"}), 400
+    expected_sha = (request.args.get("sha256") or "").strip().lower()
+    actual_sha = hashlib.sha256(raw).hexdigest()
+    if expected_sha and expected_sha != actual_sha:
+        return jsonify({"ok": False, "error": "sha256 mismatch",
+                        "expected": expected_sha, "actual": actual_sha}), 400
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"bad JSON payload: {exc}"}), 400
+    try:
+        week_start = _date.fromisoformat(str(payload.get("week_start") or "").strip())
+    except Exception:
+        return jsonify({"ok": False, "error": "week_start required (YYYY-MM-DD)"}), 400
+    records = payload.get("records")
+    if not isinstance(records, list) or not records:
+        return jsonify({"ok": False, "error": "records[] required"}), 400
+    if len(records) > 1000:
+        return jsonify({"ok": False, "error": "records[] limit is 1000"}), 400
+
+    from app.services.schedule_draft_import import import_draft_records
+    commit = (request.args.get("commit") or "").strip() in ("1", "true", "yes")
+    db = SessionLocal()
+    try:
+        summary = import_draft_records(
+            records,
+            db,
+            week_start=week_start,
+            actor_id=current_user_id(),
+            commit=commit,
+            replace_existing=bool(payload.get("replace_existing")),
+            target_store=payload.get("target_store"),
+        )
+        summary["buffered"] = {"key": clean, "sha256": actual_sha}
+        if commit and summary.get("ok"):
+            for path in chunk_dir.glob("*.b64"):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+        return jsonify(summary), (200 if summary.get("ok") else 409)
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         return jsonify({"ok": False, "error": f"{type(exc).__name__}: {exc}"}), 500

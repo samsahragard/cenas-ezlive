@@ -17,7 +17,9 @@ are intentionally omitted: cena_cloud.py owns HTTP and calls ``_answer(payload)`
 directly and returns its dict verbatim.
 
 Environment (all paths ENV-overridable; cloud points them at /var/data):
-  GEMINI_API_KEY / GEMINI_API_KEY_FILE   Gemini key (read_secret)
+  OPENAI_API_KEY / OPENAI_API_KEY_FILE   OpenAI key (read_secret)
+  AI_ASSISTANT_OPENAI_MODEL              OpenAI model
+  GEMINI_API_KEY / GEMINI_API_KEY_FILE   optional Gemini fallback key
   AI_ASSISTANT_GEMINI_MODEL              Gemini model
   ASSISTANT_CONVERSATIONS_DB             48h conversations sqlite
   ASSISTANT_TURNS_LOG                    per-turn JSONL mirror
@@ -51,6 +53,7 @@ from . import assistant_review_ck_receiver as review_receiver
 from .assistant_routing_shared import (
     DATA_TOOL_RE as _DATA_TOOL_RE,
     DEFAULT_GEMINI_MODEL as _DEFAULT_GEMINI_MODEL,
+    DEFAULT_OPENAI_MODEL as _DEFAULT_OPENAI_MODEL,
     FOLLOWUP_RE as _FOLLOWUP_RE,
     MAX_QUESTION_CHARS as _MAX_QUESTION_CHARS,
     OPERATIONAL_NOUN_RE as _OPERATIONAL_NOUN_RE,
@@ -2133,6 +2136,10 @@ def _queue_for_review(question: str, principal: dict, reason: str,
 
 
 def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
+    text, model = _openai_generate(prompt)
+    if text:
+        return text, model
+
     key = _read_secret("GEMINI_API_KEY")
     if not key:
         return None, None
@@ -2146,6 +2153,56 @@ def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
     client = genai.Client(api_key=key, http_options={"timeout": _provider_timeout_ms()})
     resp = client.models.generate_content(model=model, contents=prompt)
     text = (getattr(resp, "text", None) or "").strip()
+    return text or None, model
+
+
+def _openai_generate(prompt: str) -> tuple[str | None, str | None]:
+    key = _read_secret("OPENAI_API_KEY")
+    if not key:
+        return None, None
+
+    import urllib.error
+    import urllib.request
+
+    model = os.getenv("AI_ASSISTANT_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
+    try:
+        max_tokens = int(os.getenv("AI_ASSISTANT_OPENAI_MAX_TOKENS", "2048"))
+    except ValueError:
+        max_tokens = 2048
+    try:
+        temperature = float(os.getenv("AI_ASSISTANT_OPENAI_TEMPERATURE", "0.2"))
+    except ValueError:
+        temperature = 0.2
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max(128, min(max_tokens, 8192)),
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_provider_timeout_ms() / 1000) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        log.warning("assistant runtime: OpenAI request failed HTTP %s: %s", exc.code, detail)
+        return None, None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("assistant runtime: OpenAI request failed: %s", exc)
+        return None, None
+
+    try:
+        text = (body["choices"][0]["message"]["content"] or "").strip()
+    except (KeyError, IndexError, TypeError):
+        text = ""
     return text or None, model
 
 

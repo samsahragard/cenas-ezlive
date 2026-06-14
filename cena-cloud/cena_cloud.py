@@ -518,7 +518,8 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             return self._json({"success": False, "error": "missing 'sqlQuery'"}, 400)
 
         # Resolve DB paths inside CENA_CLOUD_ROOT
-        toast_webhook_db = os.path.join(CENA_CLOUD_ROOT, "appdb.sqlite")
+        toast_webhook_db = os.path.join(CENA_CLOUD_ROOT, "toast_webhook.sqlite")
+        appdb_db = os.path.join(CENA_CLOUD_ROOT, "appdb.sqlite")
         toastdm_db = os.path.join(CENA_CLOUD_ROOT, "toastdm.sqlite")
         toast_db = os.path.join(CENA_CLOUD_ROOT, "toast.sqlite")
 
@@ -531,6 +532,9 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
         conn.row_factory = sqlite3.Row
         try:
             # Attach snapshot databases read-only
+            if os.path.exists(appdb_db):
+                app_uri = f"file:{os.path.abspath(appdb_db).replace('\\', '/')}?mode=ro"
+                conn.execute(f"ATTACH DATABASE '{app_uri}' AS appdb")
             if os.path.exists(toastdm_db):
                 tdm_uri = f"file:{os.path.abspath(toastdm_db).replace('\\', '/')}?mode=ro"
                 conn.execute(f"ATTACH DATABASE '{tdm_uri}' AS toastdm")

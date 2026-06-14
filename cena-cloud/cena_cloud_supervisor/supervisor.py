@@ -2445,6 +2445,17 @@ def _investigation_answer_for_ck(question: str, principal: dict) -> dict | None:
     return res
 
 
+# DEV persona switch. When OFF (default), the supervisor does NOT surface the
+# DEV/CK developer persona in the chat: no DEV intro, no CK rescue on a low
+# grade, no "no"-ladder handoff, no observe-mode takeover. CENA is the sole
+# voice. Grading, turn logging, the 48h thread store, the yes/no ACK, the
+# "Did I answer your question?" closer, and the "saved for Sam review" path all
+# still run. Set CENA_DEV_PERSONA=1 (or true/yes/on) to restore the DEV persona.
+_DEV_PERSONA_ENABLED = os.environ.get("CENA_DEV_PERSONA", "").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+
+
 def _ck_rescue_answer(question: str, resolved_question: str, principal: dict,
                       grade_reason: str, cena_answer: str) -> tuple[str, dict]:
     """The CK developer's replacement answer for a medium/low CENA turn."""
@@ -2627,7 +2638,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
         resolved_question = _resolved_question(question, previous_question or prev_user_q)
         _conv.add_message(conv["id"], "user", question)
 
-        if state == "ck_engaged":
+        if state == "ck_engaged" and _DEV_PERSONA_ENABLED:
             if silence_ok and not _conv.is_negative(question) and not _conv.is_affirmation(question):
                 # Long silence = the earlier issue is assumed resolved (spec);
                 # release the thread and let CENA take this turn normally.
@@ -2662,6 +2673,22 @@ def _answer(payload: dict) -> tuple[dict, int]:
                 target = prev_user_q + " - " + extra
             else:
                 target = prev_user_q or extra or question
+            if not _DEV_PERSONA_ENABLED:
+                # DEV off: CENA itself re-attempts the original question.
+                retry_payload = dict(payload)
+                retry_payload["question"] = target
+                rbody, rstatus = _answer_core(retry_payload)
+                rtext = str(rbody.get("answer") or "")
+                if rtext and rstatus == 200 and rbody.get("ok") and not rbody.get("queued"):
+                    rtext = rtext.rstrip() + "\n\n" + _conv.CENA_FOLLOWUP
+                rbody = dict(rbody)
+                if rtext:
+                    _conv.add_message(conv["id"], "cena", rtext,
+                                      route=str(rbody.get("route_path") or "retry"))
+                    rbody["answer"] = rtext
+                    rbody["cena_answer"] = rtext
+                rbody["conversation_id"] = conv["id"]
+                return rbody, rstatus
             cena_prev = _conv.last_cena_answer(conv["id"]) or ""
             ck_answer, ck_meta = _ck_rescue_answer(
                 target, target, principal, "user_said_no", cena_prev
@@ -2704,7 +2731,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
 
         ck_answer = None
         ck_meta: dict = {}
-        if grade in ("medium", "low"):
+        if _DEV_PERSONA_ENABLED and grade in ("medium", "low"):
             ck_answer, ck_meta = _ck_rescue_answer(
                 question, resolved_question, principal, grade_reason, cena_answer
             )
@@ -2719,7 +2746,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
             )
         # DEV introduces himself ONCE per chat, right after CENA's first answer.
         intro = None
-        if first_cena_answer and cena_answer and not _conv.dev_intro_shown(conv["id"]):
+        if _DEV_PERSONA_ENABLED and first_cena_answer and cena_answer and not _conv.dev_intro_shown(conv["id"]):
             intro = _conv.INTRO_TEXT
             _conv.add_message(conv["id"], "ck-dev", intro, route="dev_intro")
         if ck_answer:
@@ -2767,7 +2794,7 @@ def _answer(payload: dict) -> tuple[dict, int]:
             "ck_mode": ck_meta.get("ck_mode"),
             "http_status": status,
         })
-        if grade in ("medium", "low"):
+        if _DEV_PERSONA_ENABLED and grade in ("medium", "low"):
             _conv.hub_post(
                 f"[supervise] conv#{conv['id']} role={(principal or {}).get('role')} "
                 f"grade={grade} ({grade_reason}) Q: {question[:140]} -> CK rescued "

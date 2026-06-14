@@ -181,10 +181,12 @@ def query_sales_db_tool(sqlQuery: str) -> list[dict]:
             
         if user_tier == "manager":
             query_upper = sqlQuery.upper()
-            forbidden = ["TOAST_LABOR", "DM_TIME_ENTRY", "BASE_PAY", "SQLITE_MASTER", "SQLITE_SCHEMA", "SQLITE_TEMP_MASTER", "PRAGMA"]
+            forbidden = ["TOAST_LABOR", "BASE_PAY", "TIPS", "SQLITE_MASTER", "SQLITE_SCHEMA", "SQLITE_TEMP_MASTER", "PRAGMA"]
             for word in forbidden:
                 if word in query_upper:
                     raise PermissionError(f"Access denied: Query contains restricted table or field '{word}' for managers.")
+            if "DM_TIME_ENTRY" in query_upper and "*" in query_upper:
+                raise PermissionError("Access denied: SELECT * is not permitted on 'dm_time_entry' to protect individual pay details. Select explicit non-pay columns like cena_employee_id, clock_in, clock_out.")
                     
         elif user_tier == "hourly":
             my_emp_id = get_current_employee_id(user)
@@ -637,3 +639,30 @@ IDENTITY VERIFICATION & GATING RULES:
     except Exception as e:
         logger.error(f"[CENA] Chat processing failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+import re
+from typing import Any
+
+_L3_DATA_QUESTION_RE = re.compile(
+    r"\b(sales|net|gross|revenue|orders?|catering|labor|hours?|overtime|\bot\b|"
+    r"avg|average|check|covers?|drivers?|deliver\w*|items?|sold|menu|store|"
+    r"copperfield|tomball|week|weekly|day|daypart|month|april|may|march|june|"
+    r"anomal\w*|trend|compare|comparison|why|how many|how much|busiest|slowest|"
+    r"top|best|worst|highest|lowest|splh|prime cost|spend)\b",
+    re.IGNORECASE,
+)
+
+def _l3_investigation_answer(question: str) -> dict[str, Any] | None:
+    """Local/dev L3 path: investigate a data question that matched no tool.
+    Defensive - any failure returns None so the conversational fallback runs."""
+    if not _L3_DATA_QUESTION_RE.search(question or ""):
+        return None
+    try:
+        from app.services.cena_sql_orchestrator import answer_question
+        res = answer_question(question)
+    except Exception:  # noqa: BLE001
+        logger.exception("assistant: L3 investigation failed")
+        return None
+    if not isinstance(res, dict) or not res.get("ok") or not str(res.get("answer", "")).strip():
+        return None
+    return res

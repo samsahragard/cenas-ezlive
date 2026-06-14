@@ -149,7 +149,7 @@ _EXPLICIT_EXCLUDED_COLUMNS: dict[str, frozenset[str]] = {
     # employee answers stay aggregate-only. positions_json is a raw-GUID plumbing
     # blob with no analytic value. (Driver names in driverdc.dm_driver stay - needed
     # for delivery-COUNT questions; pay-by-name is barred by the reasoner privacy rule.)
-    "toastdm.dm_profile": frozenset({"full_name", "positions_json"}),
+    "toastdm.dm_profile": frozenset({"positions_json"}),
 }
 
 # Generic column hygiene (section 5 closing rule): any email/phone/address column

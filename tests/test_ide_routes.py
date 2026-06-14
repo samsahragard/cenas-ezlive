@@ -125,6 +125,17 @@ def test_query_sales_db_tool_gating(app_with_user):
         g.current_user = db.query(User).filter_by(permission_level="corporate").first()
         with pytest.raises(PermissionError):
             query_sales_db_tool("SELECT base_pay FROM toastdm.dm_time_entry LIMIT 1")
+        with pytest.raises(PermissionError):
+            query_sales_db_tool("SELECT tips FROM toastdm.dm_time_entry LIMIT 1")
+        with pytest.raises(PermissionError):
+            query_sales_db_tool("SELECT * FROM toastdm.dm_time_entry LIMIT 1")
+        # Should be able to query non-pay/tips columns on dm_time_entry
+        try:
+            query_sales_db_tool("SELECT cena_employee_id, clock_in FROM toastdm.dm_time_entry LIMIT 1")
+        except PermissionError:
+            pytest.fail("Manager should be able to query non-pay columns of dm_time_entry.")
+        except Exception:
+            pass
             
     # 3. Hourly user (e.g. driver): should NOT be able to query sales tables or others' schedules
     hourly_user = User(

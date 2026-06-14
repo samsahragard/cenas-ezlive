@@ -343,6 +343,8 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             return self._sync_file_post()       # raw body, not JSON
         if route == "/sync/tombstone":
             return self._sync_tombstone()
+        if route == "/sync/query_db":
+            return self._sync_query_db()
         if route == "/assistant/answer":
             return self._assistant_answer()
         self._json({"ok": False, "error": "not_found"}, 404)
@@ -506,6 +508,45 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             conn.close()
         self._json({"ok": True, "relpath": rel, "known": known,
                     "quarantined": bool(quarantined)})
+
+    def _sync_query_db(self):
+        body = self._body()
+        if not isinstance(body, dict):
+            return self._json({"success": False, "error": "invalid body"}, 400)
+        sql_query = body.get("sqlQuery")
+        if not sql_query:
+            return self._json({"success": False, "error": "missing 'sqlQuery'"}, 400)
+
+        # Resolve DB paths inside CENA_CLOUD_ROOT
+        toast_webhook_db = os.path.join(CENA_CLOUD_ROOT, "appdb.sqlite")
+        toastdm_db = os.path.join(CENA_CLOUD_ROOT, "toastdm.sqlite")
+        toast_db = os.path.join(CENA_CLOUD_ROOT, "toast.sqlite")
+
+        if not os.path.exists(toast_webhook_db):
+            return self._json({"success": False, "error": f"Sales database not found: {toast_webhook_db}"}, 404)
+
+        # Open SQLite read-only connection
+        db_uri = f"file:{os.path.abspath(toast_webhook_db).replace('\\', '/')}?mode=ro"
+        conn = sqlite3.connect(db_uri, uri=True)
+        conn.row_factory = sqlite3.Row
+        try:
+            # Attach snapshot databases read-only
+            if os.path.exists(toastdm_db):
+                tdm_uri = f"file:{os.path.abspath(toastdm_db).replace('\\', '/')}?mode=ro"
+                conn.execute(f"ATTACH DATABASE '{tdm_uri}' AS toastdm")
+            if os.path.exists(toast_db):
+                tst_uri = f"file:{os.path.abspath(toast_db).replace('\\', '/')}?mode=ro"
+                conn.execute(f"ATTACH DATABASE '{tst_uri}' AS toast_labor")
+
+            cursor = conn.cursor()
+            cursor.execute(sql_query)
+            rows = cursor.fetchall()
+            results = [dict(r) for r in rows]
+            return self._json({"success": True, "results": results})
+        except Exception as e:
+            return self._json({"success": False, "error": str(e)})
+        finally:
+            conn.close()
 
     # -- assistant endpoint --------------------------------------------------
     # POST /assistant/answer  body {"question": "...", "principal": {...?},

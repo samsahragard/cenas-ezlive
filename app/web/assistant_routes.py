@@ -426,6 +426,11 @@ Sales Database Details (toast_webhook.sqlite):
   - quantity (REAL)
   - price (REAL)
   - voided (INTEGER)
+- Table 'toast_dimension_item' contains metadata dimensions (like table numbers). Schema:
+  - domain (TEXT) - 'table' for table information
+  - store_key (TEXT) - 'copperfield' or 'tomball'
+  - toast_guid (TEXT) - unique Toast GUID of the table (matches order_current.table_guid)
+  - name (TEXT) - clean table number or name (e.g. '91', '101')
   
 Labor & Shift Database Details (Attached as toastdm):
 - In addition to sales, you have a labor and shift database attached as 'toastdm' containing employee profiles, shifts, and schedules.
@@ -458,6 +463,10 @@ Shift definitions for servers/staff:
   4. Tickets (Ticket/Check Volume): COUNT(DISTINCT c.check_guid).
   5. Avg Duration (Table turn time): AVG(strftime('%s', replace(c.closed_date, '+0000', 'Z')) - strftime('%s', replace(c.opened_date, '+0000', 'Z'))) / 60.0 in minutes.
   - When asked to rank scheduled FOH tipped employees, write an SQL query to calculate these metrics over the last 30 days (excluding today) for each scheduled employee, present the results sorted by Tip % descending in a markdown table, and write a summary explaining who is performing better (higher tip percentage and/or volume) and who is not. Do not use today's partial sales.
+
+Live Operations, Open Tables, and Clocked-in Staff Queries:
+- To find currently open tables in a store: Query checks where `c.closed_date IS NULL OR c.closed_date = ''` (and `c.voided = 0 AND c.deleted = 0`). To get clean table names and currently assigned server names, join `toast_check_current` (c) and `toast_order_current` (o) on `c.order_guid = o.order_guid`, join `toast_dimension_item` (d) on `d.domain = 'table' AND d.toast_guid = o.table_guid AND d.store_key = o.store_key`, join `employee_toast_identity_map` (m) on `o.server_toast_guid = m.toast_employee_guid`, and join `toastdm.dm_profile` (p) on `m.cena_employee_id = p.cena_employee_id`. Make sure to restrict the query to today's business date (e.g. '20260614') to ignore stale historical records.
+- To find currently clocked-in staff: Query `toastdm.dm_time_entry` where `clock_out IS NULL OR clock_out = ''` joined with `toastdm.dm_profile` to get the list of active employees, their clock-in times, and their positions.
 """
 
         if user_tier == "partner":

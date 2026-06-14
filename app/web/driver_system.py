@@ -22,7 +22,7 @@ from flask import (
     Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template,
     request, session, url_for,
 )
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 
 from app.db import SessionLocal
 from app.models import (
@@ -313,6 +313,84 @@ _ORIGIN_TO_KITCHEN = {
     "store_2": "tomball",
     "store_4": "tomball",
 }
+_STORE_ORIGIN_IDS = {
+    "copperfield": ("store_1", "store_3"),
+    "tomball": ("store_2", "store_4"),
+}
+
+
+def _store_slug(value: str | None) -> str | None:
+    text = (value or "").strip().lower()
+    if not text:
+        return None
+    collapsed = re.sub(r"[\s\-]+", "_", text)
+    aliases = {
+        "1": "copperfield",
+        "ck1": "copperfield",
+        "store_1": "copperfield",
+        "store_3": "copperfield",
+        "uno": "copperfield",
+        "uno_mas": "copperfield",
+        "copperfield": "copperfield",
+        "2": "tomball",
+        "ck2": "tomball",
+        "store_2": "tomball",
+        "store_4": "tomball",
+        "dos": "tomball",
+        "dos_mas": "tomball",
+        "tomball": "tomball",
+    }
+    if collapsed in aliases:
+        return aliases[collapsed]
+    if any(token in text for token in ("#1", "15650", "fm 529", "fm529", "3733", "westheimer", "copperfield")):
+        return "copperfield"
+    if any(token in text for token in ("#2", "27727", "tomball", "2162", "spring stuebner")):
+        return "tomball"
+    return None
+
+
+def _driver_store_slug(driver: Driver | None) -> str | None:
+    if not driver:
+        return None
+    return _store_slug(driver.home_store_id) or _store_slug(driver.location)
+
+
+def _order_store_slug(order: Order | None) -> str | None:
+    if not order:
+        return None
+    for value in (
+        order.origin_store_id,
+        order.reported_store_id,
+        order.pickup_kitchen,
+        order.reported_store,
+    ):
+        slug = _store_slug(value)
+        if slug:
+            return slug
+    return None
+
+
+def _order_store_filter(store_slug: str):
+    origins = _STORE_ORIGIN_IDS.get(store_slug, ())
+    identifiers = (*origins, store_slug)
+    reported_needles = {
+        "copperfield": ("copperfield", "15650", "fm 529", "fm529", "3733", "westheimer", "#1", "#3"),
+        "tomball": ("tomball", "27727", "2162", "spring stuebner", "#2", "#4"),
+    }.get(store_slug, ())
+    return or_(
+        Order.origin_store_id.in_(identifiers),
+        Order.reported_store_id.in_(identifiers),
+        Order.pickup_kitchen.in_(identifiers),
+        *[Order.reported_store.ilike(f"%{needle}%") for needle in reported_needles],
+    )
+
+
+def _order_matches_store(order: Order | None, store_slug: str | None) -> bool:
+    return bool(store_slug and _order_store_slug(order) == store_slug)
+
+
+def _driver_can_see_order(driver: Driver | None, order: Order | None) -> bool:
+    return bool(driver and order and _order_matches_store(order, _driver_store_slug(driver)))
 
 # Migration 11_payroll_backfill (commit fed513b, 2026-05-10 20:04:39 CDT =
 # 2026-05-11 01:04:39 UTC) backfilled pickup_miles from ezCater's XLSX
@@ -419,10 +497,10 @@ def ez_market():
     db = SessionLocal()
     try:
         # Per Sam 2026-05-12: all upcoming orders flow into Ez Market regardless
-        # of status — same listing as /orders/<location> (today + future,
-        # excluding cancelled), but cross-store. The legacy status='available'
-        # bid-pool gate + per-tier premium cap are dropped here; the future
-        # request flow will layer on top.
+        # of status (today + future, excluding cancelled). Driver views are
+        # scoped to their home store; manager/partner read-only views stay
+        # cross-store. The legacy status='available' bid-pool gate + per-tier
+        # premium cap are dropped here; the future request flow layers on top.
         avail_q = (
             db.query(Order)
             .filter(Order.delivery_date >= today.isoformat())
@@ -430,7 +508,18 @@ def ez_market():
             .order_by(Order.delivery_date.asc(),
                       Order.deliver_at.asc().nullslast())
         )
-        available = avail_q.limit(200).all()
+        driver_store = _driver_store_slug(driver)
+        if driver:
+            if driver_store:
+                avail_q = avail_q.filter(_order_store_filter(driver_store))
+                available = [
+                    o for o in avail_q.limit(200).all()
+                    if _order_matches_store(o, driver_store)
+                ]
+            else:
+                available = []
+        else:
+            available = avail_q.limit(200).all()
         my_pending_reqs = []
         my_active = []
         my_history = []
@@ -451,12 +540,20 @@ def ez_market():
                 .filter(DeliveryRequest.status == "pending")
                 .all()
             )
+            if driver_store:
+                my_pending_reqs = [
+                    r for r in my_pending_reqs
+                    if _order_matches_store(db.get(Order, r.delivery_id), driver_store)
+                ]
+            else:
+                my_pending_reqs = []
             my_active = (
                 db.query(Order)
                 .filter(Order.assigned_driver_id == driver.id)
                 .filter(Order.status.in_(["approved", "picked_up", "en_route"]))
                 .all()
             )
+            my_active = [o for o in my_active if _order_matches_store(o, driver_store)]
             # History — last 30 days delivered
             thirty_ago = (today - timedelta(days=30)).isoformat()
             my_history = (
@@ -468,6 +565,7 @@ def ez_market():
                 .limit(50)
                 .all()
             )
+            my_history = [o for o in my_history if _order_matches_store(o, driver_store)]
 
         # Competition count per available order (number of other drivers requesting)
         competing = {}
@@ -567,6 +665,9 @@ def ez_market_request(delivery_id: int):
         order = db.get(Order, delivery_id)
         if not order:
             abort(404)
+        if not _driver_can_see_order(driver, order):
+            flash("That delivery belongs to another store.", "error")
+            return redirect(url_for("driver_system.ez_market"))
         try:
             lifecycle.request_delivery(db, order, driver)
             db.commit()
@@ -598,6 +699,8 @@ def ez_market_request_warning():
         order = db.get(Order, delivery_id)
         if not order:
             return jsonify({"ok": False, "error": "delivery not found"}), 404
+        if not _driver_can_see_order(driver, order):
+            return jsonify({"ok": False, "error": "delivery belongs to another store"}), 403
         warning = _same_day_warning_for_driver(
             db,
             driver.id,

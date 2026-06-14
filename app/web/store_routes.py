@@ -6435,7 +6435,6 @@ _TODAY_DASH_TABS = [
     # Render crons + always-on services + scheduled tasks + IMAP
     # polling + gateway auto-mirrors + third-party API integrations.
     ("automation",    "Automation"),
-    ("ide",           "IDE"),
 ]
 
 
@@ -6466,8 +6465,6 @@ def _today_dash_full_url(tab_key):
         return "/sam/docs"
     if tab_key == "automation":
         return "/sam/automation"
-    if tab_key == "ide":
-        return "/partner/developer/ide"
     return url_for("store.home")
 
 
@@ -6535,12 +6532,6 @@ def today_dashboard():
                     continue
             except Exception:
                 pass  # fail open — the destination page enforces its own gate
-        elif key == "ide":
-            try:
-                if not current_role_is("partner"):
-                    continue
-            except Exception:
-                pass
         dash_tabs.append((key, caption))
 
     valid = {key for key, _ in dash_tabs}

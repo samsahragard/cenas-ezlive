@@ -1,674 +1,1023 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'assistant_page' %}
 
-{% block title %}C.E.N.A - Cenas Kitchen{% endblock %}
-{% block page_module_class %}mod-today{% endblock %}
-{% block page_module %}AI{% endblock %}
-{% block page_title %}C.E.N.A{% endblock %}
-{% block page_subtitle %}{% endblock %}
+{% block title %}Cenas AI — Cena's Kitchen{% endblock %}
 
 {% block content %}
 <style>
-  .aiassist {
-    --ai-line: rgba(217, 164, 54, 0.18);
-    --ai-line-strong: rgba(217, 164, 54, 0.34);
-    --ai-gold: #E4B340;
-    --ai-gold-bright: #FFD970;
-    --ai-cream: #FAF6EC;
-    --ai-muted: rgba(250, 246, 236, 0.62);
-    --ai-faint: rgba(250, 246, 236, 0.42);
-    color: var(--ai-cream);
-    min-height: max(660px, calc(var(--ck-page-available-height, 100vh) - 210px));
-    display: grid;
-    grid-template-rows: auto minmax(260px, 1fr) auto;
+  /* CSS Scoping for IDE Bot under .app-container to prevent styling pollution */
+  .app-container {
+    --bg-color: #170b06;
+    --bg-light: #24130a;
+    --bg-card: #2e1a0f;
+    --accent-gold: #e5b072;
+    --accent-peach: #f59664;
+    --text-main: #f5eae3;
+    --text-muted: #af978d;
+    --border-color: #3f2619;
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --glow-color: rgba(255, 77, 109, 0.45);
+    
+    display: flex;
     position: relative;
+    height: max(640px, calc(var(--ck-page-available-height, 100vh) - 220px));
+    min-height: 600px;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
   }
-  .aiassist * { box-sizing: border-box; }
-  .aiassist-hello {
+
+  /* Scrollbar styling inside workspace */
+  .app-container ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .app-container ::-webkit-scrollbar-track {
+    background: var(--bg-color);
+  }
+  .app-container ::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+  }
+  .app-container ::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-gold);
+  }
+
+  /* Collapsible File Explorer Sidebar */
+  .ide-sidebar {
+    width: 320px;
+    background-color: var(--bg-light);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 100;
+  }
+
+  .ide-sidebar.closed {
+    transform: translateX(-320px);
+    margin-left: -320px;
+  }
+
+  .ide-sidebar-header {
+    padding: 24px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .ide-sidebar-header h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent-gold);
+    letter-spacing: 0.5px;
+  }
+
+  .ide-workspace-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ide-file-list-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+
+  /* File Tree Elements */
+  .file-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
+
+  .file-item:hover {
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+    color: var(--accent-gold);
+  }
+
+  .file-item svg {
+    margin-right: 10px;
+    color: var(--accent-gold);
+    opacity: 0.8;
+    flex-shrink: 0;
+  }
+
+  .file-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .file-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-meta {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  /* Chat Container */
+  .chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background-color: var(--bg-color);
+    max-width: 100%;
+  }
+
+  /* Welcome Section */
+  .welcome-section {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 18px 18px 8px;
+    flex: 1;
+    padding: 40px 24px;
     text-align: center;
   }
-  .aiassist-orb-button {
-    width: 118px;
-    height: 84px;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    cursor: pointer;
-    filter: drop-shadow(0 5px 14px rgba(0, 0, 0, 0.55));
+
+  .logo-wrapper {
+    margin-bottom: 24px;
   }
-  .aiassist-orb-button.is-listening {
-    filter: drop-shadow(0 0 18px rgba(91, 202, 197, 0.92));
-  }
-  .aiassist-orb {
-    width: 118px;
-    height: 84px;
-  }
-  .aiassist-greeting {
-    font-size: clamp(18px, 2.2vw, 24px);
-    font-weight: 800;
-    color: var(--ai-gold-bright);
-  }
-  .aiassist-status {
-    min-height: 18px;
-    color: var(--ai-muted);
-    font-size: 12px;
-  }
-  .aiassist-thread {
-    padding: 18px clamp(14px, 3vw, 34px);
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .aiassist-msg {
-    max-width: min(760px, 82%);
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid rgba(217, 164, 54, 0.12);
-    background: rgba(255, 255, 255, 0.045);
-    line-height: 1.48;
-    font-size: 14px;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .aiassist-msg.user {
-    align-self: flex-end;
-    border-color: rgba(232, 122, 62, 0.34);
-    background: rgba(232, 122, 62, 0.17);
-  }
-  .aiassist-msg.assistant {
-    align-self: flex-start;
-    border-color: rgba(91, 202, 197, 0.22);
-    background: rgba(91, 202, 197, 0.08);
-  }
-  .aiassist-msg.queued {
-    border-color: rgba(228, 179, 64, 0.42);
-  }
-  .aiassist-confidence {
-    margin-top: 8px;
-    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-    font-size: 10px;
-    letter-spacing: 0.02em;
-    color: var(--ai-faint);
-  }
-  .aiassist-confidence.conf-high { color: #5bcac5; }
-  .aiassist-confidence.conf-medium { color: #e4b340; }
-  .aiassist-confidence.conf-low { color: #e08a7a; }
-  .aiassist-showwork {
-    margin-top: 8px;
-  }
-  .aiassist-showwork > summary {
-    cursor: pointer;
-    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--ai-faint);
-    user-select: none;
-  }
-  .aiassist-trace {
-    margin: 8px 0 0;
-    padding: 10px;
-    border-radius: 8px;
-    background: rgba(0, 0, 0, 0.22);
-    border: 1px solid var(--ai-line);
-    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-    font-size: 11px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 320px;
-    overflow: auto;
-  }
-  .aiassist-meta {
-    margin-bottom: 6px;
-    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-    font-size: 10px;
-    letter-spacing: 0;
-    text-transform: uppercase;
-    color: var(--ai-faint);
-  }
-  .aiassist-form {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 9px;
-    padding: 13px clamp(12px, 2.5vw, 22px);
-    border-top: 1px solid var(--ai-line);
-    background: rgba(0, 0, 0, 0.18);
-  }
-  .aiassist-input {
-    min-height: 44px;
-    max-height: 140px;
-    resize: vertical;
-    border-radius: 10px;
-    border: 1px solid rgba(217, 164, 54, 0.24);
-    background: rgba(0, 0, 0, 0.32);
-    color: var(--ai-cream);
-    padding: 11px 12px;
-    font: inherit;
-  }
-  .aiassist-send {
-    min-height: 44px;
-    min-width: 54px;
-    border-radius: 10px;
-    border: 1px solid rgba(232, 122, 62, 0.86);
-    background: #E87A3E;
-    color: #170b05;
-    font: inherit;
-    font-weight: 900;
-    cursor: pointer;
-  }
-  .aiassist-send:disabled {
-    opacity: 0.56;
-    cursor: wait;
-  }
-  .aiassist-review-toggle {
-    position: absolute;
-    left: 16px;
-    bottom: 76px;
-    z-index: 6;
-    border: 1px solid rgba(217, 164, 54, 0.34);
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.46);
-    color: var(--ai-gold-bright);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 800;
-    padding: 8px 11px;
-    cursor: pointer;
-  }
-  .aiassist-review-toggle[hidden] {
-    display: none;
-  }
-  .aiassist-review-drawer {
-    position: absolute;
-    left: 16px;
-    bottom: 118px;
-    z-index: 7;
-    width: min(440px, calc(100% - 32px));
-    max-height: min(520px, calc(100% - 150px));
-    display: none;
-    flex-direction: column;
-    border: 1px solid var(--ai-line-strong);
-    border-radius: 12px;
-    background: rgba(18, 8, 5, 0.97);
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+
+  /* Glowing Pink Sphere Logo matching user mockup */
+  .glowing-logo {
+    width: 90px;
+    height: 60px;
+    background: radial-gradient(circle, #ff5b7f 0%, #d82b52 60%, rgba(216, 43, 82, 0) 100%);
+    border-radius: 50% / 40%;
+    box-shadow: 0 0 40px 10px var(--glow-color);
+    position: relative;
+    animation: pulseGlow 4s infinite alternate ease-in-out;
+    opacity: 0.9;
+    filter: blur(1px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     overflow: hidden;
   }
-  .aiassist-review-drawer.is-open {
-    display: flex;
+
+  .logo-image {
+    width: 70%;
+    height: 70%;
+    object-fit: contain;
+    mix-blend-mode: color-dodge;
   }
-  .aiassist-review-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--ai-line);
-    color: var(--ai-gold-bright);
-    font-weight: 900;
+
+  @keyframes pulseGlow {
+    0% {
+      transform: scale(0.96);
+      box-shadow: 0 0 30px 5px var(--glow-color);
+    }
+    100% {
+      transform: scale(1.04);
+      box-shadow: 0 0 50px 20px rgba(255, 77, 109, 0.65);
+    }
   }
-  .aiassist-review-close {
-    border: 1px solid rgba(217, 164, 54, 0.24);
-    border-radius: 8px;
-    background: rgba(0, 0, 0, 0.22);
-    color: var(--ai-cream);
-    font: inherit;
-    width: 32px;
-    height: 32px;
-    cursor: pointer;
+
+  .welcome-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.2rem;
+    color: var(--accent-gold);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 12px;
   }
-  .aiassist-review-list {
-    padding: 10px;
-    overflow: auto;
+
+  .welcome-subtitle {
+    font-size: 1rem;
+    color: var(--text-muted);
+    max-width: 480px;
+    line-height: 1.5;
+  }
+
+  /* Messages Stream */
+  .chat-stream {
+    flex: 1;
+    overflow-y: auto;
+    padding: 40px 24px;
+    display: none;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .message-bubble {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    max-width: 85%;
+    animation: fadeIn 0.3s ease forwards;
   }
-  .aiassist-review-item {
-    border: 1px solid rgba(217, 164, 54, 0.16);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.045);
-    padding: 10px;
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
-  .aiassist-review-item.is-acknowledged {
-    opacity: 0.58;
+
+  .message-bubble.user {
+    align-self: flex-end;
   }
-  .aiassist-review-meta {
-    color: var(--ai-faint);
-    font-size: 11px;
+
+  .message-bubble.assistant {
+    align-self: flex-start;
+  }
+
+  .message-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
     margin-bottom: 6px;
+    padding-left: 12px;
   }
-  .aiassist-review-question {
-    color: var(--ai-cream);
-    font-weight: 800;
-    margin-bottom: 6px;
+
+  .message-bubble.user .message-label {
+    color: var(--accent-peach);
+    align-self: flex-end;
+    padding-right: 12px;
   }
-  .aiassist-review-answer {
-    color: var(--ai-muted);
-    font-size: 12px;
-    line-height: 1.45;
-    margin-bottom: 9px;
+
+  .message-bubble.assistant .message-label {
+    color: var(--accent-gold);
   }
-  .aiassist-review-ack {
-    border: 1px solid rgba(91, 202, 197, 0.36);
+
+  .message-content {
+    padding: 16px 20px;
+    border-radius: 16px;
+    line-height: 1.6;
+    font-size: 0.95rem;
+  }
+
+  .message-bubble.user .message-content {
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    border-top-right-radius: 2px;
+  }
+
+  .message-bubble.assistant .message-content {
+    background-color: var(--bg-card);
+    border: 1px solid rgba(229, 176, 114, 0.15);
+    color: var(--text-main);
+    border-top-left-radius: 2px;
+  }
+
+  .message-content pre {
+    background-color: #0c0502;
+    border: 1px solid var(--border-color);
+    padding: 14px;
     border-radius: 8px;
-    background: rgba(91, 202, 197, 0.12);
-    color: var(--ai-cream);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 800;
-    padding: 7px 9px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+  }
+
+  .message-content code {
+    font-family: 'Courier New', Courier, monospace;
+    background-color: rgba(229, 176, 114, 0.1);
+    padding: 2px 5px;
+    border-radius: 4px;
+    color: var(--accent-gold);
+  }
+
+  .message-content pre code {
+    background-color: transparent;
+    padding: 0;
+    color: var(--text-main);
+  }
+
+  /* Tool Execution Cards */
+  .tool-execution-card {
+    background: rgba(229, 176, 114, 0.04);
+    border-left: 3px solid var(--accent-gold);
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin: 8px 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .tool-execution-card.success {
+    border-left-color: #4caf50;
+  }
+
+  .tool-execution-card.error {
+    border-left-color: #f44336;
+  }
+
+  .tool-name {
+    color: var(--accent-gold);
+    font-weight: 600;
+  }
+
+  /* Bottom Controls Panel */
+  .input-panel {
+    padding: 24px;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+    z-index: 10;
+  }
+
+  .input-wrapper-outer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .saved-badge-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 4px;
+  }
+
+  .saved-badge {
+    background: transparent;
+    border: 1px solid var(--accent-gold);
+    color: var(--accent-gold);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .saved-badge:hover {
+    background-color: rgba(229, 176, 114, 0.1);
+    box-shadow: 0 0 10px rgba(229, 176, 114, 0.2);
+  }
+
+  .badge-dot {
+    width: 6px;
+    height: 6px;
+    background-color: var(--accent-gold);
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulseDot 2s infinite ease-in-out;
+  }
+
+  @keyframes pulseDot {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    50% { transform: scale(1.3); opacity: 1; }
+    100% { transform: scale(0.8); opacity: 0.5; }
+  }
+
+  .execution-status {
+    font-size: 0.75rem;
+    color: var(--accent-peach);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .input-form {
+    display: flex;
+    background-color: #0c0502;
+    border: 1px solid var(--border-color);
+    border-radius: 28px;
+    padding: 6px 6px 6px 18px;
+    align-items: center;
+    box-shadow: 0 4px 20px var(--shadow-color);
+    transition: border-color 0.2s ease;
+  }
+
+  .input-form:focus-within {
+    border-color: var(--accent-gold);
+  }
+
+  .input-form input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-main);
+    font-size: 0.95rem;
+    font-family: inherit;
+    padding: 8px 0;
+  }
+
+  .input-form input::placeholder {
+    color: #5f4438;
+  }
+
+  .ask-button {
+    background-color: var(--accent-peach);
+    color: #170b06;
+    border: none;
+    outline: none;
+    padding: 10px 24px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .ask-button:hover {
+    background-color: #ffaa7d;
+    box-shadow: 0 0 12px rgba(245, 150, 100, 0.4);
+  }
+
+  .ask-button:active {
+    transform: scale(0.97);
+  }
+
+  /* Floating UI Overlays */
+  .ide-settings-btn, .ide-sidebar-toggle {
+    position: absolute;
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
+
+  .ide-settings-btn {
+    top: 16px;
+    right: 16px;
+  }
+
+  .ide-sidebar-toggle {
+    top: 16px;
+    left: 16px;
+  }
+
+  .ide-settings-btn:hover, .ide-sidebar-toggle:hover {
+    color: var(--accent-gold);
+    background-color: var(--bg-card);
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 10px rgba(229, 176, 114, 0.25);
+  }
+
+  /* Modals Layout */
+  .ide-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(12, 5, 2, 0.85);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 20px;
+  }
+
+  .ide-modal-overlay.open {
+    display: flex;
+  }
+
+  .ide-modal-content {
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 500px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    animation: modalIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+  }
+
+  @keyframes modalIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .ide-file-viewer-content {
+    max-width: 800px;
+    height: 75vh;
+  }
+
+  .ide-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .ide-modal-header h2 {
+    font-size: 1.2rem;
+    color: var(--accent-gold);
+    font-weight: 600;
+  }
+
+  .ide-close-modal-btn {
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 1.8rem;
+    color: var(--text-muted);
     cursor: pointer;
   }
-  @media (max-width: 820px) {
-    .aiassist {
-      min-height: max(620px, calc(var(--ck-page-available-height, 100vh) - 150px));
-    }
-    .aiassist-msg {
-      max-width: 94%;
-    }
-    .aiassist-orb-button,
-    .aiassist-orb {
-      width: 96px;
-      height: 68px;
-    }
-    .aiassist-review-toggle {
-      bottom: 88px;
-    }
-    .aiassist-review-drawer {
-      bottom: 128px;
+
+  .ide-close-modal-btn:hover {
+    color: var(--accent-peach);
+  }
+
+  .ide-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .ide-form-group {
+    margin-bottom: 20px;
+  }
+
+  .ide-form-group label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  .ide-form-group input {
+    width: 100%;
+    background-color: #0c0502;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--text-main);
+    outline: none;
+    font-family: inherit;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .ide-form-group input:focus {
+    border-color: var(--accent-gold);
+  }
+
+  .ide-help-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  .ide-status-box {
+    background-color: #0c0502;
+    border: 1px solid var(--border-color);
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  .ide-status-box code {
+    color: var(--accent-gold);
+  }
+
+  .ide-save-settings-btn {
+    background-color: var(--accent-gold);
+    color: #170b06;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 700;
+    width: 100%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .ide-save-settings-btn:hover {
+    background-color: #ffd59a;
+  }
+
+  .ide-file-viewer-content pre {
+    background-color: #0c0502;
+    border: 1px solid var(--border-color);
+    padding: 18px;
+    border-radius: 8px;
+    overflow: auto;
+    height: 100%;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    white-space: pre-wrap;
+  }
+
+  .ide-saved-prompts-list {
+    list-style: none;
+  }
+
+  .ide-saved-prompts-list li {
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 8px;
+    border: 1px solid transparent;
+    font-size: 0.9rem;
+  }
+
+  .ide-saved-prompts-list li:hover {
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+    color: var(--accent-gold);
+  }
+
+  @media (max-width: 768px) {
+    .ide-sidebar {
+      position: absolute;
+      height: 100%;
+      box-shadow: 5px 0 15px rgba(0,0,0,0.5);
     }
   }
 </style>
 
-<section class="aiassist" id="aiassist">
-  <header class="aiassist-hello" aria-label="C.E.N.A assistant">
-    <button class="aiassist-orb-button" id="aiassist-voice-orb" type="button" aria-label="Hold for voice input" title="Hold for voice input">
-      <canvas class="aiassist-orb" data-ck-ai-orb data-width="118" data-height="84" aria-hidden="true"></canvas>
-    </button>
-    <div class="aiassist-greeting" id="aiassist-greeting">hi.</div>
-    <div class="aiassist-status" id="aiassist-status" aria-live="polite"></div>
-  </header>
-
-  <div class="aiassist-thread" id="aiassist-thread" aria-live="polite"></div>
-
-  <button class="aiassist-review-toggle" id="aiassist-review-toggle" type="button" hidden>
-    Saved for Sam
-  </button>
-  <aside class="aiassist-review-drawer" id="aiassist-review-drawer" aria-label="Saved for Sam review">
-    <div class="aiassist-review-head">
-      <span>Saved for Sam</span>
-      <button class="aiassist-review-close" id="aiassist-review-close" type="button" aria-label="Close saved review list">x</button>
+<div class="app-container">
+  <!-- Collapsible File Explorer Sidebar -->
+  <aside class="ide-sidebar closed" id="ideSidebar">
+    <div class="ide-sidebar-header">
+      <h3>Workspace Files</h3>
+      <p class="ide-workspace-label">Path: <span id="currentWorkspacePath">Live Workspace</span></p>
     </div>
-    <div class="aiassist-review-list" id="aiassist-review-list">
-      <div class="aiassist-review-item">
-        <div class="aiassist-review-answer">Loading saved questions...</div>
-      </div>
+    <div class="ide-file-list-container" id="fileList">
+      <div class="loading-spinner">Scanning workspace...</div>
     </div>
   </aside>
 
-  <form class="aiassist-form" id="aiassist-form">
-    <textarea class="aiassist-input" id="aiassist-input" name="question" rows="1" maxlength="2000" placeholder="Ask Cenas AI..."></textarea>
-    <button class="aiassist-send" id="aiassist-send" type="submit">Ask</button>
-  </form>
-</section>
+  <!-- Toggle Buttons -->
+  <button class="ide-sidebar-toggle" id="toggleSidebarBtn" title="Toggle Workspace Files">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10M6 10h10M6 14h10"></path></svg>
+  </button>
+  <button class="ide-settings-btn" id="openSettingsBtn" title="Settings">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+  </button>
+
+  <!-- Chat Content -->
+  <main class="chat-container">
+    <section class="welcome-section" id="welcomeSection">
+      <div class="logo-wrapper">
+        <div class="glowing-logo">
+          <img src="{{ url_for('static', filename='brand/logo-bull.png') }}" alt="Logo" class="logo-image">
+        </div>
+      </div>
+      <h1 class="welcome-title">hi, {{ g.current_user.full_name if g.current_user else 'User' }}.</h1>
+      <p class="welcome-subtitle">Cenas AI is ready to build, edit, and explore your Cena's Kitchen codebase.</p>
+    </section>
+
+    <!-- Messages Log -->
+    <section class="chat-stream" id="chatStream"></section>
+
+    <!-- Input Drawer -->
+    <footer class="input-panel">
+      <div class="input-wrapper-outer">
+        <div class="saved-badge-row">
+          <button class="saved-badge" id="savedBadgeBtn">
+            <span class="badge-dot"></span>
+            Saved Prompts
+          </button>
+          <div id="executionStatus" class="execution-status"></div>
+        </div>
+        <form id="chatForm" class="input-form">
+          <input type="text" id="messageInput" placeholder="Ask Cenas AI..." autocomplete="off" required>
+          <button type="submit" class="ask-button">Ask</button>
+        </form>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<!-- Settings Modal Overlay -->
+<div class="ide-modal-overlay" id="settingsModal">
+  <div class="ide-modal-content">
+    <div class="ide-modal-header">
+      <h2>Cenas AI Settings</h2>
+      <button class="ide-close-modal-btn" id="closeSettingsBtn">&times;</button>
+    </div>
+    <div class="ide-modal-body">
+      <div class="ide-form-group">
+        <label for="apiKeyInput">Gemini API Key</label>
+        <input type="password" id="apiKeyInput" placeholder="Enter your Gemini Key (starts with AIza...)">
+        <p class="ide-help-text">Your key is stored locally in your browser and is not uploaded elsewhere.</p>
+      </div>
+      <div class="ide-form-group">
+        <label>Active Workspace Status</label>
+        <div class="ide-status-box">
+          <p><strong>Scope:</strong> <code>Cenas Kitchen Core Runtime</code></p>
+          <p><strong>Permissions:</strong> Read, Write, Attach DBs</p>
+        </div>
+      </div>
+      <button class="ide-save-settings-btn" id="saveSettingsBtn">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- File Modal Overlay -->
+<div class="ide-modal-overlay" id="fileModal">
+  <div class="ide-modal-content ide-file-viewer-content">
+    <div class="ide-modal-header">
+      <h2 id="fileModalTitle">viewing file</h2>
+      <button class="ide-close-modal-btn" id="closeFileModalBtn">&times;</button>
+    </div>
+    <div class="ide-modal-body">
+      <pre><code id="fileModalCode"></code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- Saved Prompts Modal Overlay -->
+<div class="ide-modal-overlay" id="savedPromptsModal">
+  <div class="ide-modal-content">
+    <div class="ide-modal-header">
+      <h2>Saved Prompts</h2>
+      <button class="ide-close-modal-btn" id="closeSavedModalBtn">&times;</button>
+    </div>
+    <div class="ide-modal-body">
+      <ul class="ide-saved-prompts-list" id="savedPromptsList">
+        <li>"How did Copperfield's sales last week compare to the week before?"</li>
+        <li>"Which store had higher net sales last week?"</li>
+        <li>"Compare lunch versus dinner sales at Tomball last week."</li>
+        <li>"How did this Saturday compare to last Saturday at Copperfield?"</li>
+        <li>"What was Copperfield's labor cost percentage last week?"</li>
+        <li>"What was sales per labor hour at Tomball yesterday?"</li>
+        <li>"How many labor hours did Copperfield use last Saturday?"</li>
+        <li>"Compare scheduled hours versus actual hours worked at Tomball last week."</li>
+      </ul>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-(function () {
-  "use strict";
-  var root = document.getElementById("aiassist");
-  if (!root) return;
+document.addEventListener('DOMContentLoaded', () => {
+  // UI Selectors
+  const chatForm = document.getElementById('chatForm');
+  const messageInput = document.getElementById('messageInput');
+  const chatStream = document.getElementById('chatStream');
+  const welcomeSection = document.getElementById('welcomeSection');
+  const executionStatus = document.getElementById('executionStatus');
+  
+  const sidebar = document.getElementById('ideSidebar');
+  const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+  const fileList = document.getElementById('fileList');
 
-  var greetingEl = document.getElementById("aiassist-greeting");
-  var statusEl = document.getElementById("aiassist-status");
-  var thread = document.getElementById("aiassist-thread");
-  var form = document.getElementById("aiassist-form");
-  var input = document.getElementById("aiassist-input");
-  var send = document.getElementById("aiassist-send");
-  var voiceOrb = document.getElementById("aiassist-voice-orb");
-  var reviewToggle = document.getElementById("aiassist-review-toggle");
-  var reviewDrawer = document.getElementById("aiassist-review-drawer");
-  var reviewClose = document.getElementById("aiassist-review-close");
-  var reviewList = document.getElementById("aiassist-review-list");
-  var lastUserQuestion = "";
-  var lastAssistantAnswer = "";
-  var voiceRecognition = null;
-  var voiceListening = false;
-  var originalStatusText = "";
+  const settingsModal = document.getElementById('settingsModal');
+  const openSettingsBtn = document.getElementById('openSettingsBtn');
+  const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+  const apiKeyInput = document.getElementById('apiKeyInput');
+  const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 
-  function esc(text) {
-    return String(text == null ? "" : text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
+  const fileModal = document.getElementById('fileModal');
+  const fileModalTitle = document.getElementById('fileModalTitle');
+  const fileModalCode = document.getElementById('fileModalCode');
+  const closeFileModalBtn = document.getElementById('closeFileModalBtn');
+
+  const savedBadgeBtn = document.getElementById('savedBadgeBtn');
+  const savedPromptsModal = document.getElementById('savedPromptsModal');
+  const closeSavedModalBtn = document.getElementById('closeSavedModalBtn');
+  const savedPromptsList = document.getElementById('savedPromptsList');
+
+  // State Variables
+  let chatHistory = [];
+  let apiKey = localStorage.getItem('gemini_api_key') || '';
+
+  if (apiKey) {
+    apiKeyInput.value = apiKey;
   }
 
-  function meta(role) {
-    var now = new Date();
-    return role + " - " + now.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
-  }
+  // Load Workspace Files
+  loadWorkspaceFiles();
 
-  function shortTime(value) {
-    if (!value) return "";
-    var date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString([], {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
-  }
+  // Sidebar toggler
+  toggleSidebarBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('closed');
+  });
 
-  function addMessage(kind, text, queued, label) {
-    var msg = document.createElement("div");
-    msg.className = "aiassist-msg " + kind + (queued ? " queued" : "");
-    var who = label || (kind === "user" ? "You" : "C.E.N.A");
-    msg.innerHTML = '<div class="aiassist-meta">' + esc(meta(who)) + '</div>' + esc(text || "");
-    thread.appendChild(msg);
-    thread.scrollTop = thread.scrollHeight;
-    return msg;
-  }
+  // Settings management
+  openSettingsBtn.addEventListener('click', () => openModal(settingsModal));
+  closeSettingsBtn.addEventListener('click', () => closeModal(settingsModal));
+  saveSettingsBtn.addEventListener('click', () => {
+    apiKey = apiKeyInput.value.trim();
+    localStorage.setItem('gemini_api_key', apiKey);
+    closeModal(settingsModal);
+  });
 
-  function addCkDev(text) {
-    return addMessage("assistant ckdev", text, false, "DEV");
-  }
-
-  (function injectCkDevStyle() {
-    var st = document.createElement("style");
-    st.textContent = ".aiassist-msg.ckdev{background:#2a2316;border:1px solid #e0a93f;" +
-      "border-left:4px solid #e0a93f;border-radius:10px;}" +
-      ".aiassist-msg.ckdev .aiassist-meta{color:#e0a93f;font-weight:700;letter-spacing:.06em;}";
-    document.head.appendChild(st);
-  })();
-
-  function resizeInput() {
-    input.style.height = "auto";
-    input.style.height = Math.min(input.scrollHeight, 140) + "px";
-  }
-
-  function setVoiceListening(on) {
-    voiceListening = !!on;
-    if (voiceOrb) voiceOrb.classList.toggle("is-listening", voiceListening);
-    if (voiceListening) {
-      originalStatusText = statusEl.textContent || "";
-      statusEl.textContent = "Listening...";
-    } else {
-      statusEl.textContent = originalStatusText || "";
+  // Saved Prompts
+  savedBadgeBtn.addEventListener('click', () => openModal(savedPromptsModal));
+  closeSavedModalBtn.addEventListener('click', () => closeModal(savedPromptsModal));
+  savedPromptsList.addEventListener('click', (e) => {
+    if (e.target.tagName === 'LI') {
+      messageInput.value = e.target.textContent.replace(/"/g, '');
+      closeModal(savedPromptsModal);
+      messageInput.focus();
     }
-  }
+  });
 
-  function appendTranscript(text) {
-    var clean = String(text || "").trim();
-    if (!clean) return;
-    input.value = (input.value.trim() ? input.value.trim() + " " : "") + clean;
-    resizeInput();
-    input.focus();
-  }
+  closeFileModalBtn.addEventListener('click', () => closeModal(fileModal));
 
-  function startVoiceInput() {
-    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      input.focus();
-      input.placeholder = "Voice input is not supported in this browser.";
-      return false;
+  // Chat Form Submission
+  chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const userMessage = messageInput.value.trim();
+    if (!userMessage) return;
+
+    messageInput.value = '';
+
+    if (welcomeSection.style.display !== 'none') {
+      welcomeSection.style.display = 'none';
+      chatStream.style.display = 'flex';
     }
-    if (voiceListening && voiceRecognition) {
-      voiceRecognition.stop();
-      return true;
-    }
-    voiceRecognition = new SpeechRecognition();
-    voiceRecognition.continuous = true;
-    voiceRecognition.interimResults = false;
-    voiceRecognition.lang = "en-US";
-    voiceRecognition.onresult = function (event) {
-      var text = "";
-      for (var i = event.resultIndex; i < event.results.length; i++) {
-        text += event.results[i][0].transcript;
-      }
-      appendTranscript(text);
-    };
-    voiceRecognition.onerror = function () { setVoiceListening(false); };
-    voiceRecognition.onend = function () { setVoiceListening(false); };
+
+    appendMessage('user', userMessage);
+    scrollChat();
+    setLoadingState(true, 'Bot is planning...');
+
     try {
-      voiceRecognition.start();
-      setVoiceListening(true);
-      return true;
+      const response = await fetch('/api/ide/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userMessage,
+          history: chatHistory,
+          apiKey: apiKey
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate response.');
+      }
+
+      // Format executed tools
+      let toolLogsHtml = '';
+      if (data.toolsExecuted && data.toolsExecuted.length > 0) {
+        data.toolsExecuted.forEach(tool => {
+          const statusClass = tool.success ? 'success' : 'error';
+          const symbol = tool.success ? '✓' : '✗';
+          toolLogsHtml += `
+            <div class="tool-execution-card ${statusClass}">
+              <span class="tool-name">${symbol} Tool Executed: ${tool.name}</span><br>
+              <span style="font-size: 0.75rem;">Args: ${JSON.stringify(tool.args)}</span>
+            </div>
+          `;
+        });
+        loadWorkspaceFiles();
+      }
+
+      appendMessage('assistant', data.text, toolLogsHtml);
+      chatHistory.push({ role: 'user', content: userMessage });
+      chatHistory.push({ role: 'assistant', content: data.text });
+
     } catch (err) {
-      setVoiceListening(false);
-      return false;
-    }
-  }
-
-  function renderReviewItems(items) {
-    if (!reviewList) return;
-    if (!items || !items.length) {
-      reviewList.innerHTML = '<div class="aiassist-review-item"><div class="aiassist-review-answer">No saved questions waiting.</div></div>';
-      return;
-    }
-    reviewList.innerHTML = items.map(function (item) {
-      var route = item.route_path ? "route: " + item.route_path : "review";
-      var tool = item.tool_id ? " · " + item.tool_id : "";
-      return '<div class="aiassist-review-item" data-review-id="' + esc(item.id) + '">' +
-        '<div class="aiassist-review-meta">' + esc(item.actor || "Unknown") + ' · ' + esc(shortTime(item.asked_at)) + ' · ' + esc(route + tool) + '</div>' +
-        '<div class="aiassist-review-question">' + esc(item.question || "") + '</div>' +
-        '<div class="aiassist-review-answer">' + esc(item.answer || item.reason || "") + '</div>' +
-        '<button class="aiassist-review-ack" type="button" data-review-ack="' + esc(item.id) + '">Acknowledge</button>' +
-        '</div>';
-    }).join("");
-  }
-
-  function loadReviewItems() {
-    if (!reviewToggle) return;
-    fetch("/assistant/review-items?limit=100", {
-      headers: {"X-Current-Path": window.location.pathname + window.location.search + window.location.hash}
-    })
-      .then(function (r) {
-        if (!r.ok) throw new Error("review unavailable");
-        return r.json();
-      })
-      .then(function (data) {
-        var items = data.items || [];
-        reviewToggle.hidden = false;
-        reviewToggle.textContent = "Saved for Sam" + (items.length ? " (" + items.length + ")" : "");
-        renderReviewItems(items);
-      })
-      .catch(function () {
-        reviewToggle.hidden = true;
-      });
-  }
-
-  function acknowledgeReview(id, button) {
-    if (!id) return;
-    if (button) button.disabled = true;
-    fetch("/assistant/review-items/" + encodeURIComponent(id) + "/ack", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Current-Path": window.location.pathname + window.location.search + window.location.hash
-      },
-      body: "{}"
-    })
-      .then(function (r) {
-        if (!r.ok) throw new Error("ack failed");
-        return r.json();
-      })
-      .then(function () {
-        loadReviewItems();
-      })
-      .catch(function () {
-        if (button) button.disabled = false;
-      });
-  }
-
-  fetch("/assistant/context", {
-    headers: {"X-Current-Path": window.location.pathname + window.location.search + window.location.hash}
-  })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      var principal = data.principal || {};
-      var displayName = principal.display_name || "";
-      greetingEl.textContent = displayName ? "hi, " + displayName + "." : "hi.";
-      statusEl.textContent = "";
-      if (!data.enabled) {
-        statusEl.textContent = "Assistant runtime is unavailable.";
+      console.error(err);
+      appendMessage('assistant', `⚠️ **Error:** ${err.message}`);
+      if (err.message.includes('API Key is missing')) {
+        setTimeout(() => openModal(settingsModal), 1000);
       }
-      loadReviewItems();
-    })
-    .catch(function () {
-      greetingEl.textContent = "hi.";
-      statusEl.textContent = "Could not load assistant context.";
-      loadReviewItems();
-    });
+    } finally {
+      setLoadingState(false);
+      scrollChat();
+    }
+  });
 
-  // 48h thread: restore this user's active conversation (creates it, with the
-  // CK developer intro, on first open).
-  fetch("/assistant/thread", {
-    headers: {"X-Current-Path": window.location.pathname + window.location.search + window.location.hash}
-  })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      if (!data || !data.ok || !data.messages || !data.messages.length) return;
-      var msgs = data.messages;
-      for (var i = 0; i < msgs.length; i++) {
-        var m = msgs[i];
-        if (m.sender === "user") {
-          addMessage("user", m.text);
-          lastUserQuestion = m.text;
-        } else if (m.sender === "ck-dev") {
-          addCkDev(m.text);
-          lastAssistantAnswer = m.text;
-        } else {
-          addMessage("assistant", m.text);
-          lastAssistantAnswer = m.text;
-        }
+  // Modal utils
+  function openModal(el) { el.classList.add('open'); }
+  function closeModal(el) { el.classList.remove('open'); }
+
+  function appendMessage(role, text, toolLogs = '') {
+    const bubble = document.createElement('div');
+    bubble.className = `message-bubble ${role}`;
+    
+    const label = document.createElement('div');
+    label.className = 'message-label';
+    label.textContent = role === 'user' ? 'You' : 'Cenas AI';
+    
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    
+    content.innerHTML = toolLogs + parseMarkdown(text);
+    bubble.appendChild(label);
+    bubble.appendChild(content);
+    chatStream.appendChild(bubble);
+  }
+
+  function parseMarkdown(text) {
+    let escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    escaped = escaped.replace(/```(?:[a-zA-Z0-9]+)?\n([\s\S]*?)\n```/g, '<pre><code>$1</code></pre>');
+    escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/^\*\s(.*)$/gm, '<li>$1</li>');
+    escaped = escaped.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+    return escaped.replace(/\n/g, '<br>');
+  }
+
+  // Loading indicator helper
+  function setLoadingState(isLoading, message = '') {
+    const askButton = document.querySelector('.ask-button');
+    if (isLoading) {
+      executionStatus.innerHTML = `<span class="badge-dot"></span> ${message}`;
+      askButton.disabled = true;
+      askButton.style.opacity = 0.5;
+    } else {
+      executionStatus.innerHTML = '';
+      askButton.disabled = false;
+      askButton.style.opacity = 1;
+    }
+  }
+
+  function scrollChat() {
+    chatStream.scrollTop = chatStream.scrollHeight;
+  }
+
+  // Load file explorer
+  async function loadWorkspaceFiles() {
+    try {
+      const response = await fetch('/api/ide/files');
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error);
+
+      if (data.files.length === 0) {
+        fileList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem;">Workspace is empty.</div>';
+        return;
       }
-    })
-    .catch(function () {});
 
-  input.addEventListener("input", resizeInput);
-  input.addEventListener("keydown", function (event) {
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-      event.preventDefault();
-      if (form.requestSubmit) form.requestSubmit();
-      else send.click();
-    }
-  });
-
-  if (voiceOrb) {
-    voiceOrb.addEventListener("click", function () {
-      input.focus();
-    });
-  }
-  document.addEventListener("ck-ai-orb-longpress", function (event) {
-    if (!input) return;
-    if (startVoiceInput()) {
-      event.preventDefault();
-    }
-  });
-  try {
-    if (window.sessionStorage && sessionStorage.getItem("ckAiVoiceOnLoad") === "1") {
-      sessionStorage.removeItem("ckAiVoiceOnLoad");
-      setTimeout(startVoiceInput, 250);
-    }
-  } catch (err) {}
-
-  if (reviewToggle && reviewDrawer) {
-    reviewToggle.addEventListener("click", function () {
-      reviewDrawer.classList.toggle("is-open");
-      if (reviewDrawer.classList.contains("is-open")) loadReviewItems();
-    });
-  }
-  if (reviewClose && reviewDrawer) {
-    reviewClose.addEventListener("click", function () {
-      reviewDrawer.classList.remove("is-open");
-    });
-  }
-  if (reviewList) {
-    reviewList.addEventListener("click", function (event) {
-      var target = event.target;
-      if (!target || !target.getAttribute) return;
-      var id = target.getAttribute("data-review-ack");
-      if (id) acknowledgeReview(id, target);
-    });
-  }
-
-  form.addEventListener("submit", function (event) {
-    event.preventDefault();
-    var question = input.value.trim();
-    if (!question) return;
-    var previousQuestion = lastUserQuestion;
-    var previousAnswer = lastAssistantAnswer;
-    lastUserQuestion = question;
-    input.value = "";
-    resizeInput();
-    addMessage("user", question);
-    var pending = addMessage("assistant", "Thinking...");
-    send.disabled = true;
-    fetch("/assistant/ask", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Current-Path": window.location.pathname + window.location.search + window.location.hash
-      },
-      body: JSON.stringify({
-        question: question,
-        previous_question: previousQuestion,
-        previous_answer: previousAnswer
-      })
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var answer = data && data.answer ? data.answer : "I could not answer that yet.";
-        // Dual-responder payload: cena_answer / ck_intro / ck_answer come from
-        // the supervisor lane; legacy single-answer responses still render.
-        // Order: CENA's answer, then DEV's intro (first answer only), then DEV's answer.
-        var hasSplit = data && Object.prototype.hasOwnProperty.call(data, "cena_answer");
-        var cenaText = hasSplit ? data.cena_answer : answer;
-        if (cenaText) {
-          var html = '<div class="aiassist-meta">' + esc(meta("C.E.N.A")) + '</div>' + esc(cenaText);
-          if (data && data.confidence) {
-            html += '<div class="aiassist-confidence conf-' + esc(data.confidence) + '">'
-              + esc(String(data.confidence).toUpperCase()) + ' confidence'
-              + (data.confidence_reason ? ' - ' + esc(data.confidence_reason) : '') + '</div>';
-          }
-          if (data && data.show_work) {
-            html += '<details class="aiassist-showwork"><summary>Show work</summary>'
-              + '<pre class="aiassist-trace">' + esc(data.show_work) + '</pre></details>';
-          }
-          pending.innerHTML = html;
-          if (data && data.queued) {
-            pending.classList.add("queued");
-            loadReviewItems();
-          }
-        } else {
-          pending.remove();
-          if (data && data.queued) loadReviewItems();
-        }
-        if (data && data.ck_intro) {
-          addCkDev(data.ck_intro);
-        }
-        if (data && data.ck_answer) {
-          addCkDev(data.ck_answer + (data.ck_followup ? "\n\n" + data.ck_followup : ""));
-        }
-        if (answer) lastAssistantAnswer = answer;
-      })
-      .catch(function () {
-        pending.innerHTML = '<div class="aiassist-meta">' + esc(meta("C.E.N.A")) + '</div>I could not reach the assistant right now.';
-        pending.classList.add("queued");
-      })
-      .finally(function () {
-        send.disabled = false;
-        input.focus();
+      fileList.innerHTML = '';
+      data.files.forEach(file => {
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        item.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path></svg>
+          <div class="file-info">
+            <span class="file-name" title="${file.path}">${file.path}</span>
+            <span class="file-meta">${formatBytes(file.size)}</span>
+          </div>
+        `;
+        item.addEventListener('click', () => openFileViewer(file.path));
+        fileList.appendChild(item);
       });
-  });
-})();
+    } catch (err) {
+      console.error(err);
+      fileList.innerHTML = `<div style="color: var(--accent-peach); font-size: 0.85rem;">Error: ${err.message}</div>`;
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  async function openFileViewer(path) {
+    try {
+      const response = await fetch(`/api/ide/file-content?path=${encodeURIComponent(path)}`);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error);
+
+      fileModalTitle.textContent = `viewing file: ${path}`;
+      fileModalCode.textContent = data.content;
+      openModal(fileModal);
+    } catch (err) {
+      alert(`Could not open file: ${err.message}`);
+    }
+  }
+});
 </script>
 {% endblock %}

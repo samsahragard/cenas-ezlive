@@ -1,2371 +1,493 @@
-"""Permission-scoped in-app assistant.
-
-This is the manager/employee/driver-facing assistant surface, distinct from
-Sam's operator-only /sam/chat. It deliberately starts read-only and
-queue-first: if a question needs a data tool that is not approved for the
-current role/session, it is saved for Sam review instead of guessed.
-
-Durable review and model-runtime ownership: CK/Mini_IT13. In production the
-web app should proxy assistant turns to the CK-local runtime; Render direct
-model calls are blocked unless explicitly overridden for an emergency.
-"""
-from __future__ import annotations
-
-import json
-import logging
 import os
-import re
-import threading
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-import uuid
-from datetime import date, datetime, timedelta, timezone
+import json
+import sqlite3
+import logging
 from pathlib import Path
-from typing import Any
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, g, session, abort
+from google import genai
+from google.genai import types
 
-from flask import Blueprint, g, jsonify, render_template, request, session
-
-from app.db import SessionLocal
-from app.models import (
-    AttendanceShift,
-    Driver,
-    DriverShift,
-    Employee,
-    EmployeeStoreAssignment,
-    Order,
-    PerfPeriodCache,
-    SamChatMessage,
-    SamChatSession,
-    Schedule,
-    Shift,
-)
-from app.web.permissions import accessible_store_slugs
-from app.services.assistant_tool_inventory import (
-    is_excluded_non_routable,
-    iter_partner_tool_definitions,
-    iter_readonly_operational_tool_specs,
-)
-from app.services.assistant_handlers import drivers as driver_handlers
-from app.services.assistant_handlers import orders as order_handlers
-from app.services.assistant_handlers import schedule as schedule_handlers
-from app.services.assistant_tool_registry import canonical_tool_id, iter_builtin_tool_registrations
-from app.services.assistant_routing_shared import (
-    DATA_TOOL_RE as _DATA_TOOL_RE,
-    DEFAULT_GEMINI_MODEL as _DEFAULT_GEMINI_MODEL,
-    DEFAULT_OPENAI_MODEL as _DEFAULT_OPENAI_MODEL,
-    FOLLOWUP_RE as _FOLLOWUP_RE,
-    MAX_QUESTION_CHARS as _MAX_QUESTION_CHARS,
-    OPERATIONAL_NOUN_RE as _OPERATIONAL_NOUN_RE,
-    REVIEW_STATUS as _REVIEW_STATUS,
-    SENSITIVE_RE as _SENSITIVE_RE,
-    SECRET_DEFAULTS as _SECRET_DEFAULTS,
-    TOAST_DATA_FRESHNESS_RE as _TOAST_DATA_FRESHNESS_RE,
-    TOAST_EMPLOYEE_PROFILE_RE as _TOAST_EMPLOYEE_PROFILE_RE,
-    TOAST_SALES_RE as _TOAST_SALES_RE,
-    TOAST_SALES_UNSUPPORTED_SCOPE_RE as _TOAST_SALES_UNSUPPORTED_SCOPE_RE,
-    TOAST_TABLE_ACTIVITY_RE as _TOAST_TABLE_ACTIVITY_RE,
-    TOAST_WEBHOOK_ACTIVITY_RE as _TOAST_WEBHOOK_ACTIVITY_RE,
-    contextual_followup as _shared_contextual_followup,
-    force_review_reason as _shared_force_review_reason,
-    has_unsupported_toast_sales_scope as _has_unsupported_toast_sales_scope,
-    normalize_store_key as _normalize_store_key,
-    now_iso as _now_iso,
-    provider_timeout_ms as _provider_timeout_ms,
-    queued_answer as _queued_answer,
-    read_secret as _read_secret,
-    requested_store as _requested_store,
-    resolved_question as _shared_resolved_question,
-    review_reason_label as _review_reason_label,
-    review_risk_level as _review_risk_level,
-    stable_hash as _stable_hash,
-    toast_period_from_question as _toast_period_from_question,
-    toast_table_business_date_from_question as _toast_table_business_date_from_question,
-    today_ct as _today_ct,
-    wants_cena_l3_business_analytics as _wants_cena_l3_business_analytics,
-    wants_toast_data_freshness as _wants_toast_data_freshness,
-    wants_toast_employee_profiles as _wants_toast_employee_profiles,
-    wants_toast_sales_summary as _wants_toast_sales_summary,
-    wants_toast_table_activity as _wants_toast_table_activity,
-    wants_toast_webhook_activity as _wants_toast_webhook_activity,
-)
-from app.services.permissions import ROLE_PERMISSIONS, has_permission
-
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 assistant_bp = Blueprint("assistant", __name__)
 
-_QUEUE_LOCK = threading.Lock()
-_CK_REVIEW_PATH = "/review/question"
-_CK_RUNTIME_PATH = "/assistant/answer"
-_CENA_REVIEW_SESSION_TITLE = "Cenas AI Review"
-_CENA_REVIEW_SESSION_PREFIX = "Cenas AI Review: "
-_CENA_REVIEW_CLIP_CHARS = 8000
-_CENA_REVIEW_PAYLOAD_PREFIX = "CENAS_ASSISTANT_REVIEW_V2\n"
-_CENA_REVIEW_MODEL = "assistant-review-mirror"
-_ORDERS_SUMMARY_RE = re.compile(
-    r"\b("
-    r"catering|caterings|ezcater|orders?|deliver(?:y|ies)|"
-    r"driver attention|needs driver|tracking links?|store split|"
-    r"active tracking|upcoming"
-    r")\b",
-    re.IGNORECASE,
-)
-_DRIVERS_SUMMARY_RE = re.compile(
-    r"\b("
-    r"drivers?|driver coverage|driver aggregate|current drivers|"
-    r"drivers on shift|drivers on active orders|driver score|"
-    r"delivery driver"
-    r")\b",
-    re.IGNORECASE,
-)
-_LABOR_SUMMARY_RE = re.compile(
-    r"\b("
-    r"labor|staffing|staff summary|employee summary|employees?|"
-    r"attendance|shifts?|published shifts?|open shifts?|hours"
-    r")\b",
-    re.IGNORECASE,
-)
-_TOOL_DISCOVERY_ROUTE_RE = re.compile(
-    r"\b("
-    r"what\s+tools?|tools?\s+(?:are\s+)?available|active\s+tools?|"
-    r"tool\s+(?:catalog|list|inventory|count)|how\s+many\s+tools?"
-    r")\b",
-    re.IGNORECASE,
-)
-_SESSION_CONTEXT_ROUTE_RE = re.compile(
-    r"\b("
-    r"i\s+am\s+sam|i'm\s+sam|im\s+sam|this\s+is\s+sam|"
-    r"i\s+am\s+masood|i'm\s+masood|im\s+masood|this\s+is\s+masood"
-    r")\b",
-    re.IGNORECASE,
-)
-_RUNTIME_PASSTHROUGH_TOOL_IDS = {
-    "assistant.session_context",
-    "assistant.tool_discovery",
-    "toast.webhook_activity",
-}
-_SECRET_TEXT_RE = re.compile(
-    r"(?i)\b("
-    r"sk-[A-Za-z0-9_-]{12,}|"
-    r"[A-Za-z0-9_./+-]{24,}\.[A-Za-z0-9_./+-]{12,}\.[A-Za-z0-9_./+-]{12,}|"
-    r"(?:token|secret|api key|password|passcode|pin)\s*[:=]\s*\S+"
-    r")"
-)
+workspace_path = Path.cwd().resolve()
+logger.info(f"[IDE Bot] Active workspace: {workspace_path}")
 
+# Gating decorator: only partner role with partner_auth_ok session can access
+def partner_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("partner_auth_ok"):
+            return redirect(url_for("auth.partner_login"))
+        user = getattr(g, "current_user", None)
+        if not (user is not None and getattr(user, "permission_level", None) == "partner"):
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
 
-_INTERNAL_TOOL_REGISTRY_KEYS = {"handler", "matcher", "formatter", "priority"}
+# Helper: Prevent directory traversal outside workspace
+def safe_resolve(relative_path: str) -> Path:
+    resolved = (workspace_path / relative_path).resolve()
+    if not str(resolved).startswith(str(workspace_path)):
+        raise PermissionError("Access denied: Path is outside the active workspace.")
+    return resolved
 
-
-def _label_from_tool_id(tool_id: str) -> str:
-    return re.sub(r"[_\-.]+", " ", tool_id).strip().title()
-
-
-def _readonly_operational_priority(tool_id: str) -> int:
-    if tool_id.startswith("employee."):
-        return 115
-    if tool_id.startswith("schedules."):
-        return 235
-    if tool_id.startswith("kitchen."):
-        return 350
-    if tool_id.startswith("attendance."):
-        return 345
-    if tool_id.startswith("vendors."):
-        return 355
-    return 360
-
-
-def _readonly_operational_registry_entry(spec: dict[str, Any]) -> dict[str, Any]:
-    tool_id = str(spec.get("tool_id") or "").strip()
-    roles = [str(role) for role in (spec.get("intended_roles") or []) if role]
-    is_employee_self_tool = tool_id.startswith("employee.")
-    return {
-        "tool_id": tool_id,
-        "label": _label_from_tool_id(tool_id),
-        "description": str(spec.get("description") or ""),
-        "required_permissions": (
-            ["ai.ask_claude_personal"] if is_employee_self_tool else ["ai.ask_claude"]
-        ),
-        "session_types": roles or (["employee", "staff", "partner"] if is_employee_self_tool else ["staff", "partner"]),
-        "store_scope": "own_profile" if is_employee_self_tool else "current_user_store_scope",
-        "data_class": tool_id.split(".", 1)[0] if "." in tool_id else "operations",
-        "read_write_class": "read_only",
-        "status": "active",
-        "implementation_status": "implemented",
-        "handler": f"readonly_operational:{tool_id}",
-        "matcher": f"readonly_operational:{tool_id}",
-        "formatter": "readonly_operational",
-        "priority": _readonly_operational_priority(tool_id),
-    }
-
-
-_READONLY_OPERATIONAL_SPECS = {
-    str(spec.get("tool_id") or ""): spec
-    for spec in iter_readonly_operational_tool_specs()
-    if spec.get("tool_id")
-}
-_READONLY_OPERATIONAL_TOOL_IDS = frozenset(_READONLY_OPERATIONAL_SPECS)
-_TOOL_REGISTRY: list[dict[str, Any]] = list(iter_builtin_tool_registrations())
-_KNOWN_TOOL_IDS = {tool["tool_id"] for tool in _TOOL_REGISTRY}
-for _readonly_spec in _READONLY_OPERATIONAL_SPECS.values():
-    _readonly_tool = _readonly_operational_registry_entry(_readonly_spec)
-    if _readonly_tool["tool_id"] in _KNOWN_TOOL_IDS:
-        continue
-    _TOOL_REGISTRY.append(_readonly_tool)
-    _KNOWN_TOOL_IDS.add(_readonly_tool["tool_id"])
-for _partner_tool in iter_partner_tool_definitions():
-    if _partner_tool["tool_id"] in _KNOWN_TOOL_IDS:
-        continue
-    _TOOL_REGISTRY.append(_partner_tool)
-    _KNOWN_TOOL_IDS.add(_partner_tool["tool_id"])
-del _partner_tool, _readonly_spec, _readonly_tool
-
-
-def _redact_text(value: str) -> str:
-    return _SECRET_TEXT_RE.sub("[REDACTED]", value)
-
-
-def _env_truthy(name: str) -> bool:
-    return (os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _split_csv(raw: str) -> list[str]:
-    return [part.strip() for part in raw.split(",") if part.strip()]
-
-
-def _operator_user_ids() -> set[int]:
-    raw = ",".join(
-        value
-        for value in (
-            os.getenv("AI_ASSISTANT_OPERATOR_USER_IDS"),
-            os.getenv("SAM_CHAT_USER_IDS"),
-            os.getenv("SAM_CHAT_USER_ID"),
-            os.getenv("MASOOD_CHAT_USER_ID"),
-        )
-        if value
-    )
-    ids: set[int] = set()
-    for part in _split_csv(raw):
-        try:
-            ids.add(int(part))
-        except ValueError:
-            log.warning("assistant: ignoring non-integer operator user id %r", part)
-    return ids
-
-
-def _normalized_person_name(value: str | None) -> str:
-    return re.sub(r"\s+", " ", (value or "").strip().casefold())
-
-
-def _operator_names() -> set[str]:
-    configured = os.getenv("AI_ASSISTANT_OPERATOR_NAMES")
-    names = _split_csv(configured) if configured else [
-        "sam",
-        "sam sahragard",
-        "masood",
-        "masood sahragard",
-        "masood ck",
-        "masood c",
-    ]
-    return {_normalized_person_name(name) for name in names if _normalized_person_name(name)}
-
-
-def _is_owner_operator_user(user: Any | None) -> bool:
-    if user is None:
-        return False
-    role = getattr(user, "permission_level", None)
-    if role != "partner":
-        return False
-    user_id = getattr(user, "id", None)
-    if user_id in _operator_user_ids():
-        return True
-    return _normalized_person_name(getattr(user, "full_name", None)) in _operator_names()
-
-
-def _assistant_enabled() -> bool:
-    if os.getenv("RENDER") and not _env_truthy("AI_ASSISTANT_ENABLED"):
-        return False
-    return not _env_truthy("AI_ASSISTANT_DISABLED")
-
-
-def _queue_path() -> Path:
-    raw = (
-        os.getenv("AI_ASSISTANT_PENDING_PATH")
-        or os.getenv("ASSISTANT_PENDING_QUEUE_PATH")
-        or "/var/data/assistant_review_retry_outbox.jsonl"
-    )
-    return Path(raw)
-
-
-def _env_first(*names: str) -> str:
-    for name in names:
-        value = (os.getenv(name) or "").strip()
-        if value:
-            return value
-    return ""
-
-
-def _review_timeout_seconds() -> float:
-    raw = _env_first("ASSISTANT_REVIEW_TIMEOUT_SECONDS", "AI_ASSISTANT_CK_REVIEW_TIMEOUT_SECONDS")
-    if not raw:
-        return 8.0
-    try:
-        value = float(raw)
-    except ValueError:
-        return 8.0
-    return max(1.0, min(value, 30.0))
-
-
-def _ask_timeout_seconds() -> float:
-    """Timeout for the /assistant/ask relay into the CK runtime. L3
-    investigations + CK supervisor rescues run 60-130s, so this must be far
-    above the short review-item timeout. Kept under the gunicorn worker
-    timeout (300s in start.sh)."""
-    raw = _env_first("AI_ASSISTANT_ASK_TIMEOUT_SECONDS", "ASSISTANT_ASK_TIMEOUT_SECONDS")
-    if not raw:
-        return 180.0
-    try:
-        value = float(raw)
-    except ValueError:
-        return 180.0
-    return max(30.0, min(value, 280.0))
-
-
-def _ck_review_url(raw_url: str) -> str:
-    return _normalize_service_url(raw_url, _CK_REVIEW_PATH)
-
-
-def _ck_runtime_url(raw_url: str) -> str:
-    return _normalize_service_url(raw_url, _CK_RUNTIME_PATH)
-
-
-def _normalize_service_url(raw_url: str, default_path: str) -> str:
-    url = raw_url.strip()
-    if not url:
-        return ""
-    parts = urllib.parse.urlsplit(url)
-    if parts.scheme and parts.netloc and parts.path.rstrip("/") in {"", "/"}:
-        return urllib.parse.urlunsplit((
-            parts.scheme,
-            parts.netloc,
-            default_path,
-            parts.query,
-            parts.fragment,
-        ))
-    return url
-
-
-def _runtime_configured() -> bool:
-    url = _ck_runtime_url(_env_first("AI_ASSISTANT_CK_RUNTIME_URL", "ASSISTANT_RUNTIME_URL"))
-    token = _env_first("AI_ASSISTANT_CK_RUNTIME_TOKEN", "ASSISTANT_RUNTIME_TOKEN")
-    return bool(url and token)
-
-
-def _assistant_available_for_context(ctx: dict[str, Any]) -> bool:
-    if not _assistant_enabled() or not ctx.get("can_ask_personal"):
-        return False
-    if os.getenv("RENDER") and not _runtime_configured() and not _env_truthy("AI_ASSISTANT_ALLOW_RENDER_MODELS"):
-        return False
-    return True
-
-
-def _extract_token() -> str | None:
-    auth = request.headers.get("Authorization", "")
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-    return request.headers.get("X-Ai-Assistant-Token") or request.args.get("token")
-
-
-def _role_permissions(role: str | None) -> set[str]:
-    if not role:
-        return set()
-    perms = ROLE_PERMISSIONS.get(role)
-    if perms == {"*"}:
-        return {"*"}
-    return set(perms or ())
-
-
-def _store_scope_key(raw_store: Any) -> str | None:
-    if raw_store is None:
-        return None
-    if isinstance(raw_store, str):
-        return raw_store
-    for attr in ("slug", "store_key", "key", "id"):
-        value = getattr(raw_store, attr, None)
-        if value:
-            return str(value)
-    return str(raw_store)
-
-
-def _has_all_permissions(ctx: dict[str, Any], permissions: list[str]) -> bool:
-    granted = set(ctx.get("permissions") or [])
-    return "*" in granted or all(perm in granted for perm in permissions)
-
-
-def _has_partner_tool_access(ctx: dict[str, Any]) -> bool:
-    return bool(
-        ctx.get("is_owner_operator")
-        or ctx.get("role") == "partner"
-        or ctx.get("kind") in {"partner", "staff", "employee"}
-    )
-
-
-def _employee_display_name(employee_id: Any) -> str | None:
-    try:
-        emp_id = int(employee_id)
-    except (TypeError, ValueError):
-        return None
-    if SessionLocal is None:
-        return None
-    db = SessionLocal()
-    try:
-        employee = db.get(Employee, emp_id)
-        name = (getattr(employee, "full_name", None) or "").strip() if employee else ""
-        return name or None
-    finally:
-        db.close()
-
-
-def _tool_catalog_for(ctx: dict[str, Any]) -> list[dict[str, Any]]:
-    session_type = ctx.get("kind")
-    catalog: list[dict[str, Any]] = []
-    for tool in _TOOL_REGISTRY:
-        if is_excluded_non_routable(tool["tool_id"]):
+# Helper: Recursively find workspace files
+def list_files_recursive(dir_path: Path, file_list: list) -> list:
+    for entry in dir_path.iterdir():
+        # Ignore common control/cache/env directories
+        if entry.name in ('.git', 'node_modules', '__pycache__', '.pytest_cache', '.env', '.venv', 'venv'):
             continue
-        allowed_session = session_type in set(tool["session_types"])
-        allowed_permissions = _has_all_permissions(ctx, tool["required_permissions"])
-        status = tool["status"]
-        operator_active = bool(
-            _has_partner_tool_access(ctx)
-            and tool.get("operator_enabled")
-            and allowed_session
-            and allowed_permissions
-        )
-        partner_catalog_active = bool(
-            _has_partner_tool_access(ctx)
-            and tool.get("partner_catalog_enabled")
-            and allowed_session
-            and allowed_permissions
-        )
-        promoted_active = operator_active or partner_catalog_active
-        available = bool((status == "active" or promoted_active) and allowed_session and allowed_permissions)
-        effective_status = "active" if promoted_active else status
-        reason = None
-        if not allowed_session:
-            reason = "session_type_not_allowed"
-        elif not allowed_permissions:
-            reason = "missing_permission"
-        elif status != "active" and not promoted_active:
-            reason = "needs_sam_review"
-        public_tool = {
-            key: value
-            for key, value in tool.items()
-            if key not in _INTERNAL_TOOL_REGISTRY_KEYS
-        }
-        catalog.append({
-            **public_tool,
-            "status": effective_status,
-            "available": available,
-            "deny_reason": reason,
-        })
-    return catalog
-
-
-def _principal_context() -> dict[str, Any]:
-    user = getattr(g, "current_user", None)
-    if session.get("driver_id"):
-        role = "driver"
-        kind = "driver"
-        display_name = session.get("driver_name") or "Driver"
-        principal_id = session.get("driver_id")
-        stores: list[str] = []
-    elif session.get("employee_id") and not user:
-        role = "employee"
-        kind = "employee"
-        principal_id = session.get("employee_id")
-        display_name = (
-            session.get("employee_name")
-            or _employee_display_name(principal_id)
-            or "Employee"
-        )
-        stores = []
-    elif user is not None:
-        role = getattr(user, "permission_level", None) or "unknown"
-        kind = "partner" if session.get("partner_auth_ok") else "staff"
-        display_name = getattr(user, "full_name", None) or "User"
-        principal_id = getattr(user, "id", None)
-        stores = accessible_store_slugs(user)
-        is_owner_operator = _is_owner_operator_user(user)
-    else:
-        role = "anonymous"
-        kind = "anonymous"
-        display_name = "Anonymous"
-        principal_id = None
-        stores = []
-        is_owner_operator = False
-
-    if session.get("driver_id") or (session.get("employee_id") and not user):
-        is_owner_operator = False
-
-    return {
-        "kind": kind,
-        "role": role,
-        "principal_id": principal_id,
-        "display_name": display_name,
-        "store_slugs": stores,
-        "current_store": _store_scope_key(getattr(g, "current_store", None)),
-        "path": request.headers.get("X-Current-Path") or request.referrer or request.path,
-        "permissions": sorted(_role_permissions(role)),
-        "is_owner_operator": bool(is_owner_operator),
-        "can_ask_personal": bool(
-            role == "partner"
-            or has_permission("ai.ask_claude_personal")
-            or has_permission("ai.ask_claude")
-            or role in {"driver", "employee"}
-        ),
-        "can_ask_operational": bool(role == "partner" or has_permission("ai.ask_claude")),
-    }
-
-
-def _append_pending_question(row: dict[str, Any]) -> None:
-    row = _outbox_record(row)
-    path = _queue_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with _QUEUE_LOCK:
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-
-
-def _outbox_record(row: dict[str, Any]) -> dict[str, Any]:
-    principal = row.get("principal") or {}
-    question = _redact_text(str(row.get("question") or ""))
-    return {
-        "id": row.get("id"),
-        "created_at": row.get("created_at"),
-        "status": row.get("status") or _REVIEW_STATUS,
-        "question_hash": _stable_hash({"question": question}),
-        "question_summary_redacted": question[:500],
-        "reason": row.get("reason"),
-        "required_permission": row.get("required_permission"),
-        "risk_level": row.get("risk_level") or _review_risk_level(row.get("reason")),
-        "principal_hash": _stable_hash({
-            "kind": principal.get("kind"),
-            "role": principal.get("role"),
-            "principal_id": principal.get("principal_id"),
-            "display_name": principal.get("display_name"),
-        }),
-        "scope_role": principal.get("role"),
-        "scope_store_key": (
-            principal.get("current_store")
-            or ((principal.get("store_slugs") or [None])[0])
-        ),
-        "source_path": principal.get("path"),
-        "storage": "render_retry_outbox_redacted",
-        "ck_target": "assistant_review.sqlite",
-    }
-
-
-def _post_to_ck_review(row: dict[str, Any]) -> tuple[bool, str | None]:
-    """Review-only durable persistence path for blocked questions.
-
-    CK owns the review DB. Configure AI_ASSISTANT_CK_REVIEW_URL to a CK-local
-    endpoint, for example a Tailscale URL on Mini_IT13. Token can be supplied
-    with AI_ASSISTANT_CK_REVIEW_TOKEN. Production answer execution should use
-    the CK runtime path instead; this receiver path remains for local review
-    ingestion and compatibility tests.
-    """
-    url = _ck_review_url(_env_first("AI_ASSISTANT_CK_REVIEW_URL", "ASSISTANT_REVIEW_RECEIVER_URL"))
-    if not url:
-        return False, None
-    headers = {"Content-Type": "application/json"}
-    token = _env_first("AI_ASSISTANT_CK_REVIEW_TOKEN", "ASSISTANT_REVIEW_RECEIVER_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-        headers["X-Ai-Assistant-Token"] = token
-    try:
-        import httpx
-
-        proxy = (os.getenv("CENA_PROXY") or "").strip() or None
-        client_kwargs: dict[str, Any] = {
-            "timeout": httpx.Timeout(_review_timeout_seconds(), connect=min(3.0, _review_timeout_seconds())),
-        }
-        if proxy:
-            client_kwargs["proxy"] = proxy
-        with httpx.Client(**client_kwargs) as hx:
-            resp = hx.post(url, json=row, headers=headers)
-        data = resp.json() if resp.content else {}
-        if 200 <= resp.status_code < 300 and data.get("ok", True):
-            ck_id = data.get("ck_question_id") or data.get("question_id") or data.get("id")
-            return True, str(ck_id) if ck_id is not None else None
-    except Exception:  # noqa: BLE001
-        log.exception("assistant: CK review save failed")
-    return False, None
-
-
-def _runtime_principal(ctx: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "kind": ctx["kind"],
-        "role": ctx["role"],
-        "principal_id": ctx["principal_id"],
-        "display_name": ctx["display_name"],
-        "store_slugs": ctx["store_slugs"],
-        "current_store": ctx["current_store"],
-        "path": ctx["path"],
-        "permissions": ctx["permissions"],
-        "is_owner_operator": ctx.get("is_owner_operator", False),
-        "can_ask_personal": ctx["can_ask_personal"],
-        "can_ask_operational": ctx["can_ask_operational"],
-    }
-
-
-def _clip_review_text(value: Any, max_chars: int = _CENA_REVIEW_CLIP_CHARS) -> str:
-    text = _redact_text("" if value is None else str(value).strip())
-    if len(text) <= max_chars:
-        return text
-    omitted = len(text) - max_chars
-    return f"{text[:max_chars]}\n... [truncated {omitted} chars]"
-
-
-def _review_json(value: Any, max_chars: int = 4000) -> str:
-    try:
-        text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
-    except TypeError:
-        text = str(value)
-    return _clip_review_text(_redact_text(text), max_chars)
-
-
-def _review_permissions(ctx: dict[str, Any]) -> str:
-    permissions = [str(perm) for perm in (ctx.get("permissions") or [])]
-    if "*" in permissions:
-        return "*"
-    if not permissions:
-        return "(none)"
-    visible = permissions[:25]
-    suffix = f" (+{len(permissions) - len(visible)} more)" if len(permissions) > len(visible) else ""
-    return ", ".join(visible) + suffix
-
-
-def _review_answer_from_response(data: dict[str, Any] | None) -> str:
-    if not isinstance(data, dict):
-        return _review_json(data)
-    answer = data.get("answer")
-    if answer:
-        return str(answer)
-    error = data.get("error")
-    if error:
-        if error == "assistant_unavailable":
-            return "I saved that for Sam review. The assistant model is not available right now."
-        if error == "ck_runtime_required":
-            return "I saved that for Sam review. The assistant runtime is not available right now."
-        if error == "assistant_disabled":
-            return "I saved that for Sam review. The assistant is disabled right now."
-        return f"(error: {error})"
-    return _review_json(data)
-
-
-def _review_outcome(data: dict[str, Any] | None, status: int) -> str:
-    parts = [f"http_status={status}"]
-    if isinstance(data, dict):
-        for key in (
-            "ok",
-            "queued",
-            "reason",
-            "error",
-            "model",
-            "review_notice_model",
-            "storage",
-            "queue_id",
-            "ck_question_id",
-            "tool_id",
-            "tool_name",
-        ):
-            if key in data and data.get(key) is not None:
-                parts.append(f"{key}={data.get(key)}")
-    else:
-        parts.append("response_type=non_dict")
-    return "; ".join(parts)
-
-
-def _review_result_status(data: dict[str, Any] | None, status: int) -> str:
-    if not isinstance(data, dict):
-        return "error"
-    error = str(data.get("error") or "")
-    if error == "assistant_disabled":
-        return "disabled"
-    if error == "assistant_unavailable":
-        return "unavailable"
-    if error == "ck_runtime_required":
-        return "runtime_required"
-    if data.get("queued") is True:
-        return "queued"
-    if data.get("ok") is True and status < 400:
-        return "answered"
-    return "error"
-
-
-def _review_subject(ctx: dict[str, Any]) -> str:
-    name = str(ctx.get("display_name") or "").strip()
-    if name:
-        return name[:80]
-    role = str(ctx.get("role") or ctx.get("kind") or "assistant user").strip()
-    principal_id = ctx.get("principal_id")
-    if principal_id:
-        return f"{role} #{principal_id}"[:80]
-    return role[:80] or "Assistant user"
-
-
-def _review_session_title(ctx: dict[str, Any]) -> str:
-    return f"{_CENA_REVIEW_SESSION_PREFIX}{_review_subject(ctx)}"
-
-
-def _review_session(db, ctx: dict[str, Any]) -> SamChatSession:
-    title = _review_session_title(ctx)
-    session_row = (
-        db.query(SamChatSession)
-        .filter(SamChatSession.title == title)
-        .filter(SamChatSession.is_archived.is_(False))
-        .order_by(SamChatSession.id.asc())
-        .first()
-    )
-    if session_row is not None:
-        return session_row
-
-    now = datetime.utcnow()
-    session_row = SamChatSession(
-        started_at=now,
-        last_message_at=now,
-        title=title,
-    )
-    db.add(session_row)
-    db.flush()
-    return session_row
-
-
-def _assistant_review_payload(
-    ctx: dict[str, Any],
-    question: str,
-    data: dict[str, Any] | None,
-    status: int,
-    previous_question: str = "",
-    previous_answer: str = "",
-    asked_at: str | None = None,
-) -> dict[str, Any]:
-    response = data if isinstance(data, dict) else {}
-    previous = None
-    if previous_question or previous_answer:
-        previous = {
-            "question": _clip_review_text(previous_question),
-            "answer": _clip_review_text(previous_answer, 3000),
-        }
-    return {
-        "kind": "cenas.assistant_mirror",
-        "version": 2,
-        "asked_at": asked_at or _now_iso(),
-        "actor": {
-            "display_name": ctx.get("display_name") or "Unknown",
-            "principal_id": ctx.get("principal_id"),
-            "principal_type": ctx.get("kind"),
-            "role": ctx.get("role"),
-            "owner_operator": bool(ctx.get("is_owner_operator")),
-        },
-        "permissions": {
-            "can_ask_personal": bool(ctx.get("can_ask_personal")),
-            "can_ask_operational": bool(ctx.get("can_ask_operational")),
-            "summary": _review_permissions(ctx),
-        },
-        "scope": {
-            "path": ctx.get("path"),
-            "current_store": ctx.get("current_store"),
-            "store_slugs": ctx.get("store_slugs") or [],
-        },
-        "turn": {
-            "question": _clip_review_text(question),
-            "previous": previous,
-            "answer": _clip_review_text(_review_answer_from_response(data)),
-        },
-        "result": {
-            "status": _review_result_status(data, status),
-            "http_status": status,
-            "ok": response.get("ok"),
-            "queued": response.get("queued"),
-            "reason": response.get("reason"),
-            "error": response.get("error"),
-            "queue_id": response.get("queue_id"),
-            "ck_question_id": response.get("ck_question_id"),
-        },
-        "tool": {
-            "id": response.get("tool_id"),
-            "routed_tool_id": response.get("routed_tool_id"),
-            "final_tool_id": response.get("tool_id") or response.get("routed_tool_id"),
-            "route_path": response.get("route_path"),
-            "name": response.get("tool_name"),
-            "storage": response.get("storage"),
-            "model": response.get("model") or response.get("review_notice_model"),
-            "generated_at": response.get("generated_at"),
-            "classifier": (response.get("route_meta") or {}).get("classifier")
-            if isinstance(response.get("route_meta"), dict)
-            else None,
-        },
-        "telemetry": {
-            "route_path": response.get("route_path"),
-            "route_latency_ms": (response.get("route_meta") or {}).get("latency_ms")
-            if isinstance(response.get("route_meta"), dict)
-            else None,
-            "classifier_token_cost_usd": (
-                ((response.get("route_meta") or {}).get("classifier") or {}).get("token_cost_usd")
-                if isinstance(response.get("route_meta"), dict)
-                and isinstance((response.get("route_meta") or {}).get("classifier"), dict)
-                else None
-            ),
-        },
-        "outcome": _review_outcome(data, status),
-        "raw_response": _review_json(data, 2500),
-    }
-
-
-def _assistant_review_content(*args, **kwargs) -> str:
-    payload = _assistant_review_payload(*args, **kwargs)
-    return _CENA_REVIEW_PAYLOAD_PREFIX + json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        default=str,
-    )
-
-
-def _assistant_review_payload_from_message(message: SamChatMessage) -> dict[str, Any] | None:
-    if message.model != _CENA_REVIEW_MODEL:
-        return None
-    content = message.content or ""
-    if not content.startswith(_CENA_REVIEW_PAYLOAD_PREFIX):
-        return None
-    try:
-        payload = json.loads(content.split("\n", 1)[1])
-    except (IndexError, json.JSONDecodeError):
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-def _is_saved_for_sam_review(payload: dict[str, Any]) -> bool:
-    result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
-    tool = payload.get("tool") if isinstance(payload.get("tool"), dict) else {}
-    return bool(
-        result.get("queued") is True
-        or result.get("status") in {"queued", "review", "needs_review", "unavailable"}
-        or tool.get("route_path") == "review"
-    )
-
-
-def _assistant_review_item(message: SamChatMessage) -> dict[str, Any] | None:
-    payload = _assistant_review_payload_from_message(message)
-    if not payload or not _is_saved_for_sam_review(payload):
-        return None
-    actor = payload.get("actor") if isinstance(payload.get("actor"), dict) else {}
-    turn = payload.get("turn") if isinstance(payload.get("turn"), dict) else {}
-    result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
-    tool = payload.get("tool") if isinstance(payload.get("tool"), dict) else {}
-    ack = payload.get("acknowledged") if isinstance(payload.get("acknowledged"), dict) else None
-    return {
-        "id": message.id,
-        "session_id": message.session_id,
-        "asked_at": payload.get("asked_at") or (
-            message.created_at.isoformat() if message.created_at else None
-        ),
-        "actor": actor.get("display_name") or "Unknown",
-        "role": actor.get("role"),
-        "question": turn.get("question") or "",
-        "answer": turn.get("answer") or "",
-        "reason": result.get("reason") or result.get("status"),
-        "route_path": tool.get("route_path"),
-        "tool_id": tool.get("final_tool_id") or tool.get("id") or tool.get("routed_tool_id"),
-        "acknowledged": bool(ack),
-        "acknowledged_at": ack.get("at") if ack else None,
-        "acknowledged_by": ack.get("by") if ack else None,
-    }
-
-
-def _can_review_saved_for_sam(ctx: dict[str, Any]) -> bool:
-    return bool(
-        ctx.get("kind") != "anonymous"
-        and (ctx.get("is_owner_operator") or ctx.get("role") == "partner")
-    )
-
-
-def _mirror_assistant_turn_to_cena_chat(
-    ctx: dict[str, Any],
-    question: str,
-    data: dict[str, Any] | None,
-    status: int,
-    previous_question: str = "",
-    previous_answer: str = "",
-    asked_at: str | None = None,
-) -> None:
-    if not question:
-        return
-    if SessionLocal is None:
-        log.warning("assistant: Cena chat mirror skipped because SessionLocal is unavailable")
-        return
-    db = SessionLocal()
-    try:
-        session_row = _review_session(db, ctx)
-        now = datetime.utcnow()
-        session_row.last_message_at = now
-        session_row.updated_at = now
-        db.add(SamChatMessage(
-            session_id=session_row.id,
-            role="system",
-            content=_assistant_review_content(
-                ctx,
-                question,
-                data,
-                status,
-                previous_question,
-                previous_answer,
-                asked_at,
-            ),
-            model=_CENA_REVIEW_MODEL,
-            created_at=now,
-        ))
-        db.commit()
-    except Exception:  # noqa: BLE001
-        db.rollback()
-        log.exception("assistant: failed to mirror turn into Cena chat")
-    finally:
-        db.close()
-
-
-def _assistant_json_response(
-    ctx: dict[str, Any],
-    question: str,
-    data: dict[str, Any],
-    status: int = 200,
-    previous_question: str = "",
-    previous_answer: str = "",
-    asked_at: str | None = None,
-):
-    _mirror_assistant_turn_to_cena_chat(
-        ctx,
-        question,
-        data,
-        status,
-        previous_question,
-        previous_answer,
-        asked_at,
-    )
-    return jsonify(data), status
-
-
-def _date_key(value: Any) -> str | None:
-    if isinstance(value, date):
-        return value.isoformat()
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text[:10] if text else None
-
-
-def _store_key_for_order(order: Order) -> str:
-    raw = (
-        order.origin_store_id
-        or order.pickup_kitchen
-        or order.reported_store_id
-        or order.reported_store
-        or "unknown"
-    )
-    return _normalize_store_key(raw)
-
-
-def _order_needs_driver(order: Order) -> bool:
-    status = (order.status or "").casefold()
-    has_driver = bool(order.assigned_driver_id or order.ezcater_driver_name or order.assigned_driver)
-    return not has_driver and status in {"new", "available", "requested", "needs_driver", "needs_review"}
-
-
-def _order_delivery_minute(order: Order) -> int | None:
-    if isinstance(order.delivery_window_start, datetime):
-        return order.delivery_window_start.hour * 60 + order.delivery_window_start.minute
-    text = str(order.deliver_at or "").strip()
-    if not text:
-        return None
-    match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text, re.IGNORECASE)
-    if not match:
-        return None
-    hour = int(match.group(1))
-    minute = int(match.group(2) or 0)
-    meridiem = (match.group(3) or "").casefold()
-    if meridiem == "pm" and hour < 12:
-        hour += 12
-    elif meridiem == "am" and hour == 12:
-        hour = 0
-    if not (0 <= hour <= 23 and 0 <= minute <= 59):
-        return None
-    return hour * 60 + minute
-
-
-def _time_window_key(minute: int | None, now_minute: int) -> str:
-    if minute is None:
-        return "unknown_time"
-    if minute < 12 * 60:
-        return "morning"
-    if minute < 17 * 60:
-        return "afternoon"
-    return "evening"
-
-
-def _increment_count(mapping: dict[str, int], key: str) -> None:
-    mapping[key] = mapping.get(key, 0) + 1
-
-
-def _increment_nested_count(mapping: dict[str, dict[str, int]], outer: str, inner: str) -> None:
-    bucket = mapping.setdefault(outer, {})
-    bucket[inner] = bucket.get(inner, 0) + 1
-
-
-def _tool_store_filter(ctx: dict[str, Any]) -> set[str]:
-    if ctx.get("is_owner_operator"):
-        return set()
-    return {str(store).casefold() for store in (ctx.get("store_slugs") or [])}
-
-
-def _orders_store_summary(ctx: dict[str, Any]) -> dict[str, Any]:
-    today = date.today().isoformat()
-    db = SessionLocal()
-    try:
-        orders = db.query(Order).all()
-        allowed = _tool_store_filter(ctx)
-        if allowed:
-            orders = [
-                order for order in orders
-                if _store_key_for_order(order).casefold() in allowed
-            ]
-        by_store: dict[str, int] = {}
-        today_by_store: dict[str, int] = {}
-        today_time_windows: dict[str, int] = {
-            "morning": 0,
-            "afternoon": 0,
-            "evening": 0,
-            "earlier_today": 0,
-            "unknown_time": 0,
-        }
-        today_time_windows_by_store: dict[str, dict[str, int]] = {}
-        status_counts: dict[str, int] = {}
-        today_orders = 0
-        upcoming_orders = 0
-        needs_driver = 0
-        live_tracking = 0
-        active_tracking = 0
-        now_minute = datetime.now().hour * 60 + datetime.now().minute
-        for order in orders:
-            order_date = _date_key(order.delivery_date)
-            store = _store_key_for_order(order)
-            if order_date == today:
-                today_orders += 1
-                _increment_count(today_by_store, store)
-                minute = _order_delivery_minute(order)
-                window = _time_window_key(minute, now_minute)
-                _increment_count(today_time_windows, window)
-                _increment_nested_count(today_time_windows_by_store, window, store)
-                if minute is not None and minute <= now_minute:
-                    _increment_count(today_time_windows, "earlier_today")
-                    _increment_nested_count(today_time_windows_by_store, "earlier_today", store)
-            if order_date and order_date >= today:
-                upcoming_orders += 1
-            by_store[store] = by_store.get(store, 0) + 1
-            status = (order.status or "unknown").casefold()
-            status_counts[status] = status_counts.get(status, 0) + 1
-            if _order_needs_driver(order):
-                needs_driver += 1
-            if order.delivery_tracking_id:
-                live_tracking += 1
-            if order.delivery_tracking_id and order.ezcater_status_key not in {None, "", "expired", "completed", "delivered"}:
-                active_tracking += 1
-
-        return {
-            "generated_at": _now_iso(),
-            "data_class": "operations_aggregate_sanitized",
-            "today": today,
-            "total_orders": len(orders),
-            "today_orders": today_orders,
-            "upcoming_orders": upcoming_orders,
-            "needs_driver_orders": needs_driver,
-            "live_tracking_orders": live_tracking,
-            "active_tracking_orders": active_tracking,
-            "by_store": by_store,
-            "today_by_store": today_by_store,
-            "today_time_windows": today_time_windows,
-            "today_time_windows_by_store": today_time_windows_by_store,
-            "status_counts": status_counts,
-        }
-    finally:
-        db.close()
-
-
-def _drivers_store_summary(ctx: dict[str, Any]) -> dict[str, Any]:
-    db = SessionLocal()
-    try:
-        drivers = db.query(Driver).all()
-        allowed = _tool_store_filter(ctx)
-        if allowed:
-            drivers = [
-                driver for driver in drivers
-                if str(driver.home_store_id or driver.location or "").casefold() in allowed
-            ]
-        active = [
-            driver for driver in drivers
-            if driver.active and (driver.status or "active").casefold() == "active"
-        ]
-        by_store: dict[str, int] = {}
-        score_count = 0
-        score_total = 0
-        for driver in drivers:
-            store = str(driver.home_store_id or driver.location or "unknown").casefold()
-            by_store[store] = by_store.get(store, 0) + 1
-            if driver.current_score is not None:
-                score_count += 1
-                score_total += int(driver.current_score)
-        active_shift_driver_ids = {
-            row.driver_id
-            for row in db.query(DriverShift.driver_id).filter(DriverShift.ended_at.is_(None)).all()
-        }
-        active_delivery_driver_ids = {
-            row.assigned_driver_id
-            for row in db.query(Order.assigned_driver_id)
-            .filter(Order.assigned_driver_id.isnot(None))
-            .filter(Order.status.in_(["approved", "picked_up", "en_route", "requested"]))
-            .all()
-        }
-        active_ids = {driver.id for driver in active}
-        return {
-            "generated_at": _now_iso(),
-            "data_class": "driver_aggregate_sanitized",
-            "total_drivers": len(drivers),
-            "active_drivers": len(active),
-            "inactive_drivers": max(0, len(drivers) - len(active)),
-            "drivers_on_shift": len(active_shift_driver_ids & active_ids),
-            "drivers_on_active_orders": len(active_delivery_driver_ids & active_ids),
-            "average_score": round(score_total / score_count, 1) if score_count else None,
-            "by_store": by_store,
-        }
-    finally:
-        db.close()
-
-
-def _labor_store_aggregate(ctx: dict[str, Any]) -> dict[str, Any]:
-    today = date.today()
-    db = SessionLocal()
-    try:
-        employees = db.query(Employee).all()
-        allowed = _tool_store_filter(ctx)
-        if allowed:
-            employee_ids = {
-                row.employee_id
-                for row in db.query(EmployeeStoreAssignment.employee_id)
-                .filter(EmployeeStoreAssignment.store_key.in_(list(allowed)))
-                .all()
-            }
-            employees = [employee for employee in employees if employee.id in employee_ids]
-        employee_ids = {employee.id for employee in employees}
-        active_employees = [employee for employee in employees if employee.active]
-        by_store: dict[str, int] = {}
-        if allowed and not employee_ids:
-            assignments = []
-            shifts = []
+        if entry.is_dir():
+            list_files_recursive(entry, file_list)
         else:
-            assignment_query = db.query(EmployeeStoreAssignment)
-            if employee_ids:
-                assignment_query = assignment_query.filter(EmployeeStoreAssignment.employee_id.in_(employee_ids))
-            assignments = assignment_query.all()
-            published_schedule_query = db.query(Schedule.id).filter(Schedule.status == "published")
-            if allowed:
-                published_schedule_query = published_schedule_query.filter(Schedule.store_key.in_(list(allowed)))
-            published_schedule_ids = [row.id for row in published_schedule_query.all()]
-            shift_query = db.query(Shift)
-            if published_schedule_ids:
-                shift_query = shift_query.filter(Shift.schedule_id.in_(published_schedule_ids))
-            else:
-                shift_query = shift_query.filter(Shift.id == -1)
-            if employee_ids:
-                shift_query = shift_query.filter(
-                    (Shift.employee_id.in_(employee_ids)) | (Shift.employee_id.is_(None))
-                )
-            shifts = shift_query.all()
-        for assignment in assignments:
-            store = str(assignment.store_key or "unknown").casefold()
-            by_store[store] = by_store.get(store, 0) + 1
-        today_attendance = db.query(AttendanceShift).filter(AttendanceShift.entry_date == today).all()
-        if allowed:
-            today_attendance = [
-                row for row in today_attendance
-                if (row.store_scope or "").casefold() in allowed
-            ]
-        attendance_statuses: dict[str, int] = {}
-        for row in today_attendance:
-            status = (row.status or "unknown").casefold()
-            attendance_statuses[status] = attendance_statuses.get(status, 0) + 1
-        perf_rows = db.query(PerfPeriodCache).all()
-        if employee_ids:
-            perf_rows = [row for row in perf_rows if row.cena_employee_id in employee_ids]
-        elif allowed:
-            perf_rows = []
-        total_hours = sum(float(row.total_hours or 0.0) for row in perf_rows if row.period == "last30")
-        latest_sync = max((row.synced_at for row in perf_rows if row.synced_at), default=None)
-        return {
-            "generated_at": _now_iso(),
-            "data_class": "labor_aggregate_sanitized",
-            "employee_count_scope": "all_allowed_employee_store_assignments",
-            "schedule_shift_scope": "all_allowed_historical_published_schedules",
-            "last30_cached_hours_scope": "last_30_perf_period_cache_rows",
-            "total_employees": len(employees),
-            "active_employees": len(active_employees),
-            "inactive_employees": max(0, len(employees) - len(active_employees)),
-            "by_store_assignments": by_store,
-            "published_shifts": len([shift for shift in shifts if shift.status != "open"]),
-            "open_shifts": len([shift for shift in shifts if shift.status == "open"]),
-            "today_attendance_statuses": attendance_statuses,
-            "last30_cached_hours": round(total_hours, 2),
-            "perf_cache_rows": len(perf_rows),
-            "latest_perf_sync": latest_sync.isoformat() if latest_sync else None,
-        }
-    finally:
-        db.close()
-
-
-def _tool_is_available(ctx: dict[str, Any], tool_id: str) -> bool:
-    return any(
-        tool["tool_id"] == tool_id and tool.get("available")
-        for tool in _tool_catalog_for(ctx)
-    )
-
-
-def _toast_sales_summary_tool_payload(period: str) -> dict[str, Any]:
-    from app.services.toast_analytics_summary import analytics_summary_payload
-
-    return analytics_summary_payload(period)
-
-
-def _toast_table_activity_tool_payload(
-    location: str | None,
-    business_date: str | None = None,
-) -> dict[str, Any]:
-    from app.services.toast_table_activity import latest_table_activity_payload
-
-    return latest_table_activity_payload(location, business_date=business_date)
-
-
-def _wants_orders_store_summary(question: str) -> bool:
-    text = str(question or "")
-    if "order of operations" in text.casefold():
-        return False
-    if _wants_cena_l3_business_analytics(text):
-        return False
-    if any(
-        matcher(text)
-        for matcher in (
-            _wants_toast_sales_summary,
-            _wants_toast_table_activity,
-            _wants_toast_webhook_activity,
-            _wants_toast_employee_profiles,
-        )
-    ):
-        return False
-    if not _ORDERS_SUMMARY_RE.search(text):
-        return False
-    return bool(
-        re.search(
-            r"\b("
-            r"how\s+(?:many|amny)|count|total|totals?|summary|report|list|show\s+me|"
-            r"today|tomorrow|yesterday|upcoming|current|active|"
-            r"driver\s+attention|needs?\s+(?:a\s+)?driver|tracking\s+links?|"
-            r"store\s+split|by\s+store|location\s+split|by\s+location|"
-            r"have|missing|without|no"
-            r")\b",
-            text,
-            re.IGNORECASE,
-        )
-    )
-
-
-def _wants_drivers_store_summary(question: str) -> bool:
-    text = str(question or "")
-    if _wants_orders_store_summary(text):
-        return False
-    return bool(_DRIVERS_SUMMARY_RE.search(text))
-
-
-def _wants_labor_store_aggregate(question: str) -> bool:
-    text = str(question or "")
-    if _wants_toast_employee_profiles(text):
-        return False
-    return bool(_LABOR_SUMMARY_RE.search(text))
-
-
-def _toast_webhook_activity_tool_payload(question: str) -> dict[str, Any]:
-    from app.services.toast_webhook_assistant import toast_webhook_activity_payload
-
-    return toast_webhook_activity_payload(
-        question,
-        store_key=_requested_store(question),
-        business_date=_toast_table_business_date_from_question(question),
-    )
-
-
-def _toast_employee_profiles_tool_payload(question: str) -> dict[str, Any]:
-    from app.services.toast_webhook_assistant import toast_employee_profile_payload
-
-    return toast_employee_profile_payload(question)
-
-
-def _question_text(question: str) -> str:
-    return str(question or "").casefold()
-
-
-def _contains_any(text: str, *patterns: str) -> bool:
-    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
-
-
-def _employee_self_context(text: str) -> bool:
-    return bool(
-        re.search(r"\b(my|mine|myself)\b", text)
-        or re.search(r"\bemployee(?:\s+id)?\s*#?\d+\b", text)
-    )
-
-
-def _wants_readonly_operational_tool(tool_id: str, question: str) -> bool:
-    text = _question_text(question)
-    if tool_id.startswith("employee."):
-        if tool_id == "employee.my_open_shifts":
-            return "open shift" in text and _contains_any(text, r"\b(my|available|pick\s*up|pickup)\b")
-        if not _employee_self_context(text):
-            return False
-        if tool_id == "employee.my_profile.read":
-            return _contains_any(text, r"\bprofile\b", r"\babout\s+me\b", r"\bmy\s+info\b")
-        if tool_id == "employee.my_contact.read":
-            return _contains_any(text, r"\bcontact\b", r"\bphone\b", r"\bemail\b")
-        if tool_id == "employee.my_stores.read":
-            return _contains_any(text, r"\bstores?\b", r"\blocations?\b")
-        if tool_id == "employee.my_positions.read":
-            return _contains_any(text, r"\bpositions?\b", r"\bjobs?\b", r"\broles?\b")
-        if tool_id == "employee.my_schedule.today":
-            return _contains_any(text, r"\bschedules?\b", r"\bshifts?\b") and not re.search(r"\bweek\b", text)
-        if tool_id == "employee.my_schedule.week":
-            return _contains_any(text, r"\bschedules?\b", r"\bshifts?\b") and re.search(r"\bweek\b", text)
-        if tool_id == "employee.my_recent_shifts":
-            return _contains_any(text, r"\brecent\s+shifts?\b", r"\bpast\s+shifts?\b", r"\bshift\s+history\b")
-        if tool_id == "employee.my_availability.read":
-            return "availability" in text or "available" in text
-        if tool_id == "employee.my_time_off.status":
-            return _contains_any(text, r"\btime[-\s]?off\b", r"\bpto\b", r"\bvacation\b")
-        if tool_id == "employee.my_shift_alarm_settings":
-            return _contains_any(text, r"\balarm\b", r"\breminder\b", r"\bnotification\b")
-        if tool_id == "employee.my_attendance_summary":
-            return _contains_any(text, r"\battendance\b", r"\blate\b", r"\bno[-\s]?show\b", r"\bcallout\b")
-        if tool_id == "employee.my_day_breakdown":
-            return _contains_any(text, r"\bday\s+breakdown\b", r"\btoday\s+breakdown\b")
-        return False
-
-    if tool_id == "schedules.today_view":
-        if _contains_any(text, r"\bdrivers?\b", r"\bcatering\b", r"\borders?\b"):
-            return False
-        return _contains_any(text, r"\btoday'?s?\s+schedules?\b", r"\btomorrow'?s?\s+schedules?\b", r"\bwho(?:'s|\s+is)?\s+working\b")
-    if tool_id == "schedules.week_view":
-        return _contains_any(text, r"\bweekly\s+schedules?\b", r"\bschedule\s+week\b", r"\bweek(?:ly)?\s+shift")
-    if tool_id == "kitchen.recipe_lookup":
-        return "recipe" in text and _contains_any(text, r"\blookup\b", r"\bdetails?\b", r"\bhow\s+do\s+i\s+make\b", r"\brecipe\s+for\b")
-    if tool_id == "kitchen.recipe_search":
-        return "recipe" in text and _contains_any(text, r"\bsearch\b", r"\bfind\b", r"\blist\b", r"\bshow\b")
-    if tool_id == "kitchen.prep_list_today":
-        return _contains_any(text, r"\bprep\s+list\b", r"\btoday'?s?\s+prep\b")
-    if tool_id == "kitchen.prep_entries_by_day":
-        return _contains_any(text, r"\bprep\s+entries\b", r"\bprep\s+by\s+day\b", r"\bprep\s+for\b")
-    if tool_id == "vendors.vendor_recent_orders":
-        return _contains_any(text, r"\bvendors?\b", r"\bwebstaurant\b", r"\brestaurant\s+depot\b") and _contains_any(text, r"\borders?\b", r"\brecent\b")
-    if tool_id == "attendance.manager_board_summary":
-        return _contains_any(text, r"\battendance\s+board\b", r"\battendance\s+summary\b", r"\bwho\s+is\s+late\b")
-    if tool_id == "attendance.late_summary":
-        return _contains_any(text, r"\blate\b", r"\btardy\b") and "attendance" in text
-    if tool_id == "attendance.no_show_summary":
-        return _contains_any(text, r"\bno[-\s]?show\b", r"\bno\s+show\b")
-    if tool_id == "attendance.callout_summary":
-        return _contains_any(text, r"\bcall[-\s]?out\b", r"\bcalled\s+out\b")
-    if tool_id == "attendance.missed_punch_summary":
-        return _contains_any(text, r"\bmissed\s+punch\b", r"\bmissing\s+punch\b", r"\bclock(?:ed)?\s+out\b")
-    return False
-
-
-def _requested_operational_day(question: str) -> date:
-    text = _question_text(question)
-    today = _today_ct()
-    if re.search(r"\btomorrow\b", text):
-        return today + timedelta(days=1)
-    if re.search(r"\b(yesterday|last\s+night|previous\s+day)\b", text):
-        return today - timedelta(days=1)
-    return today
-
-
-def _requested_operational_week_start(question: str) -> date:
-    day = _requested_operational_day(question)
-    return day - timedelta(days=day.weekday())
-
-
-def _operational_store_arg(question: str, ctx: dict[str, Any]) -> str | None:
-    text = _question_text(question)
-    if re.search(r"\b(all|both)\s+(?:stores?|locations?)\b", text):
-        return None
-    requested = _requested_store(question)
-    if requested:
-        return requested
-    current = _normalize_store_key(ctx.get("current_store"))
-    if current != "unknown":
-        return current
-    stores = [_normalize_store_key(store) for store in (ctx.get("store_slugs") or [])]
-    stores = [store for store in stores if store != "unknown"]
-    return stores[0] if len(stores) == 1 else None
-
-
-def _operational_employee_id_arg(question: str, ctx: dict[str, Any]) -> int | str | None:
-    match = re.search(r"\bemployee(?:\s+id)?\s*#?\s*(\d+)\b", str(question or ""), re.IGNORECASE)
-    if match:
-        return int(match.group(1))
-    return ctx.get("principal_id")
-
-
-def _operational_recipe_arg(question: str, key: str) -> str | None:
-    text = str(question or "").strip()
-    match = re.search(r"\b(?:recipe|make|for)\s+([A-Za-z][A-Za-z0-9 _-]{1,80})", text, re.IGNORECASE)
-    if match:
-        return re.sub(r"\s+", " ", match.group(1)).strip(" ?.")
-    if key == "query":
-        return text[:120]
-    return None
-
-
-def _operational_readonly_args(tool_id: str, question: str, ctx: dict[str, Any]) -> dict[str, Any]:
-    day = _requested_operational_day(question)
-    args: dict[str, Any] = {}
-    if tool_id.startswith("employee."):
-        args["employee_id"] = _operational_employee_id_arg(question, ctx)
-        if tool_id in {"employee.my_schedule.today", "employee.my_day_breakdown"}:
-            args["date"] = day.isoformat()
-        if tool_id == "employee.my_schedule.week":
-            args["week_start"] = _requested_operational_week_start(question).isoformat()
-        if tool_id in {"employee.my_recent_shifts", "employee.my_open_shifts", "employee.my_time_off.status"}:
-            args["limit"] = 20
-        if tool_id == "employee.my_attendance_summary":
-            args["days"] = 30
-        return args
-    if tool_id.startswith(("schedules.", "kitchen.prep_", "attendance.")):
-        args["store"] = _operational_store_arg(question, ctx)
-        args["date"] = day.isoformat()
-        args["week_start"] = _requested_operational_week_start(question).isoformat()
-    if tool_id == "kitchen.recipe_search":
-        args.update({"query": _operational_recipe_arg(question, "query"), "limit": 10})
-    elif tool_id == "kitchen.recipe_lookup":
-        args["name"] = _operational_recipe_arg(question, "name")
-    elif tool_id == "vendors.vendor_recent_orders":
-        args.update({
-            "vendor": None,
-            "store": _operational_store_arg(question, ctx),
-            "limit": 10,
-        })
-        vendor_match = re.search(r"\b(webstaurant|restaurant\s+depot|ezcater|sysco)\b", question, re.IGNORECASE)
-        if vendor_match:
-            args["vendor"] = vendor_match.group(1).casefold()
-    return args
-
-
-def _operational_readonly_tool_payload(tool_id: str, question: str, ctx: dict[str, Any]) -> dict[str, Any]:
-    from app.services.assistant_operational_tools import run_operational_tool
-
-    return run_operational_tool(tool_id, _operational_readonly_args(tool_id, question, ctx))
-
-
-_TOOL_MATCHERS = {
-    **order_handlers.ORDER_TOOL_MATCHERS,
-    **schedule_handlers.SCHEDULE_TOOL_MATCHERS,
-    "orders_store_summary": _wants_orders_store_summary,
-    "drivers_store_summary": _wants_drivers_store_summary,
-    "labor_store_aggregate": _wants_labor_store_aggregate,
-    "toast_sales_summary": _wants_toast_sales_summary,
-    "toast_table_activity": _wants_toast_table_activity,
-    "toast_webhook_activity": _wants_toast_webhook_activity,
-    "toast_employee_profiles": _wants_toast_employee_profiles,
-}
-for _tool_id in _READONLY_OPERATIONAL_TOOL_IDS:
-    _TOOL_MATCHERS[f"readonly_operational:{_tool_id}"] = (
-        lambda question, tool_id=_tool_id: _wants_readonly_operational_tool(tool_id, question)
-    )
-del _tool_id
-
-
-def _approved_tool_handlers() -> dict[str, Any]:
-    handlers = {
-        **order_handlers.ORDER_TOOL_HANDLERS,
-        **schedule_handlers.SCHEDULE_TOOL_HANDLERS,
-        "drivers_store_summary": driver_handlers.drivers_store_summary,
-        "labor_store_aggregate": lambda question, ctx: _labor_store_aggregate(ctx),
-        "toast_sales_summary": (
-            lambda question, ctx: _toast_sales_summary_tool_payload(
-                _toast_period_from_question(question)
-            )
-        ),
-        "toast_table_activity": (
-            lambda question, ctx: _toast_table_activity_tool_payload(
-                _requested_store(question),
-                _toast_table_business_date_from_question(question),
-            )
-        ),
-        "toast_webhook_activity": (
-            lambda question, ctx: _toast_webhook_activity_tool_payload(question)
-        ),
-        "toast_employee_profiles": (
-            lambda question, ctx: _toast_employee_profiles_tool_payload(question)
-        ),
-    }
-    for tool_id in _READONLY_OPERATIONAL_TOOL_IDS:
-        handlers[f"readonly_operational:{tool_id}"] = (
-            lambda question, ctx, tool_id=tool_id: _operational_readonly_tool_payload(tool_id, question, ctx)
-        )
-    return handlers
-
-
-def _available_implemented_tools(ctx: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    available = {
-        tool["tool_id"]: tool
-        for tool in _tool_catalog_for(ctx)
-        if tool.get("available")
-    }
-    handlers = _approved_tool_handlers()
-    return {
-        str(tool.get("tool_id") or ""): tool
-        for tool in _TOOL_REGISTRY
-        if (
-            str(tool.get("tool_id") or "") in available
-            and not is_excluded_non_routable(str(tool.get("tool_id") or ""))
-            and str(tool.get("handler") or "") in handlers
-        )
-    }
-
-
-def _deterministic_route_tool_id(question: str, ctx: dict[str, Any]) -> str | None:
-    if not _has_partner_tool_access(ctx):
-        return None
-    if _TOOL_DISCOVERY_ROUTE_RE.search(str(question or "")):
-        return "assistant.tool_discovery"
-    if _SESSION_CONTEXT_ROUTE_RE.search(str(question or "")):
-        return "assistant.session_context"
-    available = _available_implemented_tools(ctx)
-    for tool in sorted(_TOOL_REGISTRY, key=lambda item: int(item.get("priority") or 500)):
-        tool_id = str(tool.get("tool_id") or "")
-        if tool_id not in available:
-            continue
-        matcher_key = tool.get("matcher")
-        matcher = _TOOL_MATCHERS.get(str(matcher_key or ""))
-        if matcher and matcher(question):
-            return tool_id
-    return None
-
-
-def _classifier_enabled() -> bool:
-    return _env_truthy("AI_ASSISTANT_GEMINI_ROUTE_CLASSIFIER_ENABLED")
-
-
-def _route_classifier_prompt(question: str, tools: dict[str, dict[str, Any]]) -> str:
-    catalog_lines = []
-    for tool_id, tool in sorted(tools.items()):
-        catalog_lines.append(
-            f"- {tool_id}: {tool.get('label') or tool_id}. {tool.get('description') or ''}"
-        )
-    return (
-        "Classify this Cenas Kitchen assistant question to exactly one available "
-        "implemented tool id, or NONE. Return strict JSON only in this exact "
-        "shape: {\"tool_id\":\"<id or NONE>\"}. Do not include free text. "
-        "Only choose from the allowlist below.\n\n"
-        "Available implemented tools:\n"
-        + "\n".join(catalog_lines)
-        + "\n\nQuestion:\n"
-        + question
-    )
-
-
-def _classifier_route_tool_id(
-    question: str,
-    ctx: dict[str, Any],
-    available: dict[str, dict[str, Any]],
-) -> tuple[str | None, dict[str, Any]]:
-    started = time.perf_counter()
-    meta: dict[str, Any] = {
-        "enabled": _classifier_enabled(),
-        "model": None,
-        "latency_ms": 0,
-        "token_cost_usd": None,
-        "raw_tool_id": None,
-        "reason": "disabled",
-    }
-    if not meta["enabled"]:
-        return None, meta
-    if not _has_partner_tool_access(ctx) or not available:
-        meta["reason"] = "no_available_tools"
-        return None, meta
-
-    try:
-        raw_text, model = _gemini_generate(_route_classifier_prompt(question, available))
-    except Exception:  # noqa: BLE001
-        log.exception("assistant: route classifier failed")
-        meta["reason"] = "model_error"
-        meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
-        return None, meta
-
-    meta["model"] = model
-    meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
-    if not raw_text:
-        meta["reason"] = "empty_response"
-        return None, meta
-    try:
-        parsed = json.loads(raw_text)
-    except json.JSONDecodeError:
-        meta["reason"] = "invalid_json"
-        return None, meta
-    raw_tool_id = str(parsed.get("tool_id") or "").strip()
-    meta["raw_tool_id"] = raw_tool_id
-    if not raw_tool_id or raw_tool_id.upper() == "NONE":
-        meta["reason"] = "none"
-        return None, meta
-    canonical = canonical_tool_id(raw_tool_id)
-    if canonical not in available or is_excluded_non_routable(canonical):
-        meta["reason"] = "not_allowed"
-        return None, meta
-    meta["reason"] = "matched"
-    return canonical, meta
-
-
-def _route_approved_tool_choice(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
-    started = time.perf_counter()
-    if _has_unsupported_toast_sales_scope(question):
-        return {
-            "tool_id": None,
-            "route_path": "review",
-            "latency_ms": int((time.perf_counter() - started) * 1000),
-            "classifier": {"enabled": _classifier_enabled(), "reason": "unsupported_toast_sales_scope"},
-        }
-    if _wants_cena_l3_business_analytics(question):
-        return {
-            "tool_id": None,
-            "route_path": "review",
-            "latency_ms": int((time.perf_counter() - started) * 1000),
-            "classifier": {"enabled": _classifier_enabled(), "reason": "cena_l3_business_analytics"},
-        }
-    tool_id = _deterministic_route_tool_id(question, ctx)
-    if tool_id:
-        return {
-            "tool_id": tool_id,
-            "route_path": "deterministic",
-            "latency_ms": int((time.perf_counter() - started) * 1000),
-            "classifier": {"enabled": _classifier_enabled(), "reason": "not_used"},
-        }
-    available = _available_implemented_tools(ctx)
-    classifier_tool_id, classifier_meta = _classifier_route_tool_id(question, ctx, available)
-    if classifier_tool_id:
-        return {
-            "tool_id": classifier_tool_id,
-            "route_path": "classifier",
-            "latency_ms": int((time.perf_counter() - started) * 1000),
-            "classifier": classifier_meta,
-        }
-    return {
-        "tool_id": None,
-        "route_path": "review",
-        "latency_ms": int((time.perf_counter() - started) * 1000),
-        "classifier": classifier_meta,
-    }
-
-
-def _route_approved_tool_id(question: str, ctx: dict[str, Any]) -> str | None:
-    return _route_approved_tool_choice(question, ctx)["tool_id"]
-
-
-def _scan_deterministic_matchers(questions: list[str], ctx: dict[str, Any]) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    for question in questions:
-        tool_id = _deterministic_route_tool_id(question, ctx)
-        results.append({
-            "question": question,
-            "tool_id": tool_id,
-            "route_path": "deterministic" if tool_id else "review",
-        })
-    return results
-
-
-def _approved_tool_data(question: str, ctx: dict[str, Any]) -> dict[str, Any]:
-    return _approved_tool_payload(question, ctx)[1]
-
-
-def _approved_tool_package(question: str, ctx: dict[str, Any]) -> tuple[str | None, dict[str, Any], dict[str, Any]]:
-    route = _route_approved_tool_choice(question, ctx)
-    tool_id = route.get("tool_id")
-    if not tool_id:
-        return None, {}, route
-    if str(tool_id) in _RUNTIME_PASSTHROUGH_TOOL_IDS:
-        return str(tool_id), {}, route
-    tool = next((item for item in _TOOL_REGISTRY if item["tool_id"] == tool_id), None)
-    if not tool:
-        return None, {}, route
-    handler = _approved_tool_handlers().get(str(tool.get("handler") or ""))
-    if not handler:
-        return None, {}, route
-    try:
-        return str(tool_id), {str(tool_id): handler(question, ctx)}, route
-    except Exception:  # noqa: BLE001
-        log.exception("assistant: failed to build %s", tool_id)
-        return None, {}, route
-
-
-def _approved_tool_payload(question: str, ctx: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
-    tool_id, payload, _route = _approved_tool_package(question, ctx)
-    return tool_id, payload
-
-
-def _contextual_followup(question: str, previous_question: str) -> bool:
-    return _shared_contextual_followup(question, previous_question)
-
-
-def _resolved_question(question: str, previous_question: str = "") -> str:
-    return _shared_resolved_question(question, previous_question)
-
-
-def _previous_question_from_body(body: dict[str, Any], current_question: str) -> str:
-    direct = str(body.get("previous_question") or "").strip()
-    if direct and direct != current_question:
-        return direct[:_MAX_QUESTION_CHARS]
-    history = body.get("history")
-    if isinstance(history, list):
-        for item in reversed(history):
-            if not isinstance(item, dict):
-                continue
-            role = str(item.get("role") or "").casefold()
-            text = str(item.get("content") or item.get("question") or "").strip()
-            if role == "user" and text and text != current_question:
-                return text[:_MAX_QUESTION_CHARS]
-    return ""
-
-
-def _post_to_ck_runtime(
-    question: str,
-    ctx: dict[str, Any],
-    previous_question: str = "",
-    previous_answer: str = "",
-) -> tuple[dict[str, Any], int] | None:
-    """Send the assistant turn to the CK-local runtime.
-
-    The runtime is the execution boundary for production: model calls, durable
-    question storage, and future data tools stay on CK. Render is only a
-    signed web/session proxy when this URL is configured.
-    """
-    url = _ck_runtime_url(_env_first("AI_ASSISTANT_CK_RUNTIME_URL", "ASSISTANT_RUNTIME_URL"))
-    token = _env_first("AI_ASSISTANT_CK_RUNTIME_TOKEN", "ASSISTANT_RUNTIME_TOKEN")
-    if not url or not token:
-        return None
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "X-Ai-Assistant-Token": token,
-        "Content-Type": "application/json",
-    }
-    forced_review_reason = _shared_force_review_reason(question)
-    if forced_review_reason:
-        routed_tool_id = None
-        tool_data = {}
-        route_meta = {
-            "tool_id": None,
-            "route_path": "review",
-            "latency_ms": 0,
-            "classifier": {
-                "enabled": _classifier_enabled(),
-                "reason": "forced_review",
-            },
-            "reason": forced_review_reason,
-        }
-    else:
-        resolved_for_tools = _resolved_question(question, previous_question)
-        routed_tool_id, tool_data, route_meta = _approved_tool_package(resolved_for_tools, ctx)
-    payload = {
-        "question": question,
-        "principal": _runtime_principal(ctx),
-        "tools": _tool_catalog_for(ctx),
-        "tool_data": tool_data,
-        "route_path": route_meta.get("route_path"),
-        "route_meta": route_meta,
-        "source": "cenas_app",
-        "requested_at": _now_iso(),
-    }
-    if routed_tool_id:
-        payload["routed_tool_id"] = routed_tool_id
-    if previous_question:
-        payload["previous_question"] = previous_question
-    if previous_answer:
-        payload["previous_answer"] = previous_answer
-    try:
-        import httpx
-
-        proxy = (os.getenv("CENA_PROXY") or "").strip() or None
-        client_kwargs: dict[str, Any] = {
-            "timeout": httpx.Timeout(_ask_timeout_seconds(), connect=3.0),
-        }
-        if proxy:
-            client_kwargs["proxy"] = proxy
-        with httpx.Client(**client_kwargs) as hx:
-            resp = hx.post(url, json=payload, headers=headers)
-        data = resp.json() if resp.content else {}
-        if 200 <= resp.status_code < 300:
-            if isinstance(data, dict):
-                data.setdefault("route_path", route_meta.get("route_path"))
-                if data.get("queued") is True or data.get("route_path") == "review":
-                    data["routed_tool_id"] = None
-                    data.setdefault("tool_id", None)
-                else:
-                    data.setdefault("routed_tool_id", routed_tool_id)
-                data.setdefault("route_meta", route_meta)
-            return data, resp.status_code
-        return {
-            "ok": False,
-            "error": "ck_runtime_rejected",
-            "answer": "I could not reach the CK assistant safely right now.",
-            "queued": False,
-        }, 503
-    except Exception:  # noqa: BLE001
-        log.exception("assistant: CK runtime call failed")
-        return {
-            "ok": False,
-            "error": "ck_runtime_unavailable",
-            "answer": "I could not reach the CK assistant safely right now.",
-            "queued": False,
-        }, 503
-
-
-def _queue_for_review(question: str, ctx: dict[str, Any], reason: str,
-                      required_permission: str | None = None) -> dict[str, Any]:
-    row = {
-        "id": str(uuid.uuid4()),
-        "created_at": _now_iso(),
-        "status": _REVIEW_STATUS,
-        "risk_level": _review_risk_level(reason),
-        "question": question,
-        "reason": reason,
-        "required_permission": required_permission,
-        "role": ctx["role"],
-        "store_key": ctx["current_store"] or ((ctx["store_slugs"] or [None])[0]),
-        "model_key": "review_queue",
-        "tool_name": required_permission or "assistant.general_help",
-        "delivery_target": "ck_assistant_review",
-        "principal": {
-            "kind": ctx["kind"],
-            "role": ctx["role"],
-            "principal_id": ctx["principal_id"],
-            "display_name": ctx["display_name"],
-            "store_slugs": ctx["store_slugs"],
-            "current_store": ctx["current_store"],
-            "path": ctx["path"],
-            "permissions": ctx["permissions"],
-            "is_owner_operator": ctx.get("is_owner_operator", False),
-        },
-    }
-    saved_on_ck, ck_id = _post_to_ck_review(row)
-    if saved_on_ck:
-        row["storage"] = "ck"
-        row["ck_question_id"] = ck_id
-    else:
-        row["storage"] = "render_retry_outbox"
-        row["outbox_note"] = (
-            "CK review ingress unavailable or not configured; CK remains "
-            "the authoritative target."
-        )
-        _append_pending_question(row)
-    return row
-
-
-def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
-    openai_text, openai_model = _openai_generate(prompt)
-    if openai_text:
-        return openai_text, openai_model
-
-    key = _read_secret("GEMINI_API_KEY")
-    if not key:
-        return None, None
-    try:
-        from google import genai  # type: ignore[import]
-    except ImportError:
-        log.warning("assistant: google-genai package not installed")
-        return None, None
-
-    model = os.getenv("AI_ASSISTANT_GEMINI_MODEL", _DEFAULT_GEMINI_MODEL)
-    client = genai.Client(
-        api_key=key,
-        http_options={"timeout": _provider_timeout_ms()},
-    )
-    resp = client.models.generate_content(model=model, contents=prompt)
-    text = (getattr(resp, "text", None) or "").strip()
-    return text or None, model
-
-
-def _openai_generate(prompt: str) -> tuple[str | None, str | None]:
-    key = _read_secret("OPENAI_API_KEY")
-    if not key:
-        return None, None
-
-    model = os.getenv("AI_ASSISTANT_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
-    max_tokens = int(os.getenv("AI_ASSISTANT_OPENAI_MAX_TOKENS", "2048"))
-    temperature = float(os.getenv("AI_ASSISTANT_OPENAI_TEMPERATURE", "0.2"))
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(
-            req, timeout=max(1, _provider_timeout_ms() / 1000)
-        ) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        log.warning("assistant: openai HTTP %s", exc.code)
-        return None, None
-    except Exception as exc:  # noqa: BLE001
-        log.warning("assistant: openai unavailable: %s", exc)
-        return None, None
-
-    choices = body.get("choices") or []
-    if not choices:
-        return None, None
-    message = choices[0].get("message") or {}
-    text = (message.get("content") or "").strip()
-    return text or None, model
-
-
-def _review_notice_prompt(ctx: dict[str, Any], reason: str, required_permission: str | None,
-                          fallback: str) -> str:
-    return (
-        _stable_policy_prompt()
-        + "\n\n"
-        + "A user question has already been durably saved in the CK assistant "
-        "review queue. Draft only the short message shown to the user. Do not "
-        "answer the saved question. Do not invent facts, mention Gemini, mention "
-        "API keys, expose internal reason codes, or imply that Sam received a "
-        "separate live alert. Say that it was saved for Sam review. Keep it to "
-        "one or two friendly sentences.\n\n"
-        f"{_session_prompt(ctx)}\n"
-        f"Review reason: {_review_reason_label(reason)}.\n"
-        f"Required permission: {required_permission or 'none'}.\n"
-        f"Fallback notice: {fallback}"
-    )
-
-
-def _gemini_review_notice(ctx: dict[str, Any], reason: str, required_permission: str | None,
-                          fallback: str) -> tuple[str | None, str | None]:
-    return _gemini_generate(_review_notice_prompt(ctx, reason, required_permission, fallback))
-
-
-def _gemini_answer(question: str, ctx: dict[str, Any]) -> tuple[str | None, str | None]:
-    prompt = _system_prompt(ctx) + "\n\nUser question:\n" + question
-    return _gemini_generate(prompt)
-
-
-def _system_prompt(ctx: dict[str, Any]) -> str:
-    return (
-        _stable_policy_prompt()
-        + "\n\n"
-        + _session_prompt(ctx)
-    )
-
-
-def _stable_policy_prompt() -> str:
-    return (
-        "You are the Cenas Kitchen in-app assistant. Answer only within the "
-        "current user's role and permissions. You do not reveal secrets, "
-        "passcodes, tokens, customer PII, unauthorized payroll, raw peer pay, "
-        "sales internals, GUIDs, or cross-store data. Answer operational data "
-        "questions only from approved, sanitized read-only tool payloads. "
-        "Review-gated tools are visible to the server but not available to you "
-        "for answers. If the user asks for private data or operational facts "
-        "that require an unavailable tool, say the question needs Sam review "
-        "and do not guess. If owner_operator=true in the authenticated session, "
-        "use that session context for permission decisions; do not ask the user "
-        "to prove they are Sam in chat."
-    )
-
-
-def _session_prompt(ctx: dict[str, Any]) -> str:
-    return (
-        f"Current session: role={ctx['role']}, kind={ctx['kind']}, "
-        f"stores={ctx['store_slugs']}, path={ctx['path']}, "
-        f"owner_operator={bool(ctx.get('is_owner_operator'))}."
-    )
-
-
-def _should_queue(question: str, ctx: dict[str, Any]) -> tuple[bool, str, str | None]:
-    if ctx["kind"] == "anonymous":
-        return True, "not_authenticated", "ai.ask_claude_personal"
-    if not ctx["can_ask_personal"]:
-        return True, "missing_ai_permission", "ai.ask_claude_personal"
-    forced_review_reason = _shared_force_review_reason(question)
-    if forced_review_reason:
-        return True, forced_review_reason, "ai.ask_claude"
-    if _SENSITIVE_RE.search(question):
-        needed = "ai.ask_claude"
-        if not ctx["can_ask_operational"]:
-            return True, "sensitive_or_operational_question_requires_higher_permission", needed
-        return True, "sensitive_or_operational_question_needs_approved_tool", needed
-    if _DATA_TOOL_RE.search(question):
-        needed = "ai.ask_claude"
-        if not ctx["can_ask_operational"]:
-            return True, "data_question_requires_higher_permission", needed
-        return True, "data_question_needs_approved_tool", needed
-    return False, "", None
-
-
-@assistant_bp.route("/assistant/context", methods=["GET"])
-def assistant_context():
-    ctx = _principal_context()
-    tools = _tool_catalog_for(ctx)
-    enabled = _assistant_available_for_context(ctx)
-    return jsonify({
-        "ok": ctx["kind"] != "anonymous",
-        "principal": {
-            "kind": ctx["kind"],
-            "role": ctx["role"],
-            "display_name": ctx["display_name"],
-            "store_slugs": ctx["store_slugs"],
-            "is_owner_operator": ctx.get("is_owner_operator", False),
-        },
-        "enabled": bool(enabled),
-        "tools": [
-            {
-                "tool_id": tool["tool_id"],
-                "label": tool["label"],
-                "status": tool["status"],
-                "available": tool["available"],
-                "deny_reason": tool["deny_reason"],
-            }
-            for tool in tools
-        ],
-    })
-
-
-@assistant_bp.route("/assistant/thread", methods=["GET"])
-def assistant_thread():
-    """The user's active 48h conversation thread, relayed from the CK runtime
-    (which owns conversation storage). Creates the thread - with the CK
-    developer intro - on first open."""
-    ctx = _principal_context()
-    if ctx["kind"] == "anonymous":
-        return jsonify({"ok": False, "error": "not_authenticated"}), 401
-    if not _assistant_enabled() or not _assistant_available_for_context(ctx):
-        return jsonify({"ok": False, "error": "assistant_unavailable"}), 503
-    base = _env_first("AI_ASSISTANT_CK_RUNTIME_URL", "ASSISTANT_RUNTIME_URL")
-    token = _env_first("AI_ASSISTANT_CK_RUNTIME_TOKEN", "ASSISTANT_RUNTIME_TOKEN")
-    answer_url = _ck_runtime_url(base)
-    if not answer_url or not token:
-        return jsonify({"ok": False, "error": "ck_runtime_unconfigured"}), 503
-    parts = urllib.parse.urlsplit(answer_url)
-    thread_url = urllib.parse.urlunsplit((parts.scheme, parts.netloc, "/assistant/thread", "", ""))
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "X-Ai-Assistant-Token": token,
-        "Content-Type": "application/json",
-    }
-    try:
-        import httpx
-
-        proxy = (os.getenv("CENA_PROXY") or "").strip() or None
-        client_kwargs: dict[str, Any] = {"timeout": httpx.Timeout(12.0, connect=3.0)}
-        if proxy:
-            client_kwargs["proxy"] = proxy
-        with httpx.Client(**client_kwargs) as hx:
-            resp = hx.post(thread_url, json={"principal": _runtime_principal(ctx)}, headers=headers)
-        data = resp.json() if resp.content else {}
-        return jsonify(data), resp.status_code
-    except Exception:  # noqa: BLE001
-        log.exception("assistant: thread relay failed")
-        return jsonify({"ok": False, "error": "thread_unavailable"}), 503
-
-
-@assistant_bp.route("/assistant", methods=["GET"])
-def assistant_page():
-    """Full-page role-scoped Cenas AI assistant.
-
-    This replaces the old floating assistant bubble as the user-facing
-    entry point. The JSON endpoints below remain the same contract.
-    """
-    return render_template("assistant_page.html", active="assistant_page")
-
-
-@assistant_bp.route("/assistant/tools", methods=["GET"])
-def assistant_tools():
-    ctx = _principal_context()
-    if ctx["kind"] == "anonymous":
-        return jsonify({"ok": False, "error": "not_authenticated"}), 401
-    return jsonify({
-        "ok": True,
-        "generated_at": _now_iso(),
-        "tools": _tool_catalog_for(ctx),
-    })
-
-
-@assistant_bp.route("/assistant/review-items", methods=["GET"])
-def assistant_review_items():
-    ctx = _principal_context()
-    if not _can_review_saved_for_sam(ctx):
-        return jsonify({"ok": False, "error": "forbidden"}), 403
-    if SessionLocal is None:
-        return jsonify({"ok": False, "error": "database_unavailable"}), 503
-
-    include_acknowledged = str(request.args.get("include_acknowledged") or "").lower() in {"1", "true", "yes"}
-    try:
-        limit = max(1, min(int(request.args.get("limit") or 100), 200))
-    except ValueError:
-        limit = 100
-
-    db = SessionLocal()
-    try:
-        rows = (
-            db.query(SamChatMessage)
-            .filter(SamChatMessage.model == _CENA_REVIEW_MODEL)
-            .order_by(SamChatMessage.created_at.desc(), SamChatMessage.id.desc())
-            .limit(limit * 4)
-            .all()
-        )
-        items: list[dict[str, Any]] = []
-        for row in rows:
-            item = _assistant_review_item(row)
-            if not item:
-                continue
-            if item["acknowledged"] and not include_acknowledged:
-                continue
-            items.append(item)
-            if len(items) >= limit:
-                break
-        return jsonify({
-            "ok": True,
-            "generated_at": _now_iso(),
-            "items": items,
-            "pending_count": sum(1 for item in items if not item["acknowledged"]),
-        })
-    finally:
-        db.close()
-
-
-@assistant_bp.route("/assistant/review-items/<int:message_id>/ack", methods=["POST"])
-def assistant_review_item_ack(message_id: int):
-    ctx = _principal_context()
-    if not _can_review_saved_for_sam(ctx):
-        return jsonify({"ok": False, "error": "forbidden"}), 403
-    if SessionLocal is None:
-        return jsonify({"ok": False, "error": "database_unavailable"}), 503
-
-    db = SessionLocal()
-    try:
-        row = db.get(SamChatMessage, message_id)
-        if row is None:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        payload = _assistant_review_payload_from_message(row)
-        if not payload or not _is_saved_for_sam_review(payload):
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        payload["acknowledged"] = {
-            "at": _now_iso(),
-            "by": ctx.get("display_name") or "User",
-            "principal_id": ctx.get("principal_id"),
-        }
-        row.content = _CENA_REVIEW_PAYLOAD_PREFIX + json.dumps(
-            payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        )
-        db.add(row)
-        db.commit()
-        item = _assistant_review_item(row)
-        return jsonify({"ok": True, "item": item})
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
-
-
-_L3_DATA_QUESTION_RE = re.compile(
-    r"\b(sales|net|gross|revenue|orders?|catering|labor|hours?|overtime|\bot\b|"
-    r"avg|average|check|covers?|drivers?|deliver\w*|items?|sold|menu|store|"
-    r"copperfield|tomball|week|weekly|day|daypart|month|april|may|march|june|"
-    r"anomal\w*|trend|compare|comparison|why|how many|how much|busiest|slowest|"
-    r"top|best|worst|highest|lowest|splh|prime cost|spend)\b",
-    re.IGNORECASE,
-)
-
-
-def _l3_investigation_answer(question: str) -> dict[str, Any] | None:
-    """Local/dev L3 path: investigate a data question that matched no tool.
-    Defensive - any failure returns None so the conversational fallback runs."""
-    if not _L3_DATA_QUESTION_RE.search(question or ""):
-        return None
-    try:
-        from app.services.cena_sql_orchestrator import answer_question
-
-        res = answer_question(question)
-    except Exception:  # noqa: BLE001
-        log.exception("assistant: L3 investigation failed")
-        return None
-    if not isinstance(res, dict) or not res.get("ok") or not str(res.get("answer", "")).strip():
-        return None
-    return res
-
-
-@assistant_bp.route("/assistant/ask", methods=["POST"])
-def assistant_ask():
-    ctx = _principal_context()
-
-    body = request.get_json(silent=True) or {}
-    question = str(body.get("question") or "").strip()[:_MAX_QUESTION_CHARS]
-    asked_at = _now_iso()
-    if not question:
-        return _assistant_json_response(
-            ctx,
-            question,
-            {"ok": False, "error": "question required"},
-            400,
-            asked_at=asked_at,
-        )
-    previous_question = _previous_question_from_body(body, question)
-    previous_answer = str(body.get("previous_answer") or "").strip()[:_MAX_QUESTION_CHARS]
-    safety_question = _resolved_question(question, previous_question)
-
-    def respond(data: dict[str, Any], status: int = 200):
-        return _assistant_json_response(
-            ctx,
-            question,
-            data,
-            status,
-            previous_question,
-            previous_answer,
-            asked_at,
-        )
-
-    if not _assistant_enabled():
-        return respond({"ok": False, "error": "assistant_disabled"}, 503)
-
-    if not _assistant_available_for_context(ctx):
-        return respond({"ok": False, "error": "assistant_unavailable"}, 503)
-
-    runtime_response = _post_to_ck_runtime(question, ctx, previous_question, previous_answer)
-    if runtime_response is not None:
-        data, status = runtime_response
-        return respond(data, status)
-
-    if os.getenv("RENDER") and not _env_truthy("AI_ASSISTANT_ALLOW_RENDER_MODELS"):
-        return respond({"ok": False, "error": "ck_runtime_required"}, 503)
-
-    should_queue, reason, required = _should_queue(safety_question, ctx)
-    if should_queue:
-        # L3: authorized data question with no approved tool -> investigate, don't queue.
-        if reason in ("data_question_needs_approved_tool",
-                      "sensitive_or_operational_question_needs_approved_tool"):
-            investigation = _l3_investigation_answer(safety_question)
-            if investigation is not None:
-                return respond({
-                    "ok": True,
-                    "answer": investigation["answer"],
-                    "queued": False,
-                    "confidence": investigation.get("confidence"),
-                    "confidence_reason": investigation.get("confidence_reason"),
-                    "show_work": investigation.get("show_work"),
-                    "trace": investigation.get("trace"),
-                    "route_path": "investigation",
-                    "routed_tool_id": None,
+            try:
+                stat = entry.stat()
+                rel_path = entry.relative_to(workspace_path).as_posix()
+                file_list.append({
+                    "path": rel_path,
+                    "size": stat.st_size,
+                    "mtime": int(stat.st_mtime * 1000)
                 })
-        row = _queue_for_review(question, ctx, reason, required)
-        answer = _queued_answer(reason)
-        response = {
-            "ok": True,
-            "answer": answer,
-            "queued": True,
-            "queue_id": row["id"],
-            "storage": row.get("storage"),
-            "ck_question_id": row.get("ck_question_id"),
-            "reason": reason,
-            "route_path": "review",
-            "routed_tool_id": None,
-        }
-        return respond(response)
+            except Exception:
+                pass
+    return file_list
 
-    # L3: no deterministic tool matched; investigate a data question directly.
-    # (Production routes through the CK runtime above; this is the local/dev path.)
-    investigation = _l3_investigation_answer(safety_question)
-    if investigation is not None:
-        return respond({
-            "ok": True,
-            "answer": investigation["answer"],
-            "queued": False,
-            "confidence": investigation.get("confidence"),
-            "confidence_reason": investigation.get("confidence_reason"),
-            "show_work": investigation.get("show_work"),
-            "trace": investigation.get("trace"),
-            "route_path": "investigation",
-            "routed_tool_id": None,
-        })
+# Tool Python Functions for Gemini to call
+def list_files_tool() -> list[dict]:
+    """
+    Lists all files recursively inside the active workspace directory, ignoring node_modules, .git, and cache folders.
+    """
+    files = []
+    list_files_recursive(workspace_path, files)
+    return files
 
+def read_file_tool(filePath: str) -> str:
+    """
+    Reads and returns the text contents of a file in the workspace.
+    
+    Args:
+        filePath: The relative path of the file to read (e.g. "index.html" or "src/app.js").
+    """
+    resolved = safe_resolve(filePath)
+    if not resolved.exists() or not resolved.is_file():
+        raise FileNotFoundError(f"File not found: {filePath}")
+    return resolved.read_text(encoding="utf-8")
+
+def write_file_tool(filePath: str, content: str) -> str:
+    """
+    Creates a new file or overwrites an existing file with the provided text content.
+    
+    Args:
+        filePath: The relative path of the file to write.
+        content: The text content to be written.
+    """
+    resolved = safe_resolve(filePath)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text(content, encoding="utf-8")
+    return f"Successfully wrote {len(content)} characters to {filePath}"
+
+def query_sales_db_tool(sqlQuery: str) -> list[dict]:
+    """
+    Runs an SQL SELECT query against the local SQLite restaurant sales database containing Toast check and order details.
+    Tables: toast_check_current, toast_order_current, toast_selection_current.
+    Also has toastdm database attached as toastdm containing: toastdm.dm_profile, toastdm.dm_time_entry, toastdm.dm_schedule.
+    Also has toast database attached as toast_labor containing raw labor.
+    store_key can be 'copperfield' or 'tomball'.
+    business_date is stored as 'YYYYMMDD' string.
+    Use clean local time conversion: time(replace(opened_date, '+0000', 'Z'), 'localtime').
+    
+    Args:
+        sqlQuery: The SQL SELECT query to run.
+    """
+    toast_webhook_db = os.getenv("TOAST_WEBHOOK_DB") or r"C:\Users\sam\cena-ai-assistant\toast_webhook\toast_webhook.sqlite"
+    is_render = os.getenv("RENDER") == "true"
+    
+    if is_render or not os.path.exists(toast_webhook_db):
+        import urllib.request
+        import urllib.error
+        import base64
+        import json
+        
+        cloud_url = os.getenv("AI_ASSISTANT_CK_RUNTIME_URL") or "https://cena-cloud.onrender.com"
+        cloud_token = os.getenv("AI_ASSISTANT_CK_RUNTIME_TOKEN") or os.getenv("CENA_CLOUD_TOKEN") or ""
+        
+        if "/assistant/answer" in cloud_url:
+            base_url = cloud_url.split("/assistant/answer")[0]
+        else:
+            base_url = cloud_url.rstrip("/")
+            
+        endpoint = base_url + "/sync/query_db"
+        
+        payload = json.dumps({"sqlQuery": sqlQuery}).encode("utf-8")
+        req = urllib.request.Request(endpoint, data=payload, method="POST")
+        req.add_header("Content-Type", "application/json")
+        
+        auth_str = f"sam:{cloud_token}"
+        encoded_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
+        req.add_header("Authorization", f"Basic {encoded_auth}")
+        
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data.get("success"):
+                    return data.get("results") or []
+                else:
+                    raise Exception(data.get("error") or "Unknown error from cloud DB proxy")
+        except urllib.error.HTTPError as exc:
+            try:
+                err_content = exc.read().decode("utf-8")
+                err_data = json.loads(err_content)
+                err_msg = err_data.get("error") or str(exc)
+            except Exception:
+                err_msg = str(exc)
+            raise Exception(f"Cloud DB proxy HTTP error {exc.code}: {err_msg}")
+        except Exception as exc:
+            raise Exception(f"Cloud DB proxy connection failed: {exc}")
+
+    cena_l3_data_dir = os.getenv("CENA_L3_DATA_DIR") or r"C:\Users\sam\cena-l3data"
+    snapshots_dir = Path(cena_l3_data_dir) / "snapshots"
+    
+    toastdm_db = snapshots_dir / "toastdm.sqlite"
+    toast_db = snapshots_dir / "toast.sqlite"
+    
+    # Open SQLite read-only connection
+    db_uri = f"file:{Path(toast_webhook_db).resolve().as_posix()}?mode=ro"
+    conn = sqlite3.connect(db_uri, uri=True)
+    conn.row_factory = sqlite3.Row
     try:
-        answer, model = _gemini_answer(question, ctx)
-    except Exception:
-        log.exception("assistant gemini answer failed")
-        answer = None
-        model = None
+        # Attach snapshot databases read-only
+        if toastdm_db.exists():
+            tdm_uri = f"file:{toastdm_db.resolve().as_posix()}?mode=ro"
+            conn.execute(f"ATTACH DATABASE '{tdm_uri}' AS toastdm")
+        if toast_db.exists():
+            tst_uri = f"file:{toast_db.resolve().as_posix()}?mode=ro"
+            conn.execute(f"ATTACH DATABASE '{tst_uri}' AS toast_labor")
+            
+        cursor = conn.cursor()
+        cursor.execute(sqlQuery)
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
-    if not answer:
-        row = _queue_for_review(question, ctx, "model_unavailable_or_no_answer", None)
-        return respond({
-            "ok": True,
-            "answer": "I saved that for Sam review. The assistant model is not available right now.",
-            "queued": True,
-            "queue_id": row["id"],
-            "storage": row.get("storage"),
-            "ck_question_id": row.get("ck_question_id"),
-            "reason": "model_unavailable_or_no_answer",
-            "route_path": "review",
-            "routed_tool_id": None,
-        })
+# Flask API Web Routes
+@assistant_bp.route("/assistant", methods=["GET"])
+@partner_required
+def assistant_page():
+    g.current_store = "partner"
+    g.store_label = "Partner"
+    g.current_location = "both"
+    return render_template(
+        "assistant_page.html",
+        active="assistant_page",
+        page_title="Cenas AI",
+    )
 
-    return respond({
-        "ok": True,
-        "answer": answer,
-        "queued": False,
-        "model": model,
-        "route_path": "general",
-        "routed_tool_id": None,
-    })
+@assistant_bp.route("/api/ide/files", methods=["GET"])
+@partner_required
+def api_list_files():
+    try:
+        files = []
+        list_files_recursive(workspace_path, files)
+        return jsonify({"success": True, "files": files})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
+@assistant_bp.route("/api/ide/file-content", methods=["GET"])
+@partner_required
+def api_file_content():
+    relative_path = request.args.get("path")
+    if not relative_path:
+        return jsonify({"success": False, "error": "Path is required"}), 400
+    try:
+        content = read_file_tool(relative_path)
+        return jsonify({"success": True, "content": content})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
-@assistant_bp.route("/cron/assistant-questions-export", methods=["GET"])
-def assistant_questions_export():
-    expected = os.getenv("AI_ASSISTANT_EXPORT_TOKEN")
-    if not expected or _extract_token() != expected:
-        return jsonify({"ok": False, "error": "forbidden"}), 403
+@assistant_bp.route("/api/ide/save-file", methods=["POST"])
+@partner_required
+def api_save_file():
+    body = request.get_json(silent=True) or {}
+    relative_path = body.get("path")
+    content = body.get("content")
+    if not relative_path or content is None:
+        return jsonify({"success": False, "error": "Path and content are required"}), 400
+    try:
+        msg = write_file_tool(relative_path, content)
+        return jsonify({"success": True, "message": msg})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
-    path = _queue_path()
-    rows: list[dict[str, Any]] = []
-    if path.exists():
-        with path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
+@assistant_bp.route("/api/ide/chat", methods=["POST"])
+@partner_required
+def api_ide_chat():
+    body = request.get_json(silent=True) or {}
+    message = body.get("message")
+    history = body.get("history") or []
+    apiKey = body.get("apiKey")
+    
+    # Resolve API Key
+    resolved_key = apiKey or os.getenv("GEMINI_API_KEY")
+    if not resolved_key:
+        return jsonify({
+            "success": False,
+            "error": "Gemini API Key is missing. Please configure it in Settings or the server environment."
+        }), 400
+        
+    try:
+        # Initialize Google GenAI client
+        client = genai.Client(api_key=resolved_key)
+        
+        # System Instructions
+        system_instruction = """You are a powerful, intelligent software developer assistant named "IDE Bot" created to manage, build, and debug applications. 
+Your company is Cena's Kitchen (formerly Aguirre's Tex-Mex), website: https://cenaskitchen.com, app: https://app.cenaskitchen.com.
+Here is key company information you MUST know and can speak about:
+- Cuisine: Authentic Tex-Mex (fajitas, enchiladas, tacos, tostadas, house-made sauces)
+- Locations: [{"city":"Houston","address":"15650 Farm to Market Road 529, Houston, TX 77095","phone":"(281) 815-3294"},{"city":"Tomball","address":"27727 Tomball Parkway, Tomball, TX 77377","phone":"(281) 255-0012"}]
+- Settings: Edison-style lighting, festive atmosphere, Frida Kahlo inspired decorations
+- App Features: ["Driver sign in and sign up","Real-time delivery tracking","Order dispatching and routing","Phone-based authentication flow"]
+- Operational Summary: Cena's Kitchen serves high-quality Tex-Mex food in the Greater Houston and Tomball areas. They leverage technology through cenaskitchen.com (ordering and marketing) and app.cenaskitchen.com (their driver portal) to run efficient food delivery operations and provide a seamless customer experience.
+
+Sales Database Details (toast_webhook.sqlite):
+- Business Week: Cena's Kitchen's business week starts on Sunday and ends on Saturday. Therefore, from the perspective of current time (Sunday, June 14, 2026), "last week" is Sunday, June 7, 2026 to Saturday, June 13, 2026 (inclusive). Keep this week boundary in mind for all weekly calculations.
+- You have a SQLite database containing real POS transaction data for Cena's Kitchen.
+- The locations are identified by the 'store_key' field: 'copperfield' and 'tomball'.
+- Dates are stored in YYYYMMDD string format (e.g. '20260605' for June 5, 2026) in the 'business_date' field.
+- The principal table for sales is 'toast_check_current'. Schema:
+  - check_guid (TEXT PRIMARY KEY)
+  - order_guid (TEXT)
+  - store_key (TEXT) - 'copperfield' or 'tomball'
+  - business_date (TEXT, YYYYMMDD format)
+  - amount (REAL) - net sales amount for this check
+  - total_amount (REAL) - gross sales amount for this check
+  - tax_amount (REAL)
+  - opened_date (TEXT, ISO timestamp)
+  - closed_date (TEXT, ISO timestamp)
+  - paid_date (TEXT, ISO timestamp)
+  - voided (INTEGER) - 1 if voided, 0 otherwise
+  - deleted (INTEGER) - 1 if deleted, 0 otherwise
+- To calculate check counts, use: COUNT(check_guid)
+- To calculate total net sales, use: SUM(amount) where voided = 0 AND deleted = 0
+- To calculate total gross sales, use: SUM(total_amount) where voided = 0 AND deleted = 0
+- To calculate average check, use: AVG(total_amount) or AVG(amount)
+- IMPORTANT: Time fields (opened_date, closed_date, paid_date) are stored in UTC format with a '+0000' offset suffix (e.g., '2026-06-05T16:09:43.351+0000').
+- Because SQLite's built-in date/time functions do NOT recognize '+0000' as a valid timezone format, they will return NULL when parsing these fields directly.
+- You MUST clean the timezone format in your queries by replacing '+0000' with 'Z' (e.g., replace(opened_date, '+0000', 'Z')).
+- The restaurant operates in Houston (local time: America/Chicago, which is UTC-5 hours for CDT and UTC-6 hours for CST).
+- To query or group by local time (e.g., local hours for lunch/dinner dayparts), you MUST convert the cleaned UTC timestamp to local time using the 'localtime' modifier:
+  - Extract local time string: time(replace(opened_date, '+0000', 'Z'), 'localtime')
+  - Lunch daypart checks (local time before 16:00:00): time(replace(opened_date, '+0000', 'Z'), 'localtime') < '16:00:00'
+  - Dinner daypart checks (local time between 16:00:00 and 22:00:00): time(replace(opened_date, '+0000', 'Z'), 'localtime') >= '16:00:00' AND time(replace(opened_date, '+0000', 'Z'), 'localtime') < '22:00:00'
+- Table 'toast_order_current' contains order headers. Schema:
+  - order_guid (TEXT PRIMARY KEY)
+  - store_key (TEXT)
+  - business_date (TEXT)
+  - server_toast_guid (TEXT) - unique Toast GUID of the server
+- Table 'employee_toast_identity_map' maps Toast server GUIDs to corporate employee IDs. Schema:
+  - toast_employee_guid (TEXT) - unique Toast server GUID (matches server_toast_guid)
+  - cena_employee_id (INTEGER) - corporate employee ID (matches toastdm.dm_profile.cena_employee_id)
+- Table 'toast_selection_current' contains items ordered. Schema:
+  - selection_guid (TEXT PRIMARY KEY)
+  - check_guid (TEXT)
+  - order_guid (TEXT)
+  - store_key (TEXT)
+  - business_date (TEXT)
+  - display_name (TEXT) - menu item name
+  - quantity (REAL)
+  - price (REAL)
+  - voided (INTEGER)
+  
+Labor & Shift Database Details (Attached as toastdm):
+- In addition to sales, you have a labor and shift database attached as 'toastdm' containing employee profiles, shifts, and schedules.
+- Table 'toastdm.dm_profile' contains employee profile info. Schema:
+  - cena_employee_id (INTEGER PRIMARY KEY)
+  - full_name (TEXT)
+  - active (INTEGER) - 1 if active, 0 otherwise
+  - primary_store_key (TEXT) - 'copperfield' or 'tomball'
+  - positions_json (TEXT, JSON array of canonical position names, e.g. '["Server"]', '["Cook"]')
+- Table 'toastdm.dm_time_entry' contains clock-in / clock-out hours and earnings. Schema:
+  - cena_employee_id (INTEGER)
+  - store_key (TEXT) - 'copperfield' or 'tomball'
+  - business_date (TEXT, YYYY-MM-DD format with hyphens!)
+  - clock_in (TEXT, ISO timestamp)
+  - clock_out (TEXT, ISO timestamp)
+  - reg_hours (REAL) - regular hours worked
+  - ot_hours (REAL) - overtime hours worked
+  - total_hours (REAL) - reg_hours + ot_hours
+  - base_pay (REAL) - actual labor cost (hourly_rate * reg_hours + hourly_rate * 1.5 * ot_hours)
+  - tips (REAL)
+- Table 'toastdm.dm_schedule' contains scheduled hours. Schema:
+  - cena_employee_id (INTEGER)
+  - shift_uid (TEXT)
+  - store_key (TEXT) - 'copperfield' or 'tomball'
+  - position_name (TEXT) - position name, e.g. 'Cook', 'Host', 'Cashier', 'Server', 'Busser', 'Bartender', 'Well', 'Prep', 'Expo', 'KM'
+  - start_at (TEXT, ISO timestamp)
+  - end_at (TEXT, ISO timestamp)
+  - status (TEXT) - 'assigned' or 'open'
+
+Common labor query formulations:
+- To compare sales and labor by date, convert the format (e.g. replace(t.business_date, '-', '') to match YYYYMMDD sales date).
+- Labor cost: SUM(base_pay) in toastdm.dm_time_entry
+- Labor hours: SUM(total_hours) in toastdm.dm_time_entry
+- Labor cost percentage: SUM(base_pay) from toastdm.dm_time_entry / SUM(amount) from toast_check_current * 100.0 (where voided=0 and deleted=0)
+- Sales Per Labor Hour (SPLH): SUM(amount) from toast_check_current / SUM(total_hours) from toastdm.dm_time_entry
+- BOH labor: Positions matching 'Cook', 'Prep', 'KM', 'Dish', 'Chop', 'Enchilada', 'Kitchen', 'Chef'
+- FOH labor: Positions matching 'Server', 'Host', 'Cashier', 'Bartender', 'Well', 'Busser', 'Expo', 'Manager'
+- Overtime checks: If SUM(ot_hours) > 0, overtime was run.
+- Scheduled hours: SUM((strftime('%s', end_at) - strftime('%s', start_at)) / 3600.0) from toastdm.dm_schedule where status = 'assigned'
+- To rank servers by net sales performance on a specific date, write an SQL query joining toast_check_current (c), toast_order_current (o), employee_toast_identity_map (m), and toastdm.dm_profile (p) on c.order_guid = o.order_guid, o.server_toast_guid = m.toast_employee_guid, and m.cena_employee_id = p.cena_employee_id. Group by p.full_name and order by net_sales desc.
+- Shift definitions for servers/staff:
+  - "tonight's shift", "tonight", or "PM shift" without a specified date refers to the night shift on the CURRENT date (Sunday, June 14, 2026).
+  - If referencing a past date (e.g. June 10th), "night shift", "PM shift", or "that night" refers to the PM shift on that specific past date.
+  - "night shift" or "PM shift" refers to employees whose scheduled hours fall within the 2:00 PM to 11:00 PM window (specifically: time(s.start_at) >= '14:00:00' AND time(s.end_at) <= '23:00:00' in toastdm.dm_schedule).
+  - "morning shift", "morning staff", or "AM shift" refers to employees whose scheduled hours fall within the 7:00 AM to 5:00 PM window (specifically: time(s.start_at) >= '07:00:00' AND time(s.end_at) <= '17:00:00' in toastdm.dm_schedule).
+  - To identify who is scheduled for a shift on a date and rank them, filter the employee list by joining with toastdm.dm_schedule (s) on s.cena_employee_id = p.cena_employee_id where position_name IN ('Server', 'Bartender') and start_at date matches the query date (e.g., substr(s.start_at, 1, 10) = 'YYYY-MM-DD'), and apply the shift boundaries.
+  - IMPORTANT performance ranking rules for tipped employees (Waiters/Servers and Bartenders): When asked who the "better", "best", "strongest", "weakest", or "worse" waiters (servers) or bartenders are (historically or for an active/today/tonight/future shift), their performance MUST be evaluated and ranked based on their historical credit card tips and transactions over the last 30 days (excluding today).
+    Evaluate them based on these metrics directly calculated from the transaction database:
+    1. Tip % (Primary Performance Indicator for "who is better"): calculated as: (SUM(pay.tip_amount) / SUM(pay.amount)) * 100.0 from toast_payment_current pay where pay.payment_type = 'CREDIT' AND pay.payment_status = 'CAPTURED'.
+    2. CC Tabs (Sales/Tab Volume): SUM(pay.amount) for CREDIT payments.
+    3. CC Tips (Total Tips): SUM(pay.tip_amount) for CREDIT payments.
+    4. Tickets (Ticket/Check Volume): COUNT(DISTINCT c.check_guid).
+    5. Avg Duration (Table turn time): AVG(strftime('%s', replace(c.closed_date, '+0000', 'Z')) - strftime('%s', replace(c.opened_date, '+0000', 'Z'))) / 60.0 in minutes.
+    - When asked to rank scheduled FOH tipped employees, write an SQL query to calculate these metrics over the last 30 days (excluding today) for each scheduled employee, present the results sorted by Tip % descending in a markdown table, and write a summary explaining who is performing better (higher tip percentage and/or volume) and who is not. Do not use today's partial sales.
+
+Rules of operation:
+1. You have tools to read, write, and list files in the local workspace directory.
+2. You have the 'query_sales_db_tool' tool to execute SQL queries on the real toast_webhook.sqlite database.
+3. If the user asks restaurant operations, sales, average checks, covers, or order volume questions, ALWAYS use the 'query_sales_db_tool' tool to fetch the exact numbers from the real POS SQLite database tables (toast_check_current, toast_order_current, etc.). Formulate clean SQL queries using store_key and business_date. Do not guess.
+4. If the user asks you to modify code, create files, or inspect files, ALWAYS use the appropriate tool: 'write_file_tool', 'read_file_tool', or 'list_files_tool'. Do not just say you will do it—DO IT.
+5. Be professional, clean, and write pristine, correct code. Avoid placeholders or unfinished code blocks.
+6. If asked about the company or the app (app.cenaskitchen.com), explain it clearly using the provided details.
+"""
+
+        # Format history
+        chat_history = []
+        for turn in history:
+            role = "model" if turn.get("role") == "assistant" else "user"
+            chat_history.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=turn.get("content", ""))]
+                )
+            )
+            
+        contents = list(chat_history)
+        contents.append(
+            types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=message)]
+            )
+        )
+        
+        # Candidate models list
+        model_candidates = [
+            os.getenv("GEMINI_MODEL"),
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-pro",
+            "gemini-1.5-flash"
+        ]
+        model_candidates = [m for m in model_candidates if m]
+        
+        tools_list = [list_files_tool, read_file_tool, write_file_tool, query_sales_db_tool]
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            tools=tools_list,
+        )
+        
+        # Generation loop
+        success = False
+        last_error = None
+        response = None
+        model_used = None
+        
+        for candidate in model_candidates:
+            try:
+                logger.info(f"[IDE Bot] Generation attempt with {candidate}")
+                response = client.models.generate_content(
+                    model=candidate,
+                    contents=contents,
+                    config=config
+                )
+                model_used = candidate
+                success = True
+                break
+            except Exception as e:
+                logger.warning(f"[IDE Bot] Candidate {candidate} failed: {e}")
+                last_error = e
+                
+        if not success:
+            return jsonify({
+                "success": False,
+                "error": f"All candidate models failed. Last error: {str(last_error)}"
+            }), 500
+            
+        tools_executed = []
+        
+        # Tool Loop
+        while response.function_calls:
+            logger.info(f"[IDE Bot] Model {model_used} requested tool execution")
+            
+            # Save model call turn
+            contents.append(response.candidates[0].content)
+            
+            tool_parts = []
+            for call in response.function_calls:
+                name = call.name
+                args = call.args or {}
+                
+                success_run = True
+                outcome = None
                 try:
-                    rows.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-    return jsonify({"ok": True, "generated_at": _now_iso(), "rows": rows})
+                    if name == "list_files_tool":
+                        outcome = list_files_tool()
+                    elif name == "read_file_tool":
+                        outcome = read_file_tool(**args)
+                    elif name == "write_file_tool":
+                        outcome = write_file_tool(**args)
+                    elif name == "query_sales_db_tool":
+                        outcome = query_sales_db_tool(**args)
+                    else:
+                        raise ValueError(f"Unknown tool name: {name}")
+                except Exception as err:
+                    success_run = False
+                    outcome = str(err)
+                    
+                # Format for frontend logs
+                outcome_str = json.dumps(outcome)[:100] + "..." if isinstance(outcome, (dict, list)) else str(outcome)
+                tools_executed.append({
+                    "name": name.replace("_tool", ""),
+                    "args": args,
+                    "success": success_run,
+                    "outcome": outcome_str
+                })
+                
+                # Part response
+                part = types.Part.from_function_response(
+                    name=name,
+                    response={"result": outcome}
+                )
+                tool_parts.append(part)
+                
+            contents.append(types.Content(role="tool", parts=tool_parts))
+            
+            # Next turn
+            response = client.models.generate_content(
+                model=model_used,
+                contents=contents,
+                config=config
+            )
+            
+        return jsonify({
+            "success": True,
+            "text": response.text,
+            "toolsExecuted": tools_executed
+        })
+        
+    except Exception as e:
+        logger.error(f"[IDE Bot] Chat processing failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500

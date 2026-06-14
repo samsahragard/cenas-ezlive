@@ -298,7 +298,48 @@ class CenaCloudHandler(BaseHTTPRequestHandler):
             return self._sync_file_post()       # raw body, not JSON
         if route == "/sync/tombstone":
             return self._sync_tombstone()
+        if route == "/sync/query_db":
+            return self._sync_query_db()
         self._json({"ok": False, "error": "not_found"}, 404)
+
+    def _sync_query_db(self):
+        body = self._body()
+        sql = body.get("sqlQuery", "").strip()
+        if not sql:
+            return self._json({"success": False, "error": "missing sqlQuery"}, 400)
+
+        sql_upper = sql.upper().lstrip()
+        if not sql_upper.startswith("SELECT") and not sql_upper.startswith("WITH"):
+            return self._json({"success": False, "error": "Only SELECT or WITH queries are permitted"}, 400)
+
+        toast_webhook_db = os.path.join(CENA_CLOUD_ROOT, "toast_webhook.sqlite")
+        toastdm_db = os.path.join(CENA_CLOUD_ROOT, "toastdm.sqlite")
+        toast_db = os.path.join(CENA_CLOUD_ROOT, "toast.sqlite")
+
+        if not os.path.exists(toast_webhook_db):
+            return self._json({"success": False, "error": "Database toast_webhook.sqlite not found on cloud root"}, 404)
+
+        try:
+            db_uri = f"file:{os.path.abspath(toast_webhook_db).replace('\\', '/')}?mode=ro"
+            conn = sqlite3.connect(db_uri, uri=True)
+            conn.row_factory = sqlite3.Row
+            try:
+                if os.path.exists(toastdm_db):
+                    tdm_uri = f"file:{os.path.abspath(toastdm_db).replace('\\', '/')}?mode=ro"
+                    conn.execute(f"ATTACH DATABASE '{tdm_uri}' AS toastdm")
+                if os.path.exists(toast_db):
+                    tst_uri = f"file:{os.path.abspath(toast_db).replace('\\', '/')}?mode=ro"
+                    conn.execute(f"ATTACH DATABASE '{tst_uri}' AS toast_labor")
+
+                cursor = conn.cursor()
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+                results = [dict(r) for r in rows]
+                return self._json({"success": True, "results": results})
+            finally:
+                conn.close()
+        except Exception as e:
+            return self._json({"success": False, "error": str(e)}, 500)
 
     # -- sync endpoints -------------------------------------------------------
     def _sync_manifest(self):

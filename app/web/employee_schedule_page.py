@@ -68,6 +68,13 @@ def my_schedule_page():
         # Plain-string namespace (no detached ORM rows used after close).
         view = SimpleNamespace(first_name=first_name, full_name=full_name or None)
         shift_rows = employee_schedule_rows(db, emp_id)
+        # Time-off advance-notice cutoff (Sam 2026-06-13): the date picker blocks
+        # today..today+N so the employee can only request day N+1 onward.
+        from app.services import timeoff_policy
+        _pol = timeoff_policy.effective_for_employee(db, emp_id)
+        _earliest = timeoff_policy.earliest_allowed_start(_pol)
+        timeoff_min = _earliest.isoformat() if _earliest else None
+        timeoff_cutoff_days = _pol["cutoff_days"] if _pol["cutoff_enabled"] else 0
     finally:
         db.close()
 
@@ -94,6 +101,8 @@ def my_schedule_page():
         shifts=shift_rows,    # server-rendered this+next week (see employee_schedule_rows)
         active_section=section,
         config_json=json.dumps(config),
+        timeoff_min=timeoff_min,                # earliest requestable date (YYYY-MM-DD) or None
+        timeoff_cutoff_days=timeoff_cutoff_days,  # 0 = no cutoff
         dashboard_url="/employee/dashboard",
         login_url="/employee/login",
     )

@@ -344,6 +344,7 @@
     <a class="tws-tab"        href="?sub=market"   data-sub="market"   role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
     <a class="tws-tab"        href="?sub=link"     data-sub="link"     role="tab"><i class="ti ti-link"></i>Link</a>
     <a class="tws-tab"        href="?sub=schedule-reports" data-sub="schedule-reports" role="tab"><i class="ti ti-report-analytics"></i>Schedule Reports</a>
+    <a class="tws-tab"        href="?sub=settings" data-sub="settings" role="tab"><i class="ti ti-settings"></i>Settings</a>
   </div>
 
   {# ---- TEAM panel (the new roster; binds to aick's contract) ----
@@ -456,6 +457,49 @@
             data-src="{{ schedule_reports_url }}?embed=1"
             title="Schedule Reports"
             loading="lazy"></iframe>
+  </div>
+
+  {# ---- SETTINGS panel: time-off request policy (Sam 2026-06-13). Applies to
+       BOTH stores (one company policy). ---- #}
+  <style>
+    .tws-settings{ max-width:760px; }
+    .tws-set-row{ display:flex; align-items:center; justify-content:space-between; gap:24px;
+                  padding:18px 4px; border-bottom:1px solid var(--tws-line, rgba(255,255,255,.08)); }
+    .tws-set-title{ font-weight:700; color:var(--tws-cream, #f3e9d6); font-size:14px; }
+    .tws-set-desc{ color:var(--tws-cream-meta, #b9ad97); font-size:12.5px; margin-top:3px; max-width:520px; }
+    .tws-days{ display:flex; align-items:center; gap:8px; color:var(--tws-cream-meta,#b9ad97); font-size:13px; }
+    .tws-days input{ width:84px; text-align:right; background:rgba(0,0,0,.32); color:var(--tws-cream,#f3e9d6);
+                     border:1.5px solid rgba(217,164,54,.32); border-radius:8px; padding:9px 11px; font-family:inherit; font-size:14px; }
+    .tws-switch{ position:relative; display:inline-block; width:46px; height:26px; flex:0 0 auto; }
+    .tws-switch input{ opacity:0; width:0; height:0; }
+    .tws-slider{ position:absolute; inset:0; cursor:pointer; background:rgba(255,255,255,.18); border-radius:26px; transition:.18s; }
+    .tws-slider::before{ content:""; position:absolute; height:20px; width:20px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.18s; }
+    .tws-switch input:checked + .tws-slider{ background:var(--tws-gold-bright, #2f6df6); }
+    .tws-switch input:checked + .tws-slider::before{ transform:translateX(20px); }
+    .tws-set-actions{ display:flex; align-items:center; gap:14px; padding-top:20px; }
+    .tws-save-btn{ background:var(--tws-gold-bright,#d9a436); color:#1a1206; border:0; border-radius:9px;
+                   padding:10px 20px; font-weight:700; font-family:inherit; font-size:14px; cursor:pointer; }
+    .tws-set-status{ font-size:13px; font-weight:600; }
+  </style>
+  <div class="tws-panel" id="tws-panel-settings" data-sub-panel="settings" role="tabpanel">
+    <div class="tws-settings">
+      <div class="tws-set-row">
+        <div class="tws-set-text"><div class="tws-set-title">Approval</div><div class="tws-set-desc">Require manager approval of time off requests.</div></div>
+        <label class="tws-switch"><input type="checkbox" id="tws-set-approval"><span class="tws-slider"></span></label>
+      </div>
+      <div class="tws-set-row">
+        <div class="tws-set-text"><div class="tws-set-title">Cutoff time</div><div class="tws-set-desc">Time off requests must be submitted in advance.</div></div>
+        <label class="tws-switch"><input type="checkbox" id="tws-set-cutoff"><span class="tws-slider"></span></label>
+      </div>
+      <div class="tws-set-row" id="tws-set-days-row">
+        <div class="tws-set-text"><div class="tws-set-title">Number of days in advance</div><div class="tws-set-desc">Indicate how many days in advance time off requests must be submitted:</div></div>
+        <div class="tws-days"><input type="number" min="0" max="365" step="1" id="tws-set-days" value="14"> <span>Days</span></div>
+      </div>
+      <div class="tws-set-actions">
+        <button type="button" class="tws-save-btn" id="tws-set-save">Save settings</button>
+        <span class="tws-set-status" id="tws-set-status"></span>
+      </div>
+    </div>
   </div>
 
   {# Positions THIS manager may add -- server-sourced from addable_positions_for()
@@ -623,10 +667,43 @@
     else if (sub === "market") loadMarketFrames();        // S7: both stores' marketplace iframes
     else if (sub === "link") loadLink();             // Sam #2629
     else if (sub === "schedule-reports") loadFrame("schedule-reports");
+    else if (sub === "settings") loadTimeoffPolicy();
   }
   tabs.forEach(function (t) {
     t.addEventListener("click", function (e) { e.preventDefault(); show(t.getAttribute("data-sub")); });
   });
+
+  // ---- Time-off policy settings (Sam 2026-06-13). One company policy saved to
+  // BOTH stores; the cutoff blocks the employee's date picker for N days.
+  var TOP_STORES = ["/uno", "/dos"];
+  function _topEl(id){ return document.getElementById(id); }
+  function _topStatus(msg, ok){ var s=_topEl("tws-set-status"); if(s){ s.textContent=msg||""; s.style.color = ok===false ? "#e06666" : ok===true ? "#5bd6a0" : "var(--tws-cream-meta,#b9ad97)"; } }
+  function _topDaysRow(){ var on=_topEl("tws-set-cutoff") && _topEl("tws-set-cutoff").checked; var row=_topEl("tws-set-days-row"); if(row) row.style.opacity = on ? "1" : ".45"; var inp=_topEl("tws-set-days"); if(inp) inp.disabled = !on; }
+  function loadTimeoffPolicy(){
+    fetch("/uno/schedules-v2/time-off/policy", {credentials:"same-origin", headers:{Accept:"application/json"}})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ var p=(j&&j.policy)||{};
+        if(_topEl("tws-set-approval")) _topEl("tws-set-approval").checked = (p.require_approval !== false);
+        if(_topEl("tws-set-cutoff")) _topEl("tws-set-cutoff").checked = !!p.cutoff_enabled;
+        if(_topEl("tws-set-days")) _topEl("tws-set-days").value = (p.cutoff_days != null ? p.cutoff_days : 14);
+        _topDaysRow(); _topStatus("");
+      }).catch(function(){ _topStatus("Could not load settings.", false); });
+  }
+  function saveTimeoffPolicy(){
+    var body = {
+      require_approval: !!(_topEl("tws-set-approval") && _topEl("tws-set-approval").checked),
+      cutoff_enabled: !!(_topEl("tws-set-cutoff") && _topEl("tws-set-cutoff").checked),
+      cutoff_days: parseInt((_topEl("tws-set-days")||{}).value, 10) || 0
+    };
+    _topStatus("Saving…");
+    Promise.all(TOP_STORES.map(function(st){
+      return fetch(st + "/schedules-v2/time-off/policy", {method:"POST", credentials:"same-origin",
+        headers:{"Content-Type":"application/json", Accept:"application/json"}, body: JSON.stringify(body)})
+        .then(function(r){ return r.ok; }).catch(function(){ return false; });
+    })).then(function(res){ _topStatus(res.every(Boolean) ? "Saved." : "Save failed — try again.", res.every(Boolean)); });
+  }
+  if(_topEl("tws-set-cutoff")) _topEl("tws-set-cutoff").addEventListener("change", _topDaysRow);
+  if(_topEl("tws-set-save")) _topEl("tws-set-save").addEventListener("click", saveTimeoffPolicy);
   // nested Schedule sub-tabs [Week | Time off | Availability]
   var sub2tabs = root.querySelectorAll(".tws-subtab");
   sub2tabs.forEach(function (t) {

@@ -128,3 +128,44 @@ def sv2_time_off_approve(req_id):
 def sv2_time_off_deny(req_id):
     """Deny a pending (or reverse a previously-approved) request. Cancelled -> 409."""
     return _review(req_id, "denied", allowed_from=("pending", "approved"))
+
+
+# ---------------------------------------------------------------------------
+# Time-off POLICY (Sam 2026-06-13): the Operations -> Team -> Settings tab.
+# Approval-required + an N-days-in-advance cutoff, set per store.
+# ---------------------------------------------------------------------------
+@store_bp.route("/schedules-v2/time-off/policy", methods=["GET"])
+@require_level(_MGR)
+def sv2_time_off_policy_get():
+    """This store's time-off policy (defaults if never set)."""
+    from app.services import timeoff_policy
+    db = SessionLocal()
+    try:
+        return jsonify({"ok": True, "policy": timeoff_policy.get_policy(db, _store())}), 200
+    finally:
+        db.close()
+
+
+@store_bp.route("/schedules-v2/time-off/policy", methods=["POST"])
+@require_level(_MGR)
+def sv2_time_off_policy_set():
+    """Save this store's time-off policy:
+    {require_approval: bool, cutoff_enabled: bool, cutoff_days: int}."""
+    from app.services import timeoff_policy
+    data = request.get_json(silent=True) or {}
+    try:
+        cutoff_days = int(data.get("cutoff_days", 14))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "cutoff_days must be a whole number"}), 400
+    if cutoff_days < 0 or cutoff_days > 365:
+        return jsonify({"ok": False, "error": "cutoff_days must be 0-365"}), 400
+    db = SessionLocal()
+    try:
+        pol = timeoff_policy.set_policy(
+            db, _store(),
+            require_approval=bool(data.get("require_approval", True)),
+            cutoff_enabled=bool(data.get("cutoff_enabled", False)),
+            cutoff_days=cutoff_days)
+        return jsonify({"ok": True, "policy": pol}), 200
+    finally:
+        db.close()

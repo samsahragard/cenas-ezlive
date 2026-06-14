@@ -87,6 +87,19 @@ def emp_time_off_request():
     now = datetime.utcnow()
     db = SessionLocal()
     try:
+        # Advance-notice CUTOFF (Sam 2026-06-13): if the manager turned it on,
+        # the requested START must be >= today + cutoff_days. Enforced server-side
+        # (fail-closed) so it holds even if the client date-min is bypassed; the
+        # employee's effective policy is the most restrictive across their stores.
+        from app.services import timeoff_policy
+        policy = timeoff_policy.effective_for_employee(db, emp_id)
+        earliest = timeoff_policy.earliest_allowed_start(policy)  # store-local base
+        if earliest is not None and start < earliest:
+            return jsonify({"ok": False,
+                            "error": "Time off must be requested at least %d days in advance — "
+                                     "the earliest date you can request off is %s."
+                                     % (policy["cutoff_days"], earliest.isoformat())}), 400
+
         # reject overlap with an existing own pending/approved request (two ranges
         # overlap iff start <= other.end AND end >= other.start)
         clash = (db.query(TimeOffRequest)
@@ -100,8 +113,10 @@ def emp_time_off_request():
                             "error": "overlaps an existing %s request (%s to %s)"
                                      % (clash.status, clash.start_date.isoformat(),
                                         clash.end_date.isoformat())}), 409
+        # Approval policy: auto-approve when the manager doesn't require review.
+        new_status = "pending" if policy["require_approval"] else "approved"
         r = TimeOffRequest(employee_id=emp_id, start_date=start, end_date=end,
-                           reason=reason, status="pending",
+                           reason=reason, status=new_status,
                            created_at=now, updated_at=now)
         db.add(r)
         db.commit()

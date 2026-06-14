@@ -3619,6 +3619,27 @@ class TimeOffRequest(Base):
     )
 
 
+class TimeOffPolicy(Base):
+    """Per-store time-off request policy a manager sets in Operations -> Team ->
+    Settings (Sam 2026-06-13). require_approval: requests need a manager OK
+    (else auto-approved). cutoff_enabled + cutoff_days: requests must be
+    submitted at least N days in advance, so the employee's date picker blocks
+    today..today+N and only allows day N+1 onward. One row per store_key;
+    absence = defaults below. A NEW table (Base.metadata.create_all creates it
+    on boot -- no ALTER needed)."""
+
+    __tablename__ = "time_off_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    store_key: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    require_approval: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    cutoff_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    cutoff_days: Mapped[int] = mapped_column(Integer, default=14, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
 class EmployeeAvailability(Base):
     """Schedules V2 B8: an employee's recurring weekly AVAILABLE window (they
     declare when they CAN work). One employee has many (per weekday + window).

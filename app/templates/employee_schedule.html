@@ -82,13 +82,18 @@
 <section id="cf-pane-timeoff" data-pane="timeoff"{% if active_section != 'timeoff' %} hidden{% endif %}>
   <form class="cf-form" id="cf-timeoff" novalidate>
     <div class="cf-eyebrow" style="margin-top:0;">Request days off</div>
+    {% if timeoff_min %}
+    <div class="cf-faint" id="cf-timeoff-cutoff" style="color:var(--cf-faint);font-size:12px;margin-bottom:10px;">
+      Time off must be requested <strong style="color:#fff;">{{ timeoff_cutoff_days }} days</strong> in advance. The earliest date you can request off is <strong style="color:#fff;">{{ timeoff_min }}</strong>.
+    </div>
+    {% endif %}
     <label>
       <span>Start date</span>
-      <input type="date" name="start" id="cf-start" required />
+      <input type="date" name="start" id="cf-start" required {% if timeoff_min %}min="{{ timeoff_min }}"{% endif %} />
     </label>
     <label>
       <span>End date</span>
-      <input type="date" name="end" id="cf-end" required />
+      <input type="date" name="end" id="cf-end" required {% if timeoff_min %}min="{{ timeoff_min }}"{% endif %} />
     </label>
     <label>
       <span>Reason <span class="cf-req-note">(REQUIRED &mdash; if there is no clear reason placed, then it's not a request anymore, it's a demand)</span></span>
@@ -251,6 +256,11 @@
       err.hidden = true; ok.hidden = true;
       if(!start || !end){ err.textContent='Start and end dates are required.'; err.hidden=false; return; }
       if(end < start){ err.textContent='End date cannot be before start date.'; err.hidden=false; return; }
+      var minDate = ($('cf-start') && $('cf-start').getAttribute('min')) || '';
+      if(minDate && start < minDate){
+        err.textContent = 'The earliest date you can request off is ' + minDate + ' (advance-notice cutoff).';
+        err.hidden = false; return;
+      }
       if(reason.length < REASON_MIN){
         err.textContent = 'A clear reason is required — at least ' + REASON_MIN + ' characters (' + reason.length + '/' + REASON_MIN + ').';
         err.hidden = false; if(reasonEl) reasonEl.focus(); return;

@@ -498,7 +498,7 @@
   right: 0;
   bottom: 0;
   z-index: 100;
-  padding: 7px 8px max(10px, env(safe-area-inset-bottom));
+  padding: 7px 5px max(10px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--cc-border);
   background: rgba(5, 6, 10, .92);
   backdrop-filter: blur(18px);
@@ -509,8 +509,9 @@
   width: min(100%, 760px);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  /* one row for all SIX tabs (today/tables/shifts/inbox/you/sports) */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 3px;
 }
 
 .cc-tab {

@@ -35,38 +35,75 @@
   .mk-card .sub{ color:var(--cf-faint); font-size:12px; margin-top:2px; }
   .mk-bounty{ color:#5bd6a0; font-weight:800; font-size:13px; }
   .mk-muted{ color:var(--cf-faint); font-size:13px; padding:18px 0; text-align:center; }
+
+  /* My shifts: roomy cards (Sam 2026-06-13 redesign) */
+  .sh-list{ display:flex; flex-direction:column; gap:14px; }
+  .sh-card{ position:relative; background:rgba(255,255,255,.025);
+            border:1px solid var(--cc-border,rgba(255,255,255,.085));
+            border-radius:16px; padding:18px 18px 16px; }
+  .sh-card-live{ border-left:3px solid var(--cc-heat,#ff6a3d); }
+  .sh-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; }
+  .sh-when{ min-width:0; }
+  .sh-date{ color:var(--cc-txt,#eef1f6); font-weight:800; font-size:18px; line-height:1.2; }
+  .sh-time{ color:var(--cc-txt2,#97a1b2); font-size:13.5px; margin-top:5px; }
+  .sh-badges{ display:flex; flex-direction:column; align-items:flex-end; gap:7px; flex:0 0 auto; }
+  .sh-pill{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+            color:var(--cc-txt2,#97a1b2); background:rgba(255,255,255,.06);
+            border:1px solid var(--cc-border,rgba(255,255,255,.085));
+            border-radius:999px; padding:5px 12px; white-space:nowrap; }
+  .sh-pill-live{ color:var(--cc-heat,#ff6a3d); background:rgba(255,106,61,.10); border-color:rgba(255,106,61,.38); }
+  .sh-divider{ border-top:1px dashed rgba(255,255,255,.14); margin:15px 0 12px; }
+  .sh-action{ display:flex; justify-content:flex-end; align-items:center; gap:14px; min-height:20px; }
+  .sh-note{ color:var(--cc-txt3,#5b6576); font-size:12.5px; }
+  .sh-link{ background:none; border:0; padding:0; cursor:pointer; font-family:inherit;
+            color:var(--cc-heat,#ff6a3d); font-weight:700; font-size:13.5px; text-decoration:underline; }
+  .sh-form{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:14px; }
+  .sh-form input{ flex:1 1 170px; min-width:150px; background:rgba(0,0,0,.34); color:var(--cc-txt,#eef1f6);
+                  border:1.5px solid var(--cc-border,rgba(255,255,255,.085)); border-radius:12px;
+                  padding:12px 14px; font-size:14px; font-family:inherit; }
+  .sh-post{ background:var(--cc-heat,#ff6a3d); color:#1c0f07; border:0; border-radius:12px;
+            padding:12px 20px; font-weight:800; font-size:14px; cursor:pointer; font-family:inherit; white-space:nowrap; }
 </style>
 
 <section id="cf-pane-shifts" data-pane="shifts"{% if active_section != 'shifts' %} hidden{% endif %}>
   {% if shifts %}
-    <div class="cf-block">
+    <div class="sh-list">
       {% for shift in shifts %}
-        <div class="cf-bigrow" style="flex-wrap:wrap;">
-          <span>
-            <strong style="display:block;color:var(--cf-text);font-weight:800;">{{ shift.date_label or 'Scheduled' }}</strong>
-            <small style="color:var(--cf-faint);font-size:11px;">{{ shift.time_label or '' }}{% if shift.position_name %} &middot; {{ shift.position_name }}{% endif %}</small>
-          </span>
-          <span class="mk-actions">
-            <strong>{{ shift.status_label or shift.response or 'assigned' }}</strong>
+        <div class="sh-card{% if shift.offer_status %} sh-card-live{% endif %}">
+          <div class="sh-top">
+            <div class="sh-when">
+              <div class="sh-date">{{ shift.date_label or 'Scheduled' }}</div>
+              <div class="sh-time">{{ shift.time_label or '' }}{% if shift.position_name %} &middot; {{ shift.position_name }}{% endif %}</div>
+            </div>
+            <div class="sh-badges">
+              <span class="sh-pill">&bull; {{ shift.status_label or shift.response or 'Assigned' }}</span>
+              {% if shift.offer_status == 'open' %}
+                <span class="sh-pill sh-pill-live">On market{% if shift.incentive %} &middot; +${{ '%.0f'|format(shift.incentive) }}{% endif %}</span>
+              {% elif shift.offer_status == 'taken' %}
+                <span class="sh-pill sh-pill-live">Picked up{% if shift.incentive %} &middot; +${{ '%.0f'|format(shift.incentive) }}{% endif %}</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="sh-divider"></div>
+          <div class="sh-action">
             {% if shift.offer_status == 'open' %}
-              <span class="mk-state">On the market{% if shift.incentive %} &middot; +${{ '%.2f'|format(shift.incentive) }}{% endif %}</span>
-              <button type="button" class="mk-link" data-cancel-offer="{{ shift.offer_id }}">cancel offer</button>
+              <button type="button" class="sh-link" data-cancel-offer="{{ shift.offer_id }}">cancel offer</button>
             {% elif shift.offer_status == 'taken' %}
-              <span class="mk-state">Picked up &middot; pending approval{% if shift.incentive %} &middot; +${{ '%.2f'|format(shift.incentive) }}{% endif %}</span>
-              <button type="button" class="mk-link" data-cancel-offer="{{ shift.offer_id }}">cancel</button>
+              <span class="sh-note">pending manager approval</span>
+              <button type="button" class="sh-link" data-cancel-offer="{{ shift.offer_id }}">cancel</button>
             {% elif shift.shift_id %}
-              <button type="button" class="mk-link" data-release="{{ shift.shift_id }}">release / offer $</button>
+              <button type="button" class="sh-link" data-release="{{ shift.shift_id }}">release / offer $</button>
             {% endif %}
-          </span>
+          </div>
+          {% if shift.shift_id and not shift.offer_status %}
+          <div class="sh-form" id="mk-form-{{ shift.shift_id }}" hidden>
+            <input type="number" min="0" max="500" step="1" inputmode="decimal" id="mk-amt-{{ shift.shift_id }}" placeholder="$ incentive (optional)" />
+            <button type="button" class="sh-post" data-post="{{ shift.shift_id }}">Post to market</button>
+            <button type="button" class="sh-link" data-release-cancel="{{ shift.shift_id }}">cancel</button>
+            <span class="cf-error" id="mk-err-{{ shift.shift_id }}" hidden></span>
+          </div>
+          {% endif %}
         </div>
-        {% if shift.shift_id and not shift.offer_status %}
-        <div class="mk-form" id="mk-form-{{ shift.shift_id }}" hidden>
-          <input type="number" min="0" max="500" step="1" inputmode="decimal" id="mk-amt-{{ shift.shift_id }}" placeholder="$ incentive (optional)" />
-          <button type="button" class="cf-primary" data-post="{{ shift.shift_id }}">Post to market</button>
-          <button type="button" class="mk-link" data-release-cancel="{{ shift.shift_id }}">cancel</button>
-          <span class="cf-error" id="mk-err-{{ shift.shift_id }}" hidden></span>
-        </div>
-        {% endif %}
       {% endfor %}
     </div>
   {% else %}

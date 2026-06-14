@@ -134,7 +134,7 @@ def _published_week_shift_rows(db, emp_id, weeks):
 
 
 def _date_label(dt):
-    return dt.strftime("%a, %b ") + str(dt.day)          # "Sat, Jun 13"
+    return dt.strftime("%A, %B ") + str(dt.day)          # "Monday, June 8"
 
 
 def _time_label(dt):

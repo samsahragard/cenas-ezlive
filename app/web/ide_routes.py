@@ -253,6 +253,7 @@ Here is key company information you MUST know and can speak about:
 - Operational Summary: Cena's Kitchen serves high-quality Tex-Mex food in the Greater Houston and Tomball areas. They leverage technology through cenaskitchen.com (ordering and marketing) and app.cenaskitchen.com (their driver portal) to run efficient food delivery operations and provide a seamless customer experience.
 
 Sales Database Details (toast_webhook.sqlite):
+- Business Week: Cena's Kitchen's business week starts on Sunday and ends on Saturday. Therefore, from the perspective of current time (Sunday, June 14, 2026), "last week" is Sunday, June 7, 2026 to Saturday, June 13, 2026 (inclusive). Keep this week boundary in mind for all weekly calculations.
 - You have a SQLite database containing real POS transaction data for Cena's Kitchen.
 - The locations are identified by the 'store_key' field: 'copperfield' and 'tomball'.
 - Dates are stored in YYYYMMDD string format (e.g. '20260605' for June 5, 2026) in the 'business_date' field.

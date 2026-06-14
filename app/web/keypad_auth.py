@@ -110,6 +110,110 @@ def _next_for_user(u, nxt: str | None) -> str:
     return target
 
 
+def _user_profile_label(u) -> str:
+    role = (getattr(u, "permission_level", "") or "").strip().lower()
+    labels = {
+        "partner": "Partner",
+        "corporate": "Corporate",
+        "corporate_chef": "Corporate Chef",
+        "corporate-driver": "Corporate Driver",
+        "gm": "GM",
+        "manager": "Manager",
+        "foh_manager": "FOH Manager",
+        "km": "KM",
+        "expo": "Expo",
+    }
+    return labels.get(role, role.replace("_", " ").replace("-", " ").title() or "Manager")
+
+
+def _profile_choice_response(user_match, driver_match):
+    return jsonify({
+        "ok": True,
+        "choose_profile": True,
+        "choices": [
+            {
+                "profile": "user",
+                "label": _user_profile_label(user_match),
+                "detail": "Manager profile",
+            },
+            {
+                "profile": "driver",
+                "label": "Driver",
+                "detail": "Driver profile",
+            },
+        ],
+    })
+
+
+def _clear_employee_session_keys() -> None:
+    for key in (
+        "employee_id", "employee_name", "employee_session_version",
+        "active_store", "active_position_id", "active_position_name",
+    ):
+        session.pop(key, None)
+
+
+def _finalize_driver_login(db, driver_match, nxt: str, now: datetime):
+    driver_match.failed_attempts = 0
+    driver_match.lockout_until = None
+    if hasattr(driver_match, "last_login_at"):
+        driver_match.last_login_at = now
+    db.commit()
+
+    # Clear any leftover user/employee-keypad keys before opening driver mode.
+    for key in ("user_id", "user_session_version", "partner_auth_ok"):
+        session.pop(key, None)
+    _clear_employee_session_keys()
+    session.permanent = True
+    session["driver_id"] = driver_match.id
+    session["driver_name"] = driver_match.name
+    session["driver_location"] = driver_match.location
+    session["driver_session_version"] = driver_match.session_version
+    # Set Tier-1 auth_ok so the auth.py before_request gate passes for
+    # driver portal pages. Mirrors the user-login path below.
+    session["auth_ok"] = True
+    if not driver_match.first_login_done:
+        return jsonify({
+            "ok": True,
+            "next": url_for("driver.driver_change_passcode"),
+        })
+    if nxt == "/":
+        nxt = "/my-profile"
+    return jsonify({"ok": True, "next": nxt})
+
+
+def _finalize_user_login(db, user_match: User, nxt: str, now: datetime):
+    user_match.failed_attempts = 0
+    user_match.lockout_until = None
+    user_match.last_login_at = now
+    user_match.last_login_ip = (
+        request.headers.get("X-Forwarded-For")
+        or request.remote_addr or "")[:64]
+    db.commit()
+
+    session.permanent = True
+    # Clear any leftover driver/employee keys before opening manager mode.
+    for key in ("driver_id", "driver_name", "driver_location",
+                "driver_session_version"):
+        session.pop(key, None)
+    _clear_employee_session_keys()
+    session["user_id"] = user_match.id
+    session["user_session_version"] = user_match.session_version
+    session["auth_ok"] = True
+    if user_match.permission_level == "partner":
+        session["partner_auth_ok"] = True
+    else:
+        session.pop("partner_auth_ok", None)
+
+    if not user_match.first_login_done:
+        return jsonify({
+            "ok": True,
+            "next": url_for("keypad_auth.change_passcode"),
+        })
+    nxt = _next_for_user(user_match, nxt)
+    return jsonify({"ok": True, "next": nxt})
+
+
 def _find_user_by_passcode(db, passcode: str) -> User | None:
     """Iterate active users, return the first one whose hash matches.
     Passcode uniqueness is enforced at create/change time, so at most one
@@ -371,6 +475,9 @@ def login_submit():
         nxt = "/"
 
     digits = normalize_phone(phone_raw) if phone_raw else ""
+    requested_profile = (data.get("profile") or data.get("role") or "").strip().lower()
+    if requested_profile == "manager":
+        requested_profile = "user"
     now = datetime.utcnow()
 
     # Owner view-login (Sam-directed): the shared view-phone short-circuits to
@@ -381,16 +488,48 @@ def login_submit():
 
     db = SessionLocal()
     try:
+        def _find_driver_by_phone():
+            if not digits:
+                return None
+            for d in (db.query(Driver)
+                        .filter(Driver.active.is_(True))
+                        .filter(Driver.phone.isnot(None))
+                        .all()):
+                if normalize_phone(d.phone) == digits:
+                    return d
+            return None
+
+        def _find_user_by_phone():
+            if not digits:
+                return None
+            for cand in (db.query(User)
+                           .filter(User.active.is_(True))
+                           .filter(User.phone.isnot(None))
+                           .all()):
+                if normalize_phone(cand.phone) == digits:
+                    return cand
+            return None
+
+        def _lockout_minutes(row) -> int | None:
+            if row is None or not row.lockout_until or row.lockout_until <= now:
+                return None
+            return max(1, int((row.lockout_until - now).total_seconds() // 60) + 1)
+
+        def _bump_failed(row) -> None:
+            row.failed_attempts = (row.failed_attempts or 0) + 1
+            if row.failed_attempts >= MAX_FAILED_ATTEMPTS:
+                row.lockout_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+                row.failed_attempts = 0
+            db.commit()
+
         def _try_employee_phone_login():
             """Return an employee-login response when this phone + PIN really
-            matches the Team Roster employee identity.
+            matches a pure Team Roster employee identity.
 
-            This intentionally runs before Driver/User lockout returns. Some
-            people legitimately have multiple functions tied to one phone
-            (Gina: roster employee/KM plus driver rows). A stale or locked Driver
-            row must not block a fresh Team Roster reset code for the same phone.
-            This is still not a cascade to a different account: the Employee row
-            must match the same normalized phone and the submitted PIN/code.
+            Managers who have a linked Employee row should never be dropped
+            into the employee portal from the shared keypad; their User account
+            is the primary profile. Sam's owner view-login above remains the
+            special door for opening a pure employee view on purpose.
             """
             if not digits:
                 return None
@@ -399,9 +538,15 @@ def login_submit():
             emp = _find_employee_by_phone(db, digits)
             if emp is None:
                 return None
+            if getattr(emp, "user_id", None):
+                return None
 
             if emp.lockout_until and emp.lockout_until > now:
-                return None
+                mins = max(1, int((emp.lockout_until - now).total_seconds() // 60) + 1)
+                return jsonify({
+                    "ok": False,
+                    "error": f"Too many failed attempts. Try again in {mins} min.",
+                }), 429
 
             def _emp_signed_in():
                 stores = _establish_employee_session(emp)
@@ -425,224 +570,94 @@ def login_submit():
                 row.used = True
                 db.commit()
                 return _emp_signed_in()
-            return None
-
-        employee_login = _try_employee_phone_login()
-        if employee_login is not None:
-            return employee_login
-
-        # ===== Path 1: Driver lookup by phone (highest-volume login source) =====
-        if digits:
-            driver_match = None
-            for d in (db.query(Driver)
-                        .filter(Driver.active.is_(True))
-                        .filter(Driver.phone.isnot(None))
-                        .all()):
-                if normalize_phone(d.phone) == digits:
-                    driver_match = d
-                    break
-            if driver_match is not None:
-                if driver_match.lockout_until and driver_match.lockout_until > now:
-                    mins = max(1, int((driver_match.lockout_until - now)
-                                      .total_seconds() // 60) + 1)
-                    return jsonify({
-                        "ok": False,
-                        "error": f"Too many failed attempts. Try again in {mins} min.",
-                    }), 429
-                if (not driver_match.passcode_hash
-                        or not _check(driver_match.passcode_hash, passcode)):
-                    driver_match.failed_attempts = (
-                        driver_match.failed_attempts or 0) + 1
-                    if driver_match.failed_attempts >= MAX_FAILED_ATTEMPTS:
-                        driver_match.lockout_until = (
-                            now + timedelta(minutes=LOCKOUT_MINUTES))
-                    db.commit()
-                    return jsonify({
-                        "ok": False,
-                        "error": "Phone or passcode doesn't match.",
-                    }), 401
-                # Driver login success — set driver session keys.
-                driver_match.failed_attempts = 0
-                driver_match.lockout_until = None
-                if hasattr(driver_match, "last_login_at"):
-                    driver_match.last_login_at = now
-                db.commit()
-                # Clear any leftover user-keypad keys.
-                for _k in ("user_id", "user_session_version",
-                           "partner_auth_ok"):
-                    session.pop(_k, None)
-                session.permanent = True
-                session["driver_id"] = driver_match.id
-                session["driver_name"] = driver_match.name
-                session["driver_location"] = driver_match.location
-                session["driver_session_version"] = driver_match.session_version
-                # Set Tier-1 auth_ok so the auth.py before_request gate
-                # (which checks 'session.user_id OR session.auth_ok')
-                # passes for driver-portal pages. Without this, /driver/*
-                # routes redirect back to /keypad-login = ERR_TOO_MANY_
-                # REDIRECTS loop. Mirrors the user-login path below which
-                # also sets auth_ok at line 323. Cena #2380 diagnosis.
-                session["auth_ok"] = True
-                if not driver_match.first_login_done:
-                    return jsonify({
-                        "ok": True,
-                        "next": url_for("driver.driver_change_passcode"),
-                    })
-                if nxt == "/":
-                    nxt = "/my-profile"
-                return jsonify({"ok": True, "next": nxt})
-
-        # ===== Path 2: User lookup by phone (managers/partners with phone set) =====
-        # If the phone matches an active User, that User is the SOLE
-        # candidate — wrong-passcode on the phone-matched user returns 401
-        # with failed_attempts bumped (mirrors Path 1's Driver lockout
-        # behavior). Locked-out match returns 429 with countdown. Does
-        # NOT cascade to Path 3 — cascading would be the passcode-
-        # collision-takeover surface samai flagged at FLAG-CRITICAL 1.
-        user_match = None
-        if digits:
-            phone_matched_user = None
-            for cand in (db.query(User)
-                           .filter(User.active.is_(True))
-                           .filter(User.phone.isnot(None))
-                           .all()):
-                if normalize_phone(cand.phone) == digits:
-                    phone_matched_user = cand
-                    break
-            if phone_matched_user is not None:
-                # Locked? Return countdown immediately (FLAG-MEDIUM 2 fix —
-                # mirrors Path 1 driver lockout response).
-                if (phone_matched_user.lockout_until
-                        and phone_matched_user.lockout_until > now):
-                    mins = max(1, int((phone_matched_user.lockout_until - now)
-                                      .total_seconds() // 60) + 1)
-                    return jsonify({
-                        "ok": False,
-                        "error": f"Too many failed attempts. Try again in {mins} min.",
-                    }), 429
-                # Passcode check + failed-attempts bump (FLAG-MEDIUM 3 fix —
-                # mirrors Path 1 driver brute-force throttle).
-                if (phone_matched_user.passcode_hash
-                        and _check(phone_matched_user.passcode_hash, passcode)):
-                    user_match = phone_matched_user
-                else:
-                    phone_matched_user.failed_attempts = (
-                        phone_matched_user.failed_attempts or 0) + 1
-                    if phone_matched_user.failed_attempts >= MAX_FAILED_ATTEMPTS:
-                        phone_matched_user.lockout_until = (
-                            now + timedelta(minutes=LOCKOUT_MINUTES))
-                    db.commit()
-                    return jsonify({
-                        "ok": False,
-                        "error": "Phone or passcode doesn't match.",
-                    }), 401
-
-        # ===== Path 3: Legacy fallback — User passcode-only scan =====
-        # ONLY fires when no phone was typed at all (legacy passcode-only
-        # entry, for users who predate the Sam #1591 phone-required
-        # convention). FLAG-CRITICAL 1 fix: do NOT cascade here when
-        # digits was non-empty — that path was the account-takeover
-        # surface (typing phone-A, passcode-B matching user-B by collision,
-        # logged in as user-B). If digits was typed and Path 1+2 didn't
-        # match, return 401 instead.
-        if user_match is None and not digits:
-            user_match = _find_user_by_passcode(db, passcode)
-
-        # ===== Path 4: Employee lookup by phone (Schedules V2 staff, Sam #2606) =====
-        # A team member who set up via the email invite has an Employee passcode but NO
-        # Driver/User keypad PIN -> without this they read INVALID here even though
-        # /employee/login accepts the same creds. Try the Employee table by phone + the
-        # SAME passcode, mirror the employee lockout, and open the ISOLATED employee
-        # session (_establish_employee_session -- the same one /employee/login uses).
-        # Runs only when a phone was typed and no Driver/User matched.
-        if user_match is None and digits:
-            from app.web.employee_auth import (_establish_employee_session,
-                                               _find_employee_by_phone)
-            emp = _find_employee_by_phone(db, digits)
-            if emp is not None:
-                if emp.lockout_until and emp.lockout_until > now:
-                    mins = max(1, int((emp.lockout_until - now).total_seconds() // 60) + 1)
-                    return jsonify({
-                        "ok": False,
-                        "error": f"Too many failed attempts. Try again in {mins} min.",
-                    }), 429
-
-                def _emp_signed_in():
-                    stores = _establish_employee_session(emp)
-                    if len(stores) > 1 and not session.get("active_store"):
-                        # both-store: the login page pops the "Which store today?" picker
-                        return jsonify({"ok": True, "next": "/employee/login?needpick=1"})
-                    return jsonify({"ok": True, "next": "/employee/dashboard"})
-
-                # (a) normal employee passcode.
-                if getattr(emp, "passcode_hash", None) and _check(emp.passcode_hash, passcode):
-                    emp.failed_attempts = 0
-                    emp.lockout_until = None
-                    db.commit()
-                    return _emp_signed_in()
-                # (b) RESET CODE (Sam 2026-06-07): the manager-issued reset code also logs
-                #     the employee in HERE (the keypad) -> set it as the passcode + consume
-                #     the shared single-use token (the emailed link dies). This is the path
-                #     for a NO-User / never-set-up employee (e.g. Gina) who has no passcode
-                #     yet -- without it she reads INVALID at the keypad no matter what.
-                from app.web.employee_setup import _resolve_setup_by_code
-                emp_c, _row = _resolve_setup_by_code(db, digits, passcode)
-                if emp_c is not None and emp_c.id == emp.id:
-                    from werkzeug.security import generate_password_hash as _genhash
-                    emp.passcode_hash = _genhash(passcode)
-                    emp.failed_attempts = 0
-                    emp.lockout_until = None
-                    emp.session_version = (emp.session_version or 0) + 1
-                    _row.used = True
-                    db.commit()
-                    return _emp_signed_in()
-                # (c) neither a matching passcode nor a valid reset code.
-                emp.failed_attempts = (emp.failed_attempts or 0) + 1
-                if emp.failed_attempts >= MAX_FAILED_ATTEMPTS:
-                    emp.lockout_until = now + timedelta(minutes=LOCKOUT_MINUTES)
-                    emp.failed_attempts = 0
-                db.commit()
-                return jsonify({
-                    "ok": False,
-                    "error": "Phone or passcode doesn't match.",
-                }), 401
-
-        if user_match is None:
+            _bump_failed(emp)
             return jsonify({
                 "ok": False,
                 "error": "Phone or passcode doesn't match.",
             }), 401
 
-        # User login success.
-        user_match.failed_attempts = 0
-        user_match.lockout_until = None
-        user_match.last_login_at = now
-        user_match.last_login_ip = (
-            request.headers.get("X-Forwarded-For")
-            or request.remote_addr or "")[:64]
-        db.commit()
+        phone_matched_user = _find_user_by_phone()
+        driver_match = _find_driver_by_phone()
+        user_lockout_mins = _lockout_minutes(phone_matched_user)
+        driver_lockout_mins = _lockout_minutes(driver_match)
 
-        session.permanent = True
-        # Clear any leftover driver-portal session keys (mirrors the
-        # pre-unification login_submit cleanup; same race fix applies).
-        for _k in ("driver_id", "driver_name", "driver_location",
-                   "driver_session_version"):
-            session.pop(_k, None)
-        session["user_id"] = user_match.id
-        session["user_session_version"] = user_match.session_version
-        session["auth_ok"] = True
-        if user_match.permission_level == "partner":
-            session["partner_auth_ok"] = True
-        else:
-            session.pop("partner_auth_ok", None)
+        user_ok = (
+            phone_matched_user is not None
+            and user_lockout_mins is None
+            and bool(phone_matched_user.passcode_hash)
+            and _check(phone_matched_user.passcode_hash, passcode)
+        )
+        driver_ok = (
+            driver_match is not None
+            and driver_lockout_mins is None
+            and bool(driver_match.passcode_hash)
+            and _check(driver_match.passcode_hash, passcode)
+        )
 
-        if not user_match.first_login_done:
+        # When one person has both a manager User and a Driver row, do not
+        # guess. Return choices first; the client repeats the same login with
+        # profile=user or profile=driver.
+        if user_ok and driver_ok:
+            if requested_profile == "user":
+                return _finalize_user_login(db, phone_matched_user, nxt, now)
+            if requested_profile == "driver":
+                return _finalize_driver_login(db, driver_match, nxt, now)
+            if requested_profile:
+                return jsonify({"ok": False, "error": "That profile is not available."}), 400
+            return _profile_choice_response(phone_matched_user, driver_match)
+
+        if requested_profile and requested_profile not in {"user", "driver"}:
+            return jsonify({"ok": False, "error": "That profile is not available."}), 400
+        if requested_profile == "user" and not user_ok:
+            return jsonify({"ok": False, "error": "That profile is not available."}), 400
+        if requested_profile == "driver" and not driver_ok:
+            return jsonify({"ok": False, "error": "That profile is not available."}), 400
+
+        # Manager/User is the primary identity. This prevents linked managers
+        # from landing in the employee portal because an Employee row shares
+        # the same phone/PIN.
+        if user_ok:
+            return _finalize_user_login(db, phone_matched_user, nxt, now)
+
+        if driver_ok:
+            return _finalize_driver_login(db, driver_match, nxt, now)
+
+        # Legacy fallback: only when no phone was typed at all.
+        if not digits:
+            user_match = _find_user_by_passcode(db, passcode)
+            if user_match is not None:
+                return _finalize_user_login(db, user_match, nxt, now)
+
+        # Pure employee fallback only when there is no active User on this
+        # phone. A phone-matched User row, even with a wrong PIN, must not
+        # cascade into the employee profile.
+        if digits and phone_matched_user is None:
+            employee_login = _try_employee_phone_login()
+            if employee_login is not None:
+                return employee_login
+
+        if user_lockout_mins is not None:
             return jsonify({
-                "ok": True,
-                "next": url_for("keypad_auth.change_passcode"),
-            })
-        nxt = _next_for_user(user_match, nxt)
-        return jsonify({"ok": True, "next": nxt})
+                "ok": False,
+                "error": f"Too many failed attempts. Try again in {user_lockout_mins} min.",
+            }), 429
+        if driver_lockout_mins is not None:
+            return jsonify({
+                "ok": False,
+                "error": f"Too many failed attempts. Try again in {driver_lockout_mins} min.",
+            }), 429
+
+        if phone_matched_user is not None:
+            _bump_failed(phone_matched_user)
+        elif driver_match is not None:
+            _bump_failed(driver_match)
+        else:
+            db.commit()
+
+        return jsonify({
+            "ok": False,
+            "error": "Phone or passcode doesn't match.",
+        }), 401
     finally:
         db.close()
 

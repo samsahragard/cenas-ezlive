@@ -241,6 +241,36 @@
     opacity:0; transition: opacity 0.2s ease; pointer-events:none; z-index:10;
   }
   .toast.show{ opacity:1; }
+  .profile-subtitle{
+    color: var(--blue-deep); font-size:16px; font-weight:700;
+    letter-spacing:0.4px; text-align:center;
+  }
+  .role-choice-list{
+    width:min(360px, calc(100vw - 48px)); display:flex; flex-direction:column;
+    gap:14px; margin:22px;
+  }
+  .role-choice-btn{
+    width:100%; min-height:82px; border-radius:14px; border:3px solid var(--blue-bright);
+    cursor:pointer; text-align:left; padding:16px 18px;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(244,231,208,0.45) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 78% 32%, rgba(244,231,208,0.35) 0.8px, transparent 1.6px),
+      radial-gradient(ellipse at 30% 20%, var(--red-bright) 0%, var(--red) 42%, var(--red-deep) 100%);
+    background-size:22px 22px, 28px 28px, 100% 100%;
+    box-shadow:
+      inset 0 2px 1px rgba(255,210,200,0.55),
+      inset 0 -4px 8px rgba(40,5,3,0.7),
+      0 6px 10px rgba(0,0,0,0.6);
+  }
+  .role-choice-btn:active{ transform: translateY(2px) scale(0.99); }
+  .role-choice-title{
+    display:block; color:var(--cream); font-size:24px; font-weight:800;
+    line-height:1.1; text-shadow:0 1px 0 rgba(60,10,8,0.8), 0 2px 4px rgba(0,0,0,0.6);
+  }
+  .role-choice-detail{
+    display:block; margin-top:8px; color:rgba(244,231,208,0.78);
+    font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+  }
 </style>
 </head>
 <body>
@@ -337,6 +367,20 @@
     </div>
   </div>
 
+  {# ============== SCREEN 3 — Profile choice ============== #}
+  <div class="screen" id="screen-choice">
+    <div class="header-cap">
+      <div class="header-label">PROFILE</div>
+      <div class="profile-subtitle">Choose how to continue</div>
+    </div>
+
+    <div class="role-choice-list" id="role-choice-list"></div>
+
+    <div class="back-row">
+      <a id="back-to-pin">← back to PIN</a>
+    </div>
+  </div>
+
   <img src="{{ url_for('static', filename='brand/logo-text.png') }}"
        alt="Cenas Kitchen" class="brand-logo" />
 </div>
@@ -408,6 +452,8 @@
   const toast = document.getElementById('toast');
   const screenPhone = document.getElementById('screen-phone');
   const screenPin = document.getElementById('screen-pin');
+  const screenChoice = document.getElementById('screen-choice');
+  const roleChoiceList = document.getElementById('role-choice-list');
 
   function formatPhone(d){
     if (!d) return '<span class="ph-empty">(___) ___-____</span>';
@@ -444,25 +490,58 @@
 
   function goToPin(){
     screenPhone.classList.remove('active');
+    screenChoice.classList.remove('active');
     screenPin.classList.add('active');
   }
   function goToPhone(){
     pin = ''; renderDots();
     screenPin.classList.remove('active');
+    screenChoice.classList.remove('active');
     screenPhone.classList.add('active');
   }
+  function goToChoice(){
+    screenPhone.classList.remove('active');
+    screenPin.classList.remove('active');
+    screenChoice.classList.add('active');
+  }
 
-  async function submitLogin(){
+  function showProfileChoices(choices){
+    roleChoiceList.innerHTML = '';
+    choices.forEach(choice => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'role-choice-btn';
+      const title = document.createElement('span');
+      title.className = 'role-choice-title';
+      title.textContent = choice.label || 'Profile';
+      const detail = document.createElement('span');
+      detail.className = 'role-choice-detail';
+      detail.textContent = choice.detail || '';
+      btn.appendChild(title);
+      btn.appendChild(detail);
+      btn.addEventListener('click', () => submitLogin(choice.profile));
+      roleChoiceList.appendChild(btn);
+    });
+    goToChoice();
+  }
+
+  async function submitLogin(profile){
     try{
+      const payload = {phone: phoneDigits, pin, next: NEXT_URL};
+      if (profile) { payload.profile = profile; }
       const r = await fetch(SUBMIT_URL, {
         method: 'POST',
         credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({phone: phoneDigits, pin, next: NEXT_URL}),
+        body: JSON.stringify(payload),
       });
       const data = await r.json();
       if (!r.ok || !data.ok){
         showError(data.error || `Sign-in failed (${r.status}).`, 'pin');
+        return;
+      }
+      if (Array.isArray(data.choices) && data.choices.length){
+        showProfileChoices(data.choices);
         return;
       }
       // Successful login → remember the phone for next time on this
@@ -527,10 +606,13 @@
 
   // Back-to-phone link
   document.getElementById('back-to-phone').addEventListener('click', goToPhone);
+  document.getElementById('back-to-pin').addEventListener('click', goToPin);
 
   // Keyboard input — works on both screens
   document.addEventListener('keydown', e => {
     const onPhone = screenPhone.classList.contains('active');
+    const onChoice = screenChoice.classList.contains('active');
+    if (onChoice) { return; }
     if (/^[0-9]$/.test(e.key)){
       const pad = onPhone ? 'pad-phone' : 'pad-pin';
       const k = document.querySelector(`#${pad} .key[data-val="${e.key}"]`);

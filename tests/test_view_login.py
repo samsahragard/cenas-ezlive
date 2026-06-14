@@ -244,6 +244,156 @@ def app_expo_user():
         pass
 
 
+@pytest.fixture()
+def app_profile_choice(tmp_path):
+    app, SessionLocal = _prepare_temp_app(str(tmp_path / "profile_choice.db"))
+    yield app, SessionLocal
+
+
+def test_manager_phone_login_beats_linked_employee_profile(app_profile_choice):
+    app, SessionLocal = app_profile_choice
+    from app.models import Employee, User
+    from werkzeug.security import generate_password_hash
+
+    db = SessionLocal()
+    user = User(
+        full_name="Britney Manager",
+        phone="5553334444",
+        permission_level="gm",
+        store_scope="tomball",
+        active=True,
+        session_version=3,
+        first_login_done=True,
+        passcode_hash=generate_password_hash("24680"),
+    )
+    db.add(user)
+    db.commit()
+    emp = Employee(
+        full_name="Britney Employee",
+        phone="5553334444",
+        active=True,
+        session_version=5,
+        passcode_hash=generate_password_hash("24680"),
+        user_id=user.id,
+    )
+    db.add(emp)
+    db.commit()
+    uid = user.id
+    db.close()
+
+    c = app.test_client()
+    r = c.post("/keypad-login", json={"phone": "5553334444", "pin": "24680"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["next"] == "/dos/today"
+    with c.session_transaction() as s:
+        assert s.get("user_id") == uid
+        assert s.get("employee_id") is None
+        assert s.get("driver_id") is None
+
+
+def test_manager_driver_phone_login_returns_profile_choices(app_profile_choice):
+    app, SessionLocal = app_profile_choice
+    from app.models import Driver, User
+    from werkzeug.security import generate_password_hash
+
+    db = SessionLocal()
+    user = User(
+        full_name="Tomball GM",
+        phone="5554445555",
+        permission_level="gm",
+        store_scope="tomball",
+        active=True,
+        session_version=2,
+        first_login_done=True,
+        passcode_hash=generate_password_hash("13579"),
+    )
+    driver = Driver(
+        name="Tomball GM",
+        location="tomball",
+        phone="5554445555",
+        active=True,
+        status="active",
+        session_version=7,
+        first_login_done=True,
+        passcode_hash=generate_password_hash("13579"),
+    )
+    db.add_all([user, driver])
+    db.commit()
+    db.close()
+
+    c = app.test_client()
+    r = c.post("/keypad-login", json={"phone": "5554445555", "pin": "13579"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["choose_profile"] is True
+    assert [choice["profile"] for choice in body["choices"]] == ["user", "driver"]
+    assert [choice["label"] for choice in body["choices"]] == ["GM", "Driver"]
+    with c.session_transaction() as s:
+        assert s.get("user_id") is None
+        assert s.get("driver_id") is None
+        assert s.get("employee_id") is None
+
+
+def test_manager_driver_profile_choice_finalizes_selected_session(app_profile_choice):
+    app, SessionLocal = app_profile_choice
+    from app.models import Driver, User
+    from werkzeug.security import generate_password_hash
+
+    db = SessionLocal()
+    user = User(
+        full_name="Dual Role",
+        phone="5556667777",
+        permission_level="foh_manager",
+        store_scope="copperfield",
+        active=True,
+        session_version=4,
+        first_login_done=True,
+        passcode_hash=generate_password_hash("86420"),
+    )
+    driver = Driver(
+        name="Dual Role",
+        location="copperfield",
+        phone="5556667777",
+        active=True,
+        status="active",
+        session_version=8,
+        first_login_done=True,
+        passcode_hash=generate_password_hash("86420"),
+    )
+    db.add_all([user, driver])
+    db.commit()
+    uid = user.id
+    did = driver.id
+    db.close()
+
+    manager_client = app.test_client()
+    r = manager_client.post(
+        "/keypad-login",
+        json={"phone": "5556667777", "pin": "86420", "profile": "user"},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["next"] == "/uno/today"
+    with manager_client.session_transaction() as s:
+        assert s.get("user_id") == uid
+        assert s.get("driver_id") is None
+        assert s.get("employee_id") is None
+
+    driver_client = app.test_client()
+    r = driver_client.post(
+        "/keypad-login",
+        json={"phone": "5556667777", "pin": "86420", "profile": "driver"},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["next"] == "/my-profile"
+    with driver_client.session_transaction() as s:
+        assert s.get("driver_id") == did
+        assert s.get("user_id") is None
+        assert s.get("employee_id") is None
+
+
 def test_store_root_next_lands_on_permitted_today_page(app_expo_user):
     app, _ = app_expo_user
     c = app.test_client()

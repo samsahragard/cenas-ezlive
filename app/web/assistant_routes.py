@@ -427,6 +427,7 @@ def fetch_toast_live_data_tool(dataType: str, location: str) -> dict | list:
         return open_checks
 
     elif dataType == "clockins":
+        from datetime import datetime
         from app.services.toast_table_activity import _employee_name_map, _parse_iso, _format_ct
         
         start = datetime(bd_dt.year, bd_dt.month, bd_dt.day, 0, 0, 0)

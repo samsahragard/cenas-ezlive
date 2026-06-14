@@ -706,12 +706,27 @@ def _proactive_flag(executor, validate, exec_errs, scratchpad) -> str:
             for cell in row:
                 if cell in ("copperfield", "tomball"):
                     stores.add(cell)
-    where = ""
+    # frontier = most recent anomaly date; suppress STALE anomalies (anything
+    # >21d before the frontier) so a months-old outlier is not appended to every
+    # answer. Surfaces the most RECENT material anomaly, not the all-time extreme.
+    fr_sql = "SELECT MAX(business_date) AS d FROM anomaly_flags"
+    fok, _ = validate(fr_sql)
+    if not fok:
+        return ""
+    try:
+        fr = executor(fr_sql)
+    except exec_errs:
+        return ""
+    frows = fr.get("rows", []) or []
+    frontier = frows[0][0] if (frows and frows[0]) else None
+    if not frontier:
+        return ""
+    cond = f"business_date >= date('{frontier}', '-21 days')"
     if len(stores) == 1:
-        where = f" WHERE store_key = '{next(iter(stores))}'"
+        cond += f" AND store_key = '{next(iter(stores))}'"
     sql = ("SELECT store_key, business_date, metric, direction, z_score "
-           "FROM anomaly_flags" + where +
-           " ORDER BY ABS(z_score) DESC LIMIT 1")
+           "FROM anomaly_flags WHERE " + cond +
+           " ORDER BY business_date DESC, ABS(z_score) DESC LIMIT 1")
     ok, _ = validate(sql)
     if not ok:
         return ""

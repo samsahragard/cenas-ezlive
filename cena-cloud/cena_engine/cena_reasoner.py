@@ -248,24 +248,28 @@ def _agrees(target: float, candidates: list[float]) -> bool:
 _DATA_BOUNDARIES = (
     "HARD DATA BOUNDARIES - obey exactly. Saying 'not available' is ALWAYS better "
     "than a confident wrong answer or a number reconstructed from a coverage gap:\n"
-    "1. SALES = NET = caterer_total_due, and it exists ONLY through 2026-05-09. For "
-    "ANY window after that (yesterday, this week, last week, this month, last "
-    "Friday/Saturday, 'recent'), NET SALES ARE UNAVAILABLE - say that as the "
-    "HEADLINE. NEVER substitute ezcater_total (gross) or 'available'/'quoted'/"
-    "unfinalized order amounts and call it 'sales', and NEVER build a 'sales "
-    "up/down/why' conclusion on them. Gross may be named only as an explicitly "
-    "labeled DIFFERENT metric, never as the answer to a 'sales' question. This "
-    "applies to 'why'/diagnosis too: if the SPECIFIC date asked about ('last "
-    "Saturday', 'last Friday', 'yesterday') falls after 2026-05-09, say THAT date "
-    "has no data FIRST; you may then offer the most recent in-window comparable, but "
-    "only clearly labeled as a different, earlier date - never present it silently "
-    "as if it were the date asked.\n"
-    "2. There is NO intra-day/hourly data and NO daypart beyond a single 'lunch' "
-    "bucket. window_start/window_end are midnight placeholders; "
-    "dm_order_timing.delivery_start is CATERING DELIVERY logistics, NOT in-store "
-    "traffic. Treat 'busiest hour', 'lunch rush', 'dinner vs lunch', 'morning vs "
-    "evening', and any breakfast/dinner question as NOT ANSWERABLE - never "
-    "reconstruct dayparts or hours from delivery or placeholder timestamps.\n"
+    "1. NET SALES = the dollars Cenas keeps (caterer_total_due) and are FINALIZED "
+    "ONLY through 2026-05-09 - ezCater settlement imports lag ~5 weeks, so every "
+    "order after 2026-05-09 has a NULL dollar amount. BUT order COUNTS and COVERS "
+    "(headcount) ARE available for ALL dates, including yesterday, this week, and "
+    "month-to-date. So for a sales question about a window after 2026-05-09 do NOT "
+    "just say 'unavailable'. Instead: (a) ANSWER the parts you can - the order count "
+    "and covers for that exact window; (b) state plainly that finalized net-sales "
+    "dollars currently run through May 9 only; (c) offer the most recent finalized "
+    "actuals as context, clearly labeled as the earlier date (e.g. the last complete "
+    "week ending 2026-05-09). Distinguish 'that store had ZERO orders that day' (a "
+    "real answer: zero) from 'the dollar figure is not yet settled'. NEVER substitute "
+    "ezcater_total (gross) or unfinalized/quoted amounts and call it 'sales'; gross "
+    "may be named only as an explicitly labeled DIFFERENT metric.\n"
+    "2. DAYPARTS: catering is daytime delivery and is bucketed as 'lunch' only - "
+    "breakfast and dinner are NOT TRACKED at all (not merely missing for recent "
+    "dates). There is NO intra-day/hourly data; window_start/window_end are midnight "
+    "placeholders and dm_order_timing.delivery_start is delivery logistics, not "
+    "in-store traffic. For a 'dinner'/'breakfast'/'lunch rush'/'busiest hour' "
+    "question do NOT say the data is 'unavailable' (which implies a temporary gap); "
+    "say plainly that Cenas does not track dayparts beyond lunch, then offer the "
+    "total order count / covers for the requested day instead. Never reconstruct "
+    "dayparts or hours from delivery or placeholder timestamps.\n"
     "3. labor_pct and SPLH are NULL everywhere (sales ends 05-09, labor starts "
     "05-11 - no overlap) => NOT AVAILABLE. Never rebuild labor% or SPLH from the "
     "tiny residual raw overlap.\n"
@@ -284,7 +288,13 @@ _DATA_BOUNDARIES = (
     "private. For 'who earns most / individual pay / worst employee' questions, "
     "REFUSE and offer an AGGREGATE instead. Aggregate labor cost/hours is fine; "
     "per-person breakdowns by name are not. (Driver DELIVERY COUNTS by name are "
-    "operationally fine; pay/earnings by name are not.)"
+    "operationally fine; pay/earnings by name are not.)\n"
+    "9. PLAIN LANGUAGE: write for a restaurant operator, not an engineer. NEVER put "
+    "internal column names (caterer_total_due, ezcater_total, headcount, "
+    "daypart_*_net, labor_pct) or statistics jargon (z-scores, 'z=6.4') in the "
+    "answer - say 'net sales', 'gross sales', 'guests/covers', 'order count', "
+    "'labor %'. If you surface an anomaly, describe it in plain words ('net sales "
+    "were unusually high that day'), never as a z-score."
 )
 
 _PLAN_SYS = (
@@ -717,5 +727,11 @@ def _proactive_flag(executor, validate, exec_errs, scratchpad) -> str:
         store, day, metric, direction, z = r[0], r[1], r[2], r[3], r[4]
     except Exception:
         return ""
-    return (f"Separately - {store} {metric} ran unusually {direction} on {day} "
-            f"(z={float(z):.1f}); worth a look.")
+    metric_label = {
+        "net_sales": "net sales",
+        "avg_check": "average check",
+        "order_count": "order volume",
+        "labor_pct": "labor %",
+    }.get(str(metric), str(metric).replace("_", " "))
+    return (f"Separately: {store}'s {metric_label} was unusually {direction} on "
+            f"{day} - might be worth a look.")

@@ -9,10 +9,10 @@ Covers:
   - _estimate_cost: token usage -> Decimal.
   - Models: SamChatSession / SamChatMessage round-trip.
   - Routes: page gate, session create/list/load/rename/archive, and
-    /sam/chat/send happy-path (Gemini client mocked) -> persists the
+    /sam/chat/send happy-path (OpenAI client mocked) -> persists the
     user + assistant turns + SSE-streams the reply.
 
-External calls (Gemini) are mocked - no network, no key.
+External calls (OpenAI) are mocked - no network, no key.
 """
 from __future__ import annotations
 
@@ -65,43 +65,43 @@ class _FakeGeminiClient:
 # _estimate_cost – pure
 # ============================================================
 
-def test_estimate_cost_gemini():
-    c = sc._estimate_cost("gemini-2.5-flash", 1_000_000, 1_000_000)
-    # Gemini Flash rate: 0.15 in + 0.60 out per Mtok -> $0.7500
-    assert c == Decimal("0.7500")
+def test_estimate_cost_openai():
+    c = sc._estimate_cost("gpt-4.1-mini", 1_000_000, 1_000_000)
+    # GPT-4.1 Mini rate: 0.40 in + 1.60 out per Mtok -> $2.0000
+    assert c == Decimal("2.0000")
 
 
 def test_estimate_cost_zero_and_unknown_model():
-    assert sc._estimate_cost("gemini-2.5-flash", 0, 0) == Decimal("0.0000")
+    assert sc._estimate_cost("gpt-4.1-mini", 0, 0) == Decimal("0.0000")
     assert sc._estimate_cost("mystery-model", 5000, 5000) == Decimal("0.0000")
 
 
-def test_estimate_cost_with_cache_tokens_gemini():
-    # Gemini rate: 0.15/M input. 1M uncached + 1M cache_creation @2x
-    # + 1M cache_read @0.10x + 0 output. 0.15 + 0.30 + 0.015 = 0.465
-    c = sc._estimate_cost("gemini-2.5-flash", 1_000_000, 0,
+def test_estimate_cost_with_cache_tokens_openai():
+    # GPT-4.1 Mini input rate: 0.40/M. 1M uncached + 1M cache_creation @2x
+    # + 1M cache_read @0.10x + 0 output. 0.40 + 0.80 + 0.040 = 1.240
+    c = sc._estimate_cost("gpt-4.1-mini", 1_000_000, 0,
                           cache_create_tok=1_000_000,
                           cache_read_tok=1_000_000)
-    assert c == Decimal("0.4650")
+    assert c == Decimal("1.2400")
 
 
 def test_estimate_cost_cache_kwargs_default_zero_preserves_backcompat():
     # Old callers that don't pass cache_create_tok / cache_read_tok must
     # see exactly the pre-cache cost (regression guard for callers in
-    # sam_chat.py + chart/cron paths). Gemini: 1M in @0.15 + 1M out @0.60.
-    c = sc._estimate_cost("gemini-2.5-flash", 1_000_000, 1_000_000)
-    assert c == Decimal("0.7500")
+    # sam_chat.py + chart/cron paths). GPT-4.1 Mini: 1M in @0.40 + 1M out @1.60.
+    c = sc._estimate_cost("gpt-4.1-mini", 1_000_000, 1_000_000)
+    assert c == Decimal("2.0000")
 
 
 def test_estimate_cost_cache_read_is_cheaper_than_uncached():
     # The cache_read pricing should make 1M cache-read tokens 10x cheaper
     # than 1M uncached input tokens, all else equal.
-    uncached = sc._estimate_cost("gemini-2.5-flash", 1_000_000, 0)
-    cached   = sc._estimate_cost("gemini-2.5-flash", 0, 0,
+    uncached = sc._estimate_cost("gpt-4.1-mini", 1_000_000, 0)
+    cached   = sc._estimate_cost("gpt-4.1-mini", 0, 0,
                                  cache_read_tok=1_000_000)
     assert cached < uncached
-    assert cached == Decimal("0.0150")  # 0.15 * 0.10 = 0.015
-    assert uncached == Decimal("0.1500")
+    assert cached == Decimal("0.0400")  # 0.40 * 0.10 = 0.040
+    assert uncached == Decimal("0.4000")
 
 
 # ============================================================
@@ -657,30 +657,30 @@ def test_suggestions_queue_add_list_and_decide(app_with_sam):
 
 
 # ============================================================
-# Model-picker enforcement: the Sam Chat surface is Gemini 2.5 only.
+# Model-picker enforcement: the Sam Chat surface is OpenAI-only.
 # ============================================================
 
-def test_model_picker_is_gemini_only_with_gateway(
+def test_model_picker_is_openai_only_with_gateway(
         app_with_sam, monkeypatch):
     _app, client_for, _db = app_with_sam
     monkeypatch.setenv("CENA_GATEWAY_URL", "https://cena.example.test")
     r = client_for(1).get("/sam/chat")
     assert r.status_code == 200
     body = r.data.decode("utf-8")
-    assert "gemini-2.5-flash" in body
+    assert "gpt-4.1-mini" in body
     assert "claude-opus" not in body
     assert "claude-sonnet" not in body
     assert "Message Cenas AI" in body
 
 
-def test_model_picker_is_gemini_only_without_gateway(
+def test_model_picker_is_openai_only_without_gateway(
         app_with_sam, monkeypatch):
     _app, client_for, _db = app_with_sam
     monkeypatch.delenv("CENA_GATEWAY_URL", raising=False)
     r = client_for(1).get("/sam/chat")
     assert r.status_code == 200
     body = r.data.decode("utf-8")
-    assert "gemini-2.5-flash" in body
+    assert "gpt-4.1-mini" in body
     assert "claude-opus" not in body
     assert "claude-sonnet" not in body
 
@@ -731,19 +731,29 @@ def test_load_unknown_session_404(app_with_sam):
 
 
 # ============================================================
-# /sam/chat/send - happy path (Gemini mocked)
+# /sam/chat/send - happy path (OpenAI mocked)
 # ============================================================
 
 def test_send_streams_and_persists(app_with_sam, monkeypatch):
     _app, client_for, db = app_with_sam
-    fake = _FakeGeminiClient("Hello from Gemini, Sam.")
+    calls = []
     monkeypatch.delenv("CENA_GATEWAY_URL", raising=False)
-    monkeypatch.setattr(sc, "_gemini_client", lambda: fake)
+    monkeypatch.setattr(
+        sc,
+        "_openai_chat_complete",
+        lambda model, messages, system: (
+            calls.append({"model": model, "messages": messages, "system": system})
+            or ("Hello from OpenAI, Sam.", {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+            })
+        ),
+    )
     c = client_for(1)
 
     r = c.post("/sam/chat/send", data={
         "message": "What is 2+2?",
-        "model": "gemini-2.5-flash",
+        "model": "gpt-4.1-mini",
     })
     assert r.status_code == 200
     assert r.mimetype == "text/event-stream"
@@ -761,17 +771,17 @@ def test_send_streams_and_persists(app_with_sam, monkeypatch):
 
     # The streamed text reassembles to the full reply.
     streamed = "".join(f["text"] for f in frames if f["type"] == "delta")
-    assert streamed == "Hello from Gemini, Sam."
+    assert streamed == "Hello from OpenAI, Sam."
 
     # Both turns persisted.
     msgs = (db.query(SamChatMessage)
             .order_by(SamChatMessage.id).all())
     assert [m.role for m in msgs] == ["user", "assistant"]
     assert msgs[0].content == "What is 2+2?"
-    assert msgs[1].content == "Hello from Gemini, Sam."
-    assert msgs[1].model == "gemini-2.5-flash"
+    assert msgs[1].content == "Hello from OpenAI, Sam."
+    assert msgs[1].model == "gpt-4.1-mini"
     assert msgs[1].cost_usd is not None
-    assert fake.calls[-1]["model"] == "gemini-2.5-flash"
+    assert calls[-1]["model"] == "gpt-4.1-mini"
 
 
 def test_send_coerces_unknown_model(app_with_sam, monkeypatch):
@@ -780,8 +790,14 @@ def test_send_coerces_unknown_model(app_with_sam, monkeypatch):
     a valid model."""
     _app, client_for, db = app_with_sam
     monkeypatch.delenv("CENA_GATEWAY_URL", raising=False)
-    monkeypatch.setattr(sc, "_gemini_client",
-                        lambda: _FakeGeminiClient("Auto-selected reply."))
+    monkeypatch.setattr(
+        sc,
+        "_openai_chat_complete",
+        lambda *_: ("Auto-selected reply.", {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+        }),
+    )
     r = client_for(1).post("/sam/chat/send", data={
         "message": "hi", "model": "gpt-4"})
     assert r.status_code == 200
@@ -794,18 +810,18 @@ def test_send_coerces_unknown_model(app_with_sam, monkeypatch):
             .order_by(SamChatMessage.id).all())
     # Last row is the assistant turn; user rows carry model=None.
     assert msgs[-1].role == "assistant"
-    assert msgs[-1].model == "gemini-2.5-flash"
+    assert msgs[-1].model == "gpt-4.1-mini"
 
 
 def test_send_rejects_empty_message(app_with_sam):
     _app, client_for, _db = app_with_sam
     r = client_for(1).post("/sam/chat/send", data={
-        "message": "   ", "model": "gemini-2.5-flash"})
+        "message": "   ", "model": "gpt-4.1-mini"})
     assert r.status_code == 400
 
 
 def test_send_blocked_for_non_sam(app_with_sam):
     _app, client_for, _db = app_with_sam
     r = client_for(2).post("/sam/chat/send", data={
-        "message": "hi", "model": "gemini-2.5-flash"})
+        "message": "hi", "model": "gpt-4.1-mini"})
     assert r.status_code == 403

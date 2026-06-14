@@ -1,5 +1,5 @@
 """Sam Chat — a standalone /sam/chat surface for Sam to converse with
-Cenas AI through Gemini 2.5 Flash.
+Cenas AI through OpenAI.
 
 Deliberately ISOLATED from the agentic pipeline: no Cenas Kitchen
 system prompt, no agent context, no reads/writes to AgentChatMessage /
@@ -38,6 +38,8 @@ import json
 import logging
 import os
 import re
+import urllib.error
+import urllib.request
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -56,6 +58,7 @@ from app.models import (
     _VALID_SAM_CHAT_ROLES,
     _VALID_SAM_CHAT_SUGGESTION_STATUS,
 )
+from app.services.assistant_routing_shared import read_secret as _read_secret
 
 logger = logging.getLogger(__name__)
 
@@ -63,34 +66,91 @@ sam_chat_bp = Blueprint("sam_chat", __name__)
 
 
 # ---- model routing ----
-_DEFAULT_MODEL = "gemini-2.5-flash"
+_DEFAULT_MODEL = "gpt-4.1-mini"
 _PICKER_MODELS = (_DEFAULT_MODEL,)
 _ALLOWED_MODELS = set(_PICKER_MODELS)
 _MODEL_LABELS = {
-    "gemini-2.5-flash":  "Gemini 2.5 Flash",
+    "gpt-4.1-mini":  "OpenAI GPT-4.1 Mini",
 }
 # Rough list-price estimates, USD per million tokens.
 _MODEL_RATES = {
-    "gemini-2.5-flash":  {"in": 0.15, "out": 0.60},
+    "gpt-4.1-mini":  {"in": 0.40, "out": 1.60},
 }
 
 
 def _auto_select_model(text: str) -> str:
-    """Coerce any stale/unknown browser value back to Gemini 2.5 Flash."""
+    """Coerce any stale/unknown browser value back to the default OpenAI model."""
     return _DEFAULT_MODEL
 
 
-def _gemini_client():
-    """Returns a google.genai Client or None if GEMINI_API_KEY is unset."""
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        return None
+def _openai_key() -> str | None:
+    """Return the OpenAI key from env or the shared CENA secret-file lookup."""
+    key = _read_secret("OPENAI_API_KEY")
+    return key.strip() if key else None
+
+
+def _openai_text_content(raw) -> str:
+    if not isinstance(raw, list):
+        return str(raw or "")
+    chunks: list[str] = []
+    for block in raw:
+        if not isinstance(block, dict):
+            continue
+        kind = block.get("type")
+        if kind == "text":
+            chunks.append(str(block.get("text") or ""))
+        elif kind == "image":
+            chunks.append("[image attachment available in the CENA gateway path]")
+        elif kind == "document":
+            chunks.append("[document attachment available in the CENA gateway path]")
+    return "\n".join(part for part in chunks if part).strip()
+
+
+def _openai_messages(api_messages: list[dict], system: str | None) -> list[dict]:
+    out: list[dict] = []
+    if system:
+        out.append({"role": "system", "content": system})
+    for msg in api_messages:
+        role = "assistant" if msg.get("role") == "assistant" else "user"
+        content = _openai_text_content(msg.get("content"))
+        if content:
+            out.append({"role": role, "content": content})
+    return out or [{"role": "user", "content": ""}]
+
+
+def _openai_chat_complete(model: str, api_messages: list[dict],
+                          system: str | None) -> tuple[str, dict]:
+    key = _openai_key()
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY not configured")
+    payload = {
+        "model": model,
+        "messages": _openai_messages(api_messages, system),
+        "max_tokens": _MAX_OUTPUT_TOKENS,
+        "temperature": float(os.getenv("AI_ASSISTANT_OPENAI_TEMPERATURE", "0.2")),
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
     try:
-        from google import genai  # type: ignore[import]
-        return genai.Client(api_key=api_key)
-    except ImportError:
-        logger.warning("sam_chat: google-genai package not installed")
-        return None
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:300]
+        raise RuntimeError(f"OpenAI HTTP {exc.code}: {detail}") from exc
+    choices = body.get("choices") or []
+    if not choices:
+        raise RuntimeError("OpenAI returned no choices")
+    text = ((choices[0].get("message") or {}).get("content") or "").strip()
+    if not text:
+        raise RuntimeError("OpenAI returned no text")
+    return text, (body.get("usage") or {})
 
 
 _MAX_OUTPUT_TOKENS = 8192
@@ -163,8 +223,8 @@ def _require_sam_api():
 def _cena_gateway_url() -> str | None:
     """URL of Cena's gateway server on aick, e.g.
     https://cena-api.cenaskitchen.com  (set via CENA_GATEWAY_URL env var).
-    When set, sam_chat routes to Cena instead of calling Gemini directly.
-    Returns None when the env var is absent — falls back to direct Gemini."""
+    When set, sam_chat routes to Cena instead of calling OpenAI directly.
+    Returns None when the env var is absent - falls back to direct OpenAI."""
     url = (os.getenv("CENA_GATEWAY_URL") or "").strip().rstrip("/")
     return url or None
 
@@ -362,7 +422,7 @@ def _estimate_cost(model: str, in_tok: int, out_tok: int,
     for the Numeric(10,4) column. Best-effort — see _MODEL_RATES.
 
     Cache-token inputs are accepted for gateway compatibility. Direct
-    Gemini sends usually leave these at zero."""
+    OpenAI sends usually leave these at zero."""
     rates = _MODEL_RATES.get(model, {"in": 0.0, "out": 0.0})
     in_rate = rates["in"]
     usd = ((in_tok or 0) * in_rate
@@ -970,10 +1030,9 @@ def sam_chat_page():
             token_estimate = _session_token_estimate(db, current.id)
             session_cost = _session_cost(db, current.id)
 
-        # Source-of-truth model (Sam directive #276 2026-05-23): this
-        # surface now exposes Gemini 2.5 Flash only. Gateway state is
-        # still read for compatibility, but stale non-Gemini values fall
-        # back to _DEFAULT_MODEL.
+        # Source-of-truth model: this surface now exposes the configured
+        # OpenAI model. Gateway state is still read for compatibility, but
+        # stale non-OpenAI values fall back to _DEFAULT_MODEL.
         return render_template(
             "sam_chat.html",
             active="sam_chat",
@@ -1618,7 +1677,7 @@ def sam_chat_send():
     multipart/form-data:
       session_id  — optional; a new session is created when absent
       message     — the user's text (required unless attachments present)
-      model       — gemini-2.5-flash
+      model       - gpt-4.1-mini
       attachments — 0..N files (images / PDFs / text)
 
     The user message + attachment text are persisted BEFORE streaming
@@ -1819,71 +1878,21 @@ def sam_chat_send():
                                 raise RuntimeError(
                                     evt.get("error", "Cena gateway error"))
             else:
-                # ---- Google Gemini: direct API (gateway-down fallback) ----
+                # ---- OpenAI: direct API (gateway-down fallback) ----
                 # Normal production uses the Cena gateway so tool/context
                 # orchestration stays centralized. This direct API path is
                 # the fallback for local dev or an unwired gateway.
-                gc = _gemini_client()
-                if gc is None:
-                    yield _sse({"type": "error",
-                                "error": "GEMINI_API_KEY not configured"})
-                    return
-                from google.genai import types as _gtypes  # type: ignore[import]
-
-                def _gemini_parts(raw) -> list:
-                    if not isinstance(raw, list):
-                        return [_gtypes.Part.from_text(text=str(raw))]
-                    parts = []
-                    for block in raw:
-                        if not isinstance(block, dict):
-                            continue
-                        kind = block.get("type")
-                        if kind == "text":
-                            parts.append(_gtypes.Part.from_text(
-                                text=str(block.get("text") or "")))
-                            continue
-                        if kind not in ("image", "document"):
-                            continue
-                        source = block.get("source") or {}
-                        if source.get("type") != "base64":
-                            continue
-                        try:
-                            parts.append(_gtypes.Part.from_bytes(
-                                data=base64.b64decode(source.get("data") or ""),
-                                mime_type=(
-                                    source.get("media_type")
-                                    or "application/octet-stream"
-                                ),
-                            ))
-                        except Exception:  # noqa: BLE001
-                            continue
-                    return parts or [_gtypes.Part.from_text(text="")]
-
-                gemini_contents = []
-                for _m in api_messages:
-                    _role = "model" if _m["role"] == "assistant" else "user"
-                    gemini_contents.append(_gtypes.Content(
-                        role=_role,
-                        parts=_gemini_parts(_m["content"]),
-                    ))
-                _gemini_cfg_kwargs: dict = {
-                    "max_output_tokens": _MAX_OUTPUT_TOKENS,
-                }
-                if cena_devchat_feed:
-                    _gemini_cfg_kwargs["system_instruction"] = cena_devchat_feed
-                for _chunk in gc.models.generate_content_stream(
-                    model=model,
-                    contents=gemini_contents,
-                    config=_gtypes.GenerateContentConfig(**_gemini_cfg_kwargs),
-                ):
-                    if _chunk.text:
-                        full += _chunk.text
-                        yield _sse({"type": "delta", "text": _chunk.text})
-                # Gemini streaming doesn't expose per-chunk usage;
-                # rough estimate from character counts (÷4 ≈ tokens).
-                in_tok = sum(len(str(_m.get("content", ""))) // 4
-                             for _m in api_messages)
-                out_tok = len(full) // 4
+                chunk, usage = _openai_chat_complete(
+                    model, api_messages, cena_devchat_feed)
+                full += chunk
+                yield _sse({"type": "delta", "text": chunk})
+                in_tok = int(usage.get("prompt_tokens") or 0)
+                out_tok = int(usage.get("completion_tokens") or 0)
+                if not in_tok:
+                    in_tok = sum(len(_openai_text_content(_m.get("content"))) // 4
+                                 for _m in api_messages)
+                if not out_tok:
+                    out_tok = len(full) // 4
         except Exception as e:  # noqa: BLE001
             logger.exception("sam_chat: stream failed")
             # Persist whatever streamed before the failure so the turn

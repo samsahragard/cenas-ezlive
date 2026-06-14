@@ -17,7 +17,9 @@ import os
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -52,6 +54,7 @@ from app.services.assistant_tool_registry import canonical_tool_id, iter_builtin
 from app.services.assistant_routing_shared import (
     DATA_TOOL_RE as _DATA_TOOL_RE,
     DEFAULT_GEMINI_MODEL as _DEFAULT_GEMINI_MODEL,
+    DEFAULT_OPENAI_MODEL as _DEFAULT_OPENAI_MODEL,
     FOLLOWUP_RE as _FOLLOWUP_RE,
     MAX_QUESTION_CHARS as _MAX_QUESTION_CHARS,
     OPERATIONAL_NOUN_RE as _OPERATIONAL_NOUN_RE,
@@ -1880,6 +1883,10 @@ def _queue_for_review(question: str, ctx: dict[str, Any], reason: str,
 
 
 def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
+    openai_text, openai_model = _openai_generate(prompt)
+    if openai_text:
+        return openai_text, openai_model
+
     key = _read_secret("GEMINI_API_KEY")
     if not key:
         return None, None
@@ -1896,6 +1903,49 @@ def _gemini_generate(prompt: str) -> tuple[str | None, str | None]:
     )
     resp = client.models.generate_content(model=model, contents=prompt)
     text = (getattr(resp, "text", None) or "").strip()
+    return text or None, model
+
+
+def _openai_generate(prompt: str) -> tuple[str | None, str | None]:
+    key = _read_secret("OPENAI_API_KEY")
+    if not key:
+        return None, None
+
+    model = os.getenv("AI_ASSISTANT_OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
+    max_tokens = int(os.getenv("AI_ASSISTANT_OPENAI_MAX_TOKENS", "2048"))
+    temperature = float(os.getenv("AI_ASSISTANT_OPENAI_TEMPERATURE", "0.2"))
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(
+            req, timeout=max(1, _provider_timeout_ms() / 1000)
+        ) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        log.warning("assistant: openai HTTP %s", exc.code)
+        return None, None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("assistant: openai unavailable: %s", exc)
+        return None, None
+
+    choices = body.get("choices") or []
+    if not choices:
+        return None, None
+    message = choices[0].get("message") or {}
+    text = (message.get("content") or "").strip()
     return text or None, model
 
 

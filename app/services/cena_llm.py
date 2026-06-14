@@ -4,22 +4,27 @@ The reasoning loop needs a single ``complete(prompt, system=...) -> str`` call.
 Providers are tried in order and a provider that fails auth/permission/quota is
 marked dead for the rest of the process so we don't keep paying its latency:
 
-  1. Gemini   - google.genai, key via read_secret('GEMINI_API_KEY'),
+  1. OpenAI   - HTTPS Chat Completions, key via read_secret('OPENAI_API_KEY'),
+                model env AI_ASSISTANT_OPENAI_MODEL (default gpt-4.1-mini).
+  2. Gemini   - google.genai, key via read_secret('GEMINI_API_KEY'),
                 model env AI_ASSISTANT_GEMINI_MODEL (default gemini-3.5-flash).
-  2. Anthropic - env ANTHROPIC_API_KEY or C:\\Users\\sam\\cena-secrets\\anthropic_api_key.txt,
+  3. Anthropic - env ANTHROPIC_API_KEY or C:\\Users\\sam\\cena-secrets\\anthropic_api_key.txt,
                 model env CENA_L3_ANTHROPIC_MODEL (default claude-haiku-4-5-20251001).
 
-On this machine the Gemini key is 403-blocked, so the chain falls through to
-Anthropic automatically. Everything is lazy-imported; nothing constructs a
+Everything is lazy-imported; nothing constructs a
 client at module import. Tests inject their own callable and never touch these.
 """
 from __future__ import annotations
 
+import json
 import os
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Callable, Optional
 
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 _ANTHROPIC_KEY_FILE = r"C:\Users\sam\cena-secrets\anthropic_api_key.txt"
@@ -54,13 +59,62 @@ def _read_key(name: str) -> Optional[str]:
 
 
 # provider liveness for this process (None = untried, True = ok, False = dead)
-_state: dict[str, Optional[bool]] = {"gemini": None, "anthropic": None}
+_state: dict[str, Optional[bool]] = {
+    "openai": None,
+    "gemini": None,
+    "anthropic": None,
+}
 
 
 def reset_providers() -> None:
     """Test/maintenance hook: forget which providers were marked dead."""
+    _state["openai"] = None
     _state["gemini"] = None
     _state["anthropic"] = None
+
+
+def _openai_complete(prompt: str, system: Optional[str], timeout_s: float) -> str:
+    key = _read_key("OPENAI_API_KEY")
+    if not key:
+        raise CenaLlmError("no OpenAI key")
+
+    model = os.getenv("AI_ASSISTANT_OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+    max_tokens = int(os.getenv("AI_ASSISTANT_OPENAI_MAX_TOKENS", "2048"))
+    temperature = float(os.getenv("AI_ASSISTANT_OPENAI_TEMPERATURE", "0.2"))
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:300]
+        raise CenaLlmError(f"OpenAI HTTP {exc.code}: {detail}") from exc
+
+    choices = body.get("choices") or []
+    if not choices:
+        raise CenaLlmError("empty OpenAI response")
+    message = choices[0].get("message") or {}
+    text = (message.get("content") or "").strip()
+    if not text:
+        raise CenaLlmError("empty OpenAI response")
+    return text
 
 
 def _gemini_complete(prompt: str, system: Optional[str], timeout_s: float) -> str:
@@ -106,6 +160,7 @@ def _anthropic_complete(prompt: str, system: Optional[str], timeout_s: float) ->
 
 
 _PROVIDERS: list[tuple[str, Callable[[str, Optional[str], float], str]]] = [
+    ("openai", _openai_complete),
     ("gemini", _gemini_complete),
     ("anthropic", _anthropic_complete),
 ]

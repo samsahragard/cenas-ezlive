@@ -22,11 +22,16 @@ from app.services.assistant_safety import (
 
 
 MAX_QUESTION_CHARS = 2000
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_PROVIDER_TIMEOUT_MS = 20_000
 REVIEW_STATUS = "needs_review"
 
 SECRET_DEFAULTS = {
+    "OPENAI_API_KEY": [
+        r"C:\Users\sam\cena-secrets\openai_api_key.txt",
+        r"C:\Users\sam\cena-ai-assistant\.secrets\openai_api_key.txt",
+    ],
     "GEMINI_API_KEY": [
         r"C:\Users\sam\cena-secrets\gemini_api_key.txt",
         r"C:\Users\sam\cena\.secrets\gemini_api_key.txt",

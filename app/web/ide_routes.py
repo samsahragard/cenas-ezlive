@@ -346,10 +346,14 @@ Common labor query formulations:
   - "night shift" or "PM shift" refers to employees whose scheduled hours fall within the 2:00 PM to 11:00 PM window (specifically: time(s.start_at) >= '14:00:00' AND time(s.end_at) <= '23:00:00' in toastdm.dm_schedule).
   - "morning shift", "morning staff", or "AM shift" refers to employees whose scheduled hours fall within the 7:00 AM to 5:00 PM window (specifically: time(s.start_at) >= '07:00:00' AND time(s.end_at) <= '17:00:00' in toastdm.dm_schedule).
   - To identify who is scheduled for a shift on a date and rank them, filter the employee list by joining with toastdm.dm_schedule (s) on s.cena_employee_id = p.cena_employee_id where position_name IN ('Server', 'Bartender') and start_at date matches the query date (e.g., substr(s.start_at, 1, 10) = 'YYYY-MM-DD'), and apply the shift boundaries.
-  - IMPORTANT ranking rule for waiters (servers) and bartenders: When asked who the "better", "best", "strongest", or "weakest" waiters (servers) or bartenders are (historically or for an active/today/tonight/future shift), their performance MUST be evaluated and ranked based on two key historical metrics over the last 30 days (excluding today):
-    1. Hourly Sales Rate Average (Sales Per Labor Hour, SPLH): calculated as SUM(c.amount) / SUM(t.total_hours) where c.amount is from toast_check_current and t.total_hours is from toastdm.dm_time_entry.
-    2. Tip Percentage (Tip%): calculated as (SUM(t.tips) / SUM(c.amount)) * 100.0 where t.tips is from toastdm.dm_time_entry and c.amount is from toast_check_current.
-    - When ranking these employees, query both of these metrics over the last 30 days, present the ranked list, show both their Hourly Sales Rate Average and Tip% in the output, and explain that the evaluation is based on these historical metrics over the last 30 days. Do not rank them solely on the sales they have rung up so far during today's shift.
+  - IMPORTANT performance ranking rules for tipped employees (Waiters/Servers and Bartenders): When asked who the "better", "best", "strongest", "weakest", or "worse" waiters (servers) or bartenders are (historically or for an active/today/tonight/future shift), their performance MUST be evaluated and ranked based on their historical credit card tips and transactions over the last 30 days (excluding today).
+    Evaluate them based on these metrics directly calculated from the transaction database:
+    1. Tip % (Primary Performance Indicator for "who is better"): calculated as: (SUM(pay.tip_amount) / SUM(pay.amount)) * 100.0 from toast_payment_current pay where pay.payment_type = 'CREDIT' AND pay.payment_status = 'CAPTURED'.
+    2. CC Tabs (Sales/Tab Volume): SUM(pay.amount) for CREDIT payments.
+    3. CC Tips (Total Tips): SUM(pay.tip_amount) for CREDIT payments.
+    4. Tickets (Ticket/Check Volume): COUNT(DISTINCT c.check_guid).
+    5. Avg Duration (Table turn time): AVG(strftime('%s', replace(c.closed_date, '+0000', 'Z')) - strftime('%s', replace(c.opened_date, '+0000', 'Z'))) / 60.0 in minutes.
+    - When asked to rank scheduled FOH tipped employees, write an SQL query to calculate these metrics over the last 30 days (excluding today) for each scheduled employee, present the results sorted by Tip % descending in a markdown table, and write a summary explaining who is performing better (higher tip percentage and/or volume) and who is not. Do not use today's partial sales.
 
 Rules of operation:
 1. You have tools to read, write, and list files in the local workspace directory.

@@ -188,17 +188,148 @@
     border-color: rgba(228,179,64,0.5);
     background: rgba(228,179,64,0.08);
   }
+  .ezm-phone-brief { display: none; }
 
   @media (max-width: 720px) {
+    .ezm-tabs {
+      gap: 10px;
+      overflow-x: auto;
+      padding: 0 2px 10px;
+      margin: -2px -2px 14px;
+      scrollbar-width: none;
+    }
+    .ezm-tabs::-webkit-scrollbar { display: none; }
+    .ezm-tab {
+      flex: 0 0 auto;
+      padding: 9px 13px;
+      border: 0.5px solid rgba(217,164,54,0.28);
+      border-radius: 999px;
+      background: rgba(0,0,0,0.20);
+    }
+    .ezm-tab.active {
+      color: #140A06;
+      border-color: #E4B340;
+      background: #E4B340;
+    }
+    .ezm-sheet-card {
+      border-color: rgba(217,164,54,0.20);
+      border-radius: 12px;
+      background: rgba(28,16,11,0.94);
+      margin-bottom: 14px;
+    }
     .ezm-sheet-top,
-    .ezm-sheet-summary,
+    .ezm-sheet-summary {
+      display: none;
+    }
+    .ezm-phone-brief {
+      display: grid;
+      grid-template-columns: minmax(112px, 0.7fr) minmax(0, 1fr);
+      min-height: 196px;
+      padding: 17px 16px 16px;
+    }
+    .ezm-phone-left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      padding-right: 15px;
+    }
+    .ezm-phone-id {
+      color: #E4B340;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      line-height: 1.08;
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+    .ezm-phone-store,
+    .ezm-phone-date,
+    .ezm-phone-weekday {
+      color: #FAF6EC;
+      font-size: 17px;
+      font-weight: 900;
+      line-height: 1.12;
+    }
+    .ezm-phone-right {
+      min-width: 0;
+      padding-left: 15px;
+      border-left: 0.5px solid rgba(250,246,236,0.10);
+    }
+    .ezm-phone-pay {
+      color: #FFD970;
+      font-size: 29px;
+      font-weight: 900;
+      line-height: 1;
+      margin: 0 0 11px;
+      text-shadow: 0 0 12px rgba(255,200,80,0.45);
+    }
+    .ezm-phone-label {
+      display: block;
+      margin: 10px 0 4px;
+      color: rgba(250,246,236,0.45);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+    .ezm-phone-strong {
+      display: block;
+      color: #FAF6EC;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.18;
+      overflow-wrap: anywhere;
+    }
+    .ezm-phone-muted {
+      color: rgba(250,246,236,0.52);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.35;
+      margin-top: 3px;
+    }
+    .ezm-sheet-dropdown {
+      border-top: 0.5px solid rgba(250,246,236,0.08);
+      margin: 0 16px;
+    }
+    .ezm-sheet-dropdown summary {
+      min-height: 46px;
+      padding: 0;
+      background: transparent;
+    }
     .ezm-sheet-detail-grid,
     .ezm-sheet-driver-row {
       grid-template-columns: 1fr;
     }
-    .ezm-sheet-pay { text-align: left; }
     .ezm-sheet-detail-wide,
     .ezm-sheet-driver-list { grid-column: auto; }
+    .ezm-sheet-detail-grid {
+      padding: 14px 0 16px;
+      background: transparent;
+    }
+    .ezm-sheet-driver-row {
+      align-items: stretch;
+      padding: 10px;
+    }
+    .ezm-sheet-driver-row form,
+    .ezm-sheet-driver-row .ezm-btn,
+    .ezm-footer form,
+    .ezm-footer .ezm-btn {
+      width: 100%;
+    }
+    .ezm-footer {
+      flex-direction: column;
+      width: 100%;
+    }
+    .ezm-approved-main {
+      flex-direction: column;
+    }
+    .ezm-approved-main > div:last-child {
+      text-align: left !important;
+    }
   }
 </style>
 {% endblock %}
@@ -372,6 +503,31 @@ if (document.readyState === 'loading') {
           <span class="ezm-sheet-strong">{{ first_driver.name if first_driver else 'No driver' }}</span>
           {% if first_row %}
             <div class="ezm-sheet-muted">
+              {{ first_row.load_str }}
+              {% if first_driver and first_driver.lifetime_delivery_count < 20 %}
+                · {{ first_driver.lifetime_delivery_count }} lifetime · Still in trial
+              {% elif first_driver %}
+                · score {{ first_driver.current_score or '—' }}/100
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="ezm-phone-brief">
+        <div class="ezm-phone-left">
+          <a class="ezm-phone-id" href="/orders/view/{{ o.external_order_id }}">{{ card.external_id }}</a>
+          <span class="ezm-phone-store">{{ card.store_label }}</span>
+          <span class="ezm-phone-date">{{ card.date_label }}</span>
+          <span class="ezm-phone-weekday">{{ card.weekday_label }}</span>
+        </div>
+        <div class="ezm-phone-right">
+          <div class="ezm-phone-pay">{{ card.payout_label }}</div>
+          <span class="ezm-phone-label">Bidding</span>
+          <span class="ezm-phone-strong">{{ g.rows|length }} request{{ 's' if g.rows|length != 1 else '' }}</span>
+          <span class="ezm-phone-label">Recommended</span>
+          <span class="ezm-phone-strong">{{ first_driver.name if first_driver else 'No driver' }}</span>
+          {% if first_row %}
+            <div class="ezm-phone-muted">
               {{ first_row.load_str }}
               {% if first_driver and first_driver.lifetime_delivery_count < 20 %}
                 · {{ first_driver.lifetime_delivery_count }} lifetime · Still in trial

@@ -14,6 +14,40 @@ assistant_bp = Blueprint("assistant", __name__)
 workspace_path = Path.cwd().resolve()
 logger.info(f"[IDE Bot] Active workspace: {workspace_path}")
 
+from app.services.assistant_routing_shared import (
+    DATA_TOOL_RE as _DATA_TOOL_RE,
+    DEFAULT_GEMINI_MODEL as _DEFAULT_GEMINI_MODEL,
+    FOLLOWUP_RE as _FOLLOWUP_RE,
+    MAX_QUESTION_CHARS as _MAX_QUESTION_CHARS,
+    OPERATIONAL_NOUN_RE as _OPERATIONAL_NOUN_RE,
+    REVIEW_STATUS as _REVIEW_STATUS,
+    SECRET_DEFAULTS as _SECRET_DEFAULTS,
+    SENSITIVE_RE as _SENSITIVE_RE,
+    TOAST_DATA_FRESHNESS_RE as _TOAST_DATA_FRESHNESS_RE,
+    TOAST_EMPLOYEE_PROFILE_RE as _TOAST_EMPLOYEE_PROFILE_RE,
+    TOAST_SALES_RE as _TOAST_SALES_RE,
+    TOAST_SALES_UNSUPPORTED_SCOPE_RE as _TOAST_SALES_UNSUPPORTED_SCOPE_RE,
+    TOAST_TABLE_ACTIVITY_RE as _TOAST_TABLE_ACTIVITY_RE,
+    TOAST_WEBHOOK_ACTIVITY_RE as _TOAST_WEBHOOK_ACTIVITY_RE,
+    has_unsupported_toast_sales_scope as _has_unsupported_toast_sales_scope,
+    now_iso as _now_iso,
+    provider_timeout_ms as _provider_timeout_ms,
+    queued_answer as _queued_answer,
+    read_secret as _read_secret,
+    requested_store as _requested_store,
+    review_reason_label as _review_reason_label,
+    review_risk_level as _review_risk_level,
+    stable_hash as _stable_hash,
+    toast_period_from_question as _toast_period_from_question,
+    toast_table_business_date_from_question as _toast_table_business_date_from_question,
+    today_ct as _today_ct,
+    wants_cena_l3_business_analytics as _wants_cena_l3_business_analytics,
+    wants_toast_data_freshness as _wants_toast_data_freshness,
+    wants_toast_employee_profiles as _wants_toast_employee_profiles,
+    wants_toast_sales_summary as _wants_toast_sales_summary,
+    wants_toast_table_activity as _wants_toast_table_activity,
+    wants_toast_webhook_activity as _wants_toast_webhook_activity,
+)
 # Gating decorator: only partner role with partner_auth_ok session can access
 def partner_required(f):
     from functools import wraps
@@ -278,6 +312,229 @@ def query_sales_db_tool(sqlQuery: str) -> list[dict]:
     finally:
         conn.close()
 
+def fetch_toast_live_data_tool(dataType: str, location: str) -> dict | list:
+    """
+    Fetches real-time operational data directly from the Toast API for a given location, bypassing the SQLite database replica.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        dataType: The type of live data to fetch. Must be one of:
+                  - 'tables': Open tables, active checks, assigned servers, check numbers, open items, and amounts so far.
+                  - 'clockins': Currently clocked-in staff, their positions, clock-in times, and regular/overtime hours so far (excluding pay rate/tips).
+                  - 'sales': Today's live sales summary (check counts, closed vs open checks, net sales closed, total guests) and top items rung in today.
+        location: The location/store key to fetch data for. Must be 'tomball' or 'copperfield'.
+    """
+    # Gating check
+    user = None
+    try:
+        from flask import has_request_context, g
+        if has_request_context():
+            user = getattr(g, "current_user", None)
+    except Exception:
+        pass
+
+    if user is not None:
+        user_role = getattr(user, "permission_level", "driver")
+        manager_roles = {"corporate", "corporate_chef", "gm", "manager", "km", "assistant_km", "prep_manager", "foh_manager", "expo"}
+        if user_role == "partner":
+            user_tier = "partner"
+        elif user_role in manager_roles:
+            user_tier = "manager"
+        else:
+            user_tier = "hourly"
+            
+        if user_tier == "hourly":
+            raise PermissionError("Access denied: Hourly employees are not permitted to fetch Toast live data.")
+
+    loc = str(location or "").lower().strip()
+    if loc not in ("tomball", "copperfield"):
+        raise ValueError("Invalid location. Must be 'tomball' or 'copperfield'.")
+
+    from app.services.toast_client import ToastClient, restaurant_guids
+    guids = restaurant_guids()
+    restaurant_guid = guids.get(loc)
+    if not restaurant_guid:
+        raise ValueError(f"No Toast restaurant GUID configured for location: {location}")
+
+    toast = ToastClient.shared()
+
+    from app.services.assistant_routing_shared import today_ct
+    bd_dt = today_ct()
+    bd = bd_dt.strftime("%Y%m%d")
+
+    if dataType == "tables":
+        from app.services.toast_table_activity import _table_name_map, _employee_name_map, _table_guid, _table_name_from_order, _ref_guid, _ref_name, _parse_iso, _format_ct
+        
+        table_map, _ = _table_name_map(toast, loc, restaurant_guid)
+        employee_map, _ = _employee_name_map(toast, loc, restaurant_guid, refresh=True)
+        orders = toast.fetch_orders_for_date(loc, restaurant_guid, bd, refresh=True)
+
+        open_checks = []
+        for order in orders or []:
+            if not isinstance(order, dict):
+                continue
+            if order.get("voided") or order.get("deleted"):
+                continue
+            
+            table_guid = _table_guid(order)
+            table_name = _table_name_from_order(order)
+            if table_guid:
+                table_name = table_map.get(table_guid) or table_name
+
+            for check in order.get("checks") or []:
+                if not isinstance(check, dict):
+                    continue
+                if check.get("voided") or check.get("deleted"):
+                    continue
+                
+                closed_date = check.get("closedDate")
+                if closed_date:
+                    continue
+
+                opened_at_raw = check.get("openedDate") or order.get("openedDate")
+                opened_at_str = ""
+                if opened_at_raw:
+                    opened_at = _parse_iso(opened_at_raw)
+                    if opened_at:
+                        opened_at_str = _format_ct(opened_at)
+
+                server_guid = _ref_guid(check.get("server") or order.get("server"))
+                server_name = employee_map.get(server_guid) if server_guid else None
+                if not server_name:
+                    server_name = _ref_name(check.get("server") or order.get("server"), employee_map) or "Unknown Server"
+
+                items_rung_in = []
+                for sel in check.get("selections") or []:
+                    if not isinstance(sel, dict):
+                        continue
+                    if sel.get("voided") or sel.get("deleted"):
+                        continue
+                    items_rung_in.append({
+                        "name": sel.get("displayName") or sel.get("name") or "Unknown Item",
+                        "quantity": sel.get("quantity") or 1,
+                        "price": sel.get("price") or 0.0,
+                        "amount": sel.get("netAmount") or sel.get("amount") or 0.0
+                    })
+
+                open_checks.append({
+                    "table_name": table_name or "Unknown Table",
+                    "check_number": check.get("displayNumber") or order.get("displayNumber") or "Unknown Check",
+                    "assigned_server": server_name,
+                    "opened_at": opened_at_str,
+                    "amount_so_far": check.get("amount") or check.get("totalAmount") or 0.0,
+                    "items_rung_in": items_rung_in
+                })
+        return open_checks
+
+    elif dataType == "clockins":
+        from app.services.toast_table_activity import _employee_name_map, _parse_iso, _format_ct
+        
+        start = datetime(bd_dt.year, bd_dt.month, bd_dt.day, 0, 0, 0)
+        end = datetime(bd_dt.year, bd_dt.month, bd_dt.day, 23, 59, 59)
+        time_entries = toast.fetch_time_entries(loc, restaurant_guid, start, end, refresh=True)
+        employee_map, _ = _employee_name_map(toast, loc, restaurant_guid, refresh=True)
+
+        jobs = toast.fetch_jobs(loc, restaurant_guid)
+        job_map = {j["guid"]: (j.get("title") or "?").strip() for j in jobs or [] if isinstance(j, dict) and "guid" in j}
+
+        clockins = []
+        for te in time_entries or []:
+            if not isinstance(te, dict):
+                continue
+            if te.get("deleted"):
+                continue
+
+            out_date = te.get("outDate")
+            is_open = out_date in (None, "") or (out_date or "").startswith("1970")
+            if not is_open:
+                continue
+
+            emp_guid = (te.get("employeeReference") or {}).get("guid")
+            emp_name = employee_map.get(emp_guid) if emp_guid else "Unknown Employee"
+
+            job_guid = (te.get("jobReference") or {}).get("guid")
+            position = job_map.get(job_guid) or "Unknown Position"
+
+            in_date_raw = te.get("inDate")
+            clock_in_str = ""
+            if in_date_raw:
+                in_dt = _parse_iso(in_date_raw)
+                if in_dt:
+                    clock_in_str = _format_ct(in_dt)
+
+            reg_hours = float(te.get("regularHours") or 0.0)
+            ot_hours = float(te.get("overtimeHours") or 0.0)
+
+            clockins.append({
+                "employee_name": emp_name,
+                "position": position,
+                "clock_in_time": clock_in_str,
+                "regular_hours": reg_hours,
+                "overtime_hours": ot_hours
+            })
+        return clockins
+
+    elif dataType == "sales":
+        orders = toast.fetch_orders_for_date(loc, restaurant_guid, bd, refresh=True)
+
+        closed_count = 0
+        open_count = 0
+        net_sales_closed = 0.0
+        total_guests = 0
+        item_counts = {}
+
+        for order in orders or []:
+            if not isinstance(order, dict):
+                continue
+            if order.get("voided") or order.get("deleted"):
+                continue
+
+            for check in order.get("checks") or []:
+                if not isinstance(check, dict):
+                    continue
+                if check.get("voided") or check.get("deleted"):
+                    continue
+
+                closed_date = check.get("closedDate")
+                is_closed = bool(closed_date)
+
+                amt = float(check.get("amount") or check.get("totalAmount") or 0.0)
+                guests = int(check.get("customerCount") or check.get("guestCount") or order.get("customerCount") or order.get("guestCount") or 0)
+                total_guests += guests
+
+                if is_closed:
+                    closed_count += 1
+                    net_sales_closed += amt
+                else:
+                    open_count += 1
+
+                for sel in check.get("selections") or []:
+                    if not isinstance(sel, dict):
+                        continue
+                    if sel.get("voided") or sel.get("deleted"):
+                        continue
+                    name = sel.get("displayName") or sel.get("name") or "Unknown Item"
+                    qty = float(sel.get("quantity") or 1.0)
+                    item_counts[name] = item_counts.get(name, 0.0) + qty
+
+        top_items = sorted(
+            [{"name": k, "quantity": v} for k, v in item_counts.items()],
+            key=lambda x: x["quantity"],
+            reverse=True
+        )[:5]
+
+        return {
+            "check_counts": closed_count + open_count,
+            "closed_checks": closed_count,
+            "open_checks": open_count,
+            "net_sales_closed": round(net_sales_closed, 2),
+            "total_guests": total_guests,
+            "top_items_rung_in": top_items
+        }
+
+    else:
+        raise ValueError("Invalid dataType. Must be 'tables', 'clockins', or 'sales'.")
+
 # Flask API Web Routes
 @assistant_bp.route("/assistant", methods=["GET"])
 @assistant_login_required
@@ -362,7 +619,9 @@ def api_assistant_chat():
             
         # Dynamically build tools list based on tier
         if user_tier == "partner":
-            tools_list = [list_files_tool, read_file_tool, write_file_tool, query_sales_db_tool]
+            tools_list = [list_files_tool, read_file_tool, write_file_tool, query_sales_db_tool, fetch_toast_live_data_tool]
+        elif user_tier == "manager":
+            tools_list = [query_sales_db_tool, fetch_toast_live_data_tool]
         else:
             tools_list = [query_sales_db_tool]
             
@@ -466,9 +725,12 @@ Shift definitions for servers/staff:
   5. Avg Duration (Table turn time): AVG(strftime('%s', replace(c.closed_date, '+0000', 'Z')) - strftime('%s', replace(c.opened_date, '+0000', 'Z'))) / 60.0 in minutes.
   - When asked to rank scheduled FOH tipped employees, write an SQL query to calculate these metrics over the last 30 days (excluding today) for each scheduled employee, present the results sorted by Tip % descending in a markdown table, and write a summary explaining who is performing better (higher tip percentage and/or volume) and who is not. Do not use today's partial sales.
 
-Live Operations, Open Tables, and Clocked-in Staff Queries:
-- To find currently open tables in a store: Query checks where `c.closed_date IS NULL OR c.closed_date = ''` (and `c.voided = 0 AND c.deleted = 0`). To get clean table names and currently assigned server names, join `toast_check_current` (c) and `toast_order_current` (o) on `c.order_guid = o.order_guid`, join `toast_dimension_item` (d) on `d.domain = 'table' AND d.toast_guid = o.table_guid AND d.store_key = o.store_key`, join `employee_toast_identity_map` (m) on `o.server_toast_guid = m.toast_employee_guid`, and join `toastdm.dm_profile` (p) on `m.cena_employee_id = p.cena_employee_id`. Make sure to restrict the query to today's business date (e.g. '20260614') to ignore stale historical records.
-- To find currently clocked-in staff: Query `toastdm.dm_time_entry` where `clock_out IS NULL OR clock_out = ''` joined with `toastdm.dm_profile` to get the list of active employees, their clock-in times, and their positions.
+Live Operations, Open Tables, Clocked-in Staff, and Live Sales/Store Queries:
+- IMPORTANT: For any query about "right now", "currently", "live", or "today" regarding open tables, clocked-in staff, waitstaff/cooks active, items rung in today, guest counts today, or live/today's sales summary, you MUST use the `fetch_toast_live_data_tool` instead of querying the sales/labor database.
+- Use `fetch_toast_live_data_tool` with `dataType='tables'` to get open tables, active checks, assigned servers, check numbers, open items, and amounts so far.
+- Use `fetch_toast_live_data_tool` with `dataType='clockins'` to get currently clocked-in staff, their positions, clock-in times, and regular/overtime hours so far today.
+- Use `fetch_toast_live_data_tool` with `dataType='sales'` to get today's live sales summary (check counts, closed vs open checks, net sales closed, total guests) and top items rung in.
+- This tool bypasses the database and routes live data directly from the Toast API.
 """
 
         if user_tier == "partner":
@@ -477,7 +739,7 @@ IDENTITY VERIFICATION & GATING RULES:
 - You are speaking to {user_name}, who is logged in as a 'partner'.
 - On the first turn of a conversation, you MUST explicitly greet {user_name} by name, state/verify their role as 'partner', and confirm they have full access.
 - As a partner, they have full access to everything: codebase files, database schemas, raw SQL queries, hourly pay rates, and labor costs.
-- You have access to files tools (list_files_tool, read_file_tool, write_file_tool) and query_sales_db_tool.
+- You have access to files tools (list_files_tool, read_file_tool, write_file_tool), query_sales_db_tool, and fetch_toast_live_data_tool.
 - In addition to sales, you have access to the 'toastdm.dm_time_entry' table and the 'toast_labor' database to query labor costs, hourly pay rates, and hours worked.
 """
         elif user_tier == "manager":
@@ -490,7 +752,7 @@ IDENTITY VERIFICATION & GATING RULES:
   2. Database schemas, raw SQL queries, or internal table/column structures. Never explain SQL queries or print them.
   3. Hourly pay rates (individual hourly pay) or total labor costs (labor cost sum, hourly rate avg, base_pay, or total labor spend).
 - If they ask for any codebase, file, schema, raw SQL, or labor cost/pay rate information, you MUST politely refuse, stating that you have verified their role as '{user_role}' and that such information is restricted to Partners only.
-- You have ONLY the query_sales_db_tool to fetch check counts, sales volume, menu selections, and FOH schedules. You MUST NOT query labor costs or hourly pay rates.
+- You have query_sales_db_tool and fetch_toast_live_data_tool. You MUST NOT query labor costs or hourly pay rates, but you can fetch live operational data via fetch_toast_live_data_tool.
 - Do NOT output SQL query text or database names under any circumstance to this user.
 """
         else:  # hourly
@@ -599,6 +861,10 @@ IDENTITY VERIFICATION & GATING RULES:
                         outcome = write_file_tool(**args)
                     elif name == "query_sales_db_tool":
                         outcome = query_sales_db_tool(**args)
+                    elif name == "fetch_toast_live_data_tool":
+                        if user_tier not in ("partner", "manager"):
+                            raise PermissionError("Access denied: fetch_toast_live_data_tool is restricted to partners and managers.")
+                        outcome = fetch_toast_live_data_tool(**args)
                     else:
                         raise ValueError(f"Unknown tool name: {name}")
                 except Exception as err:

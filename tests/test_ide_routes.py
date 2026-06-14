@@ -193,3 +193,180 @@ def test_query_sales_db_tool_proxy(monkeypatch):
     assert "Authorization" in called_headers
     assert called_headers["Authorization"].startswith("Basic ")
     assert called_data == {"sqlQuery": "SELECT 42"}
+
+def test_fetch_toast_live_data_tool_gating(app_with_user, monkeypatch):
+    app, client_for, db = app_with_user
+    from app.web.assistant_routes import fetch_toast_live_data_tool
+    
+    # Mock ToastClient and restaurant_guids
+    monkeypatch.setattr("app.services.toast_client.restaurant_guids", lambda: {"tomball": "guid-tomball", "copperfield": "guid-copperfield"})
+    
+    class FakeToast:
+        def fetch_orders_for_date(self, *args, **kwargs):
+            return []
+        def fetch_time_entries(self, *args, **kwargs):
+            return []
+        def fetch_employees(self, *args, **kwargs):
+            return []
+        def fetch_jobs(self, *args, **kwargs):
+            return []
+        def fetch_tables(self, *args, **kwargs):
+            return []
+            
+    from app.services.toast_client import ToastClient
+    monkeypatch.setattr(ToastClient, "shared", lambda: FakeToast())
+    
+    # 1. Partner user: should access successfully
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(permission_level="partner").first()
+        res = fetch_toast_live_data_tool("sales", "tomball")
+        assert isinstance(res, dict)
+        
+    # 2. Manager user (corporate): should access successfully
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(permission_level="corporate").first()
+        res = fetch_toast_live_data_tool("sales", "tomball")
+        assert isinstance(res, dict)
+        
+    # 3. Hourly user: should raise PermissionError
+    hourly_user = User(
+        id=4, full_name="Hourly Worker Live Test", email="hourly2@x.test",
+        passcode_hash="x", permission_level="driver",
+        active=True, first_login_done=True,
+    )
+    db.add(hourly_user)
+    db.commit()
+    with app.test_request_context():
+        g.current_user = hourly_user
+        with pytest.raises(PermissionError):
+            fetch_toast_live_data_tool("sales", "tomball")
+
+def test_fetch_toast_live_data_tool_tables(app_with_user, monkeypatch):
+    app, client_for, db = app_with_user
+    from app.web.assistant_routes import fetch_toast_live_data_tool
+    
+    monkeypatch.setattr("app.services.toast_client.restaurant_guids", lambda: {"tomball": "guid-tomball"})
+    
+    class FakeToast:
+        def fetch_tables(self, *args, **kwargs):
+            return [{"guid": "table-101", "name": "101"}]
+        def fetch_employees(self, *args, **kwargs):
+            return [{"guid": "server-1", "firstName": "Alice", "lastName": "Smith"}]
+        def fetch_orders_for_date(self, *args, **kwargs):
+            return [{
+                "guid": "order-1",
+                "source": "In Store",
+                "table": {"guid": "table-101", "name": "101"},
+                "openedDate": "2026-06-05T23:00:00.000+0000",
+                "checks": [{
+                    "guid": "check-1",
+                    "displayNumber": "7",
+                    "openedDate": "2026-06-05T23:00:00.000+0000",
+                    "closedDate": None, # open check
+                    "amount": 25.5,
+                    "server": {"guid": "server-1"},
+                    "selections": [{
+                        "guid": "sel-1",
+                        "displayName": "Tacos",
+                        "quantity": 2,
+                        "price": 10.0,
+                        "netAmount": 20.0
+                    }]
+                }]
+            }]
+            
+    from app.services.toast_client import ToastClient
+    monkeypatch.setattr(ToastClient, "shared", lambda: FakeToast())
+    
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(permission_level="partner").first()
+        res = fetch_toast_live_data_tool("tables", "tomball")
+        assert len(res) == 1
+        assert res[0]["table_name"] == "101"
+        assert res[0]["check_number"] == "7"
+        assert res[0]["assigned_server"] == "Alice Smith"
+        assert res[0]["amount_so_far"] == 25.5
+        assert len(res[0]["items_rung_in"]) == 1
+        assert res[0]["items_rung_in"][0]["name"] == "Tacos"
+        assert res[0]["items_rung_in"][0]["quantity"] == 2
+
+def test_fetch_toast_live_data_tool_clockins(app_with_user, monkeypatch):
+    app, client_for, db = app_with_user
+    from app.web.assistant_routes import fetch_toast_live_data_tool
+    
+    monkeypatch.setattr("app.services.toast_client.restaurant_guids", lambda: {"tomball": "guid-tomball"})
+    
+    class FakeToast:
+        def fetch_employees(self, *args, **kwargs):
+            return [{"guid": "emp-1", "firstName": "Bob", "lastName": "Jones"}]
+        def fetch_jobs(self, *args, **kwargs):
+            return [{"guid": "job-1", "title": "Cook"}]
+        def fetch_time_entries(self, *args, **kwargs):
+            return [{
+                "guid": "te-1",
+                "employeeReference": {"guid": "emp-1"},
+                "jobReference": {"guid": "job-1"},
+                "inDate": "2026-06-05T09:00:00.000-0500",
+                "outDate": None, # clocked in
+                "regularHours": 4.5,
+                "overtimeHours": 0.0,
+                "hourlyWage": 15.0 # should be masked!
+            }]
+            
+    from app.services.toast_client import ToastClient
+    monkeypatch.setattr(ToastClient, "shared", lambda: FakeToast())
+    
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(permission_level="partner").first()
+        res = fetch_toast_live_data_tool("clockins", "tomball")
+        assert len(res) == 1
+        assert res[0]["employee_name"] == "Bob Jones"
+        assert res[0]["position"] == "Cook"
+        assert res[0]["regular_hours"] == 4.5
+        # Ensure wage info is NOT leaked
+        assert "hourlyWage" not in res[0]
+        assert "wage" not in res[0]
+        assert "rate" not in res[0]
+
+def test_fetch_toast_live_data_tool_sales(app_with_user, monkeypatch):
+    app, client_for, db = app_with_user
+    from app.web.assistant_routes import fetch_toast_live_data_tool
+    
+    monkeypatch.setattr("app.services.toast_client.restaurant_guids", lambda: {"tomball": "guid-tomball"})
+    
+    class FakeToast:
+        def fetch_orders_for_date(self, *args, **kwargs):
+            return [{
+                "guid": "order-1",
+                "customerCount": 2,
+                "checks": [
+                    {
+                        "guid": "check-1",
+                        "closedDate": "2026-06-05T23:06:00.000+0000", # closed
+                        "amount": 25.5,
+                        "selections": [{"displayName": "Fajitas", "quantity": 1}]
+                    },
+                    {
+                        "guid": "check-2",
+                        "closedDate": None, # open
+                        "amount": 10.0,
+                        "selections": [{"displayName": "Fajitas", "quantity": 2}, {"displayName": "Rita", "quantity": 1}]
+                    }
+                ]
+            }]
+            
+    from app.services.toast_client import ToastClient
+    monkeypatch.setattr(ToastClient, "shared", lambda: FakeToast())
+    
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(permission_level="partner").first()
+        res = fetch_toast_live_data_tool("sales", "tomball")
+        assert res["check_counts"] == 2
+        assert res["closed_checks"] == 1
+        assert res["open_checks"] == 1
+        assert res["net_sales_closed"] == 25.5
+        assert res["total_guests"] == 4 # 2 checks x 2 guests (default/sum)
+        assert len(res["top_items_rung_in"]) == 2
+        assert res["top_items_rung_in"][0]["name"] == "Fajitas"
+        assert res["top_items_rung_in"][0]["quantity"] == 3
+

@@ -103,6 +103,50 @@ def query_sales_db_tool(sqlQuery: str) -> list[dict]:
         sqlQuery: The SQL SELECT query to run.
     """
     toast_webhook_db = os.getenv("TOAST_WEBHOOK_DB") or r"C:\Users\sam\cena-ai-assistant\toast_webhook\toast_webhook.sqlite"
+    is_render = os.getenv("RENDER") == "true"
+    
+    if is_render or not os.path.exists(toast_webhook_db):
+        import urllib.request
+        import urllib.error
+        import base64
+        import json
+        
+        cloud_url = os.getenv("AI_ASSISTANT_CK_RUNTIME_URL") or "https://cena-cloud.onrender.com"
+        cloud_token = os.getenv("AI_ASSISTANT_CK_RUNTIME_TOKEN") or os.getenv("CENA_CLOUD_TOKEN") or ""
+        
+        if "/assistant/answer" in cloud_url:
+            base_url = cloud_url.split("/assistant/answer")[0]
+        else:
+            base_url = cloud_url.rstrip("/")
+            
+        endpoint = base_url + "/sync/query_db"
+        
+        payload = json.dumps({"sqlQuery": sqlQuery}).encode("utf-8")
+        req = urllib.request.Request(endpoint, data=payload, method="POST")
+        req.add_header("Content-Type", "application/json")
+        
+        auth_str = f"sam:{cloud_token}"
+        encoded_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
+        req.add_header("Authorization", f"Basic {encoded_auth}")
+        
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data.get("success"):
+                    return data.get("results") or []
+                else:
+                    raise Exception(data.get("error") or "Unknown error from cloud DB proxy")
+        except urllib.error.HTTPError as exc:
+            try:
+                err_content = exc.read().decode("utf-8")
+                err_data = json.loads(err_content)
+                err_msg = err_data.get("error") or str(exc)
+            except Exception:
+                err_msg = str(exc)
+            raise Exception(f"Cloud DB proxy HTTP error {exc.code}: {err_msg}")
+        except Exception as exc:
+            raise Exception(f"Cloud DB proxy connection failed: {exc}")
+
     cena_l3_data_dir = os.getenv("CENA_L3_DATA_DIR") or r"C:\Users\sam\cena-l3data"
     snapshots_dir = Path(cena_l3_data_dir) / "snapshots"
     

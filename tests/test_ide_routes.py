@@ -114,3 +114,41 @@ def test_query_sales_db_tool():
         assert isinstance(profiles, list)
     except Exception as e:
         print("Could not query toastdm.dm_profile:", e)
+
+def test_query_sales_db_tool_proxy(monkeypatch):
+    import urllib.request
+    from app.web.ide_routes import query_sales_db_tool
+    
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_URL", "https://cena-cloud-test.onrender.com/assistant/answer")
+    monkeypatch.setenv("AI_ASSISTANT_CK_RUNTIME_TOKEN", "mocktoken")
+    
+    called_url = None
+    called_headers = {}
+    called_data = None
+    
+    class MockResponse:
+        def __init__(self, data):
+            self.data = data
+        def read(self):
+            return self.data
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+            
+    def mock_urlopen(req, timeout=None):
+        nonlocal called_url, called_headers, called_data
+        called_url = req.full_url
+        called_headers = req.headers
+        called_data = json.loads(req.data.decode("utf-8"))
+        return MockResponse(json.dumps({"success": True, "results": [{"val": 42}]}).encode("utf-8"))
+        
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+    
+    res = query_sales_db_tool("SELECT 42")
+    assert res == [{"val": 42}]
+    assert called_url == "https://cena-cloud-test.onrender.com/sync/query_db"
+    assert "Authorization" in called_headers
+    assert called_headers["Authorization"].startswith("Basic ")
+    assert called_data == {"sqlQuery": "SELECT 42"}

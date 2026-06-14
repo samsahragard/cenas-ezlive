@@ -266,6 +266,7 @@ def import_draft_records(
     actor_id: int | None,
     commit: bool = False,
     replace_existing: bool = False,
+    target_store: str | None = None,
 ) -> dict:
     """Validate and optionally insert unpublished draft shifts.
 
@@ -279,6 +280,20 @@ def import_draft_records(
         return {"ok": False, "error": "no usable shift records"}
 
     target_stores = sorted({r["store"] for r in prepared})
+    target_store_key = _store_key(target_store) if target_store else None
+    if replace_existing:
+        if target_store_key is None:
+            return {
+                "ok": False,
+                "error": "target_store is required when replace_existing=true",
+            }
+        if target_stores != [target_store_key]:
+            return {
+                "ok": False,
+                "error": "replace_existing target_store must match every record",
+                "target_store": target_store_key,
+                "record_stores": target_stores,
+            }
     blockers = []
     schedules: dict[str, Schedule] = {}
     existing_by_store: dict[str, list[Schedule]] = {}

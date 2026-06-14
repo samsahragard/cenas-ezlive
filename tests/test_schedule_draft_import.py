@@ -15,7 +15,8 @@ from app.services.schedule_draft_import import import_draft_records
 
 
 def _seed_schedulable_employee(db, *, emp_id=20, name="Alex Martinez", store="tomball"):
-    db.add(Position(id=10, name="Cook", store_key=None))
+    if db.get(Position, 10) is None:
+        db.add(Position(id=10, name="Cook", store_key=None))
     db.add(Employee(id=emp_id, full_name=name, active=True, session_version=1))
     db.add(EmployeeStoreAssignment(employee_id=emp_id, store_key=store))
     db.add(EmployeePosition(employee_id=emp_id, position_id=10, store_key=store))
@@ -161,6 +162,7 @@ def test_draft_import_replace_clears_legacy_week_and_imports_only_payload(db_ses
         actor_id=1,
         commit=True,
         replace_existing=True,
+        target_store="tomball",
     )
 
     assert summary["ok"] is True
@@ -178,3 +180,136 @@ def test_draft_import_replace_clears_legacy_week_and_imports_only_payload(db_ses
     assert shifts[0].id != 200
     assert shifts[0].published_at is None
     assert shifts[0].start_at == datetime(2026, 6, 14, 9, 0)
+
+
+def test_draft_import_replace_requires_target_store_match(db_session):
+    _seed_schedulable_employee(db_session)
+    db_session.add(Schedule(
+        id=100,
+        store_key="tomball",
+        week_start=date(2026, 6, 13),
+        status="published",
+        published_at=datetime(2026, 6, 6, 12, 0),
+        created_by=1,
+    ))
+    db_session.add(Shift(
+        id=200,
+        schedule_id=100,
+        employee_id=20,
+        position_id=10,
+        start_at=datetime(2026, 6, 13, 16, 0),
+        end_at=datetime(2026, 6, 13, 22, 0),
+        break_minutes=0,
+        status="assigned",
+        published_at=datetime(2026, 6, 6, 12, 0),
+    ))
+    db_session.commit()
+
+    summary = import_draft_records(
+        [{
+            "employee_name": "Alex Martinez",
+            "store_key": "tomball",
+            "shift_date": "2026-06-14",
+            "start": "9:00 AM",
+            "end": "5:00 PM",
+            "position_name": "Cook",
+        }],
+        db_session,
+        week_start=date(2026, 6, 14),
+        actor_id=1,
+        commit=True,
+        replace_existing=True,
+    )
+
+    assert summary["ok"] is False
+    assert "target_store is required" in summary["error"]
+    assert db_session.query(Schedule).filter_by(id=100).count() == 1
+    assert db_session.query(Shift).filter_by(id=200).count() == 1
+
+    mismatch = import_draft_records(
+        [{
+            "employee_name": "Alex Martinez",
+            "store_key": "tomball",
+            "shift_date": "2026-06-14",
+            "start": "9:00 AM",
+            "end": "5:00 PM",
+            "position_name": "Cook",
+        }],
+        db_session,
+        week_start=date(2026, 6, 14),
+        actor_id=1,
+        commit=True,
+        replace_existing=True,
+        target_store="copperfield",
+    )
+
+    assert mismatch["ok"] is False
+    assert "must match every record" in mismatch["error"]
+    assert db_session.query(Schedule).filter_by(id=100).count() == 1
+    assert db_session.query(Shift).filter_by(id=200).count() == 1
+
+
+def test_draft_import_replace_leaves_other_store_untouched(db_session):
+    _seed_schedulable_employee(db_session)
+    _seed_schedulable_employee(db_session, emp_id=21, name="Copper Person", store="copperfield")
+    tomball = Schedule(
+        id=100,
+        store_key="tomball",
+        week_start=date(2026, 6, 13),
+        status="published",
+        published_at=datetime(2026, 6, 6, 12, 0),
+        created_by=1,
+    )
+    copperfield = Schedule(
+        id=101,
+        store_key="copperfield",
+        week_start=date(2026, 6, 14),
+        status="draft",
+        published_at=None,
+        created_by=1,
+    )
+    db_session.add_all([tomball, copperfield])
+    db_session.add(Shift(
+        id=200,
+        schedule_id=100,
+        employee_id=20,
+        position_id=10,
+        start_at=datetime(2026, 6, 13, 16, 0),
+        end_at=datetime(2026, 6, 13, 22, 0),
+        break_minutes=0,
+        status="assigned",
+        published_at=datetime(2026, 6, 6, 12, 0),
+    ))
+    db_session.add(Shift(
+        id=201,
+        schedule_id=101,
+        employee_id=21,
+        position_id=10,
+        start_at=datetime(2026, 6, 14, 16, 0),
+        end_at=datetime(2026, 6, 14, 22, 0),
+        break_minutes=0,
+        status="assigned",
+        published_at=None,
+    ))
+    db_session.commit()
+
+    summary = import_draft_records(
+        [{
+            "employee_name": "Alex Martinez",
+            "store_key": "tomball",
+            "shift_date": "2026-06-14",
+            "start": "9:00 AM",
+            "end": "5:00 PM",
+            "position_name": "Cook",
+        }],
+        db_session,
+        week_start=date(2026, 6, 14),
+        actor_id=1,
+        commit=True,
+        replace_existing=True,
+        target_store="tomball",
+    )
+
+    assert summary["ok"] is True
+    assert db_session.query(Schedule).filter_by(id=101).count() == 1
+    assert db_session.query(Shift).filter_by(id=201).count() == 1

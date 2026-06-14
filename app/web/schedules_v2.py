@@ -598,6 +598,7 @@ def sv2_draft_import():
             actor_id=current_user_id(),
             commit=commit,
             replace_existing=replace_existing,
+            target_store=payload.get("target_store"),
         )
         status = 200 if summary.get("ok") else 409
         return jsonify(summary), status

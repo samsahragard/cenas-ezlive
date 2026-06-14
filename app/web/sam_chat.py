@@ -900,13 +900,14 @@ def _process_attachments(files):
 # auto-loaded start docs at the top of /sam/chat so the most recent
 # copy is always visible at chat open). Read at request time from
 # project root, embed server-side; collapsed by default so they don't
-# dominate the view. List matches CENA_CHARTER.md autoload section.
+# dominate the view.
 _START_FILES = (
     "CENA_CHARTER.md",
     "CENA.md",
     "APP_STATUS.md",
     "plan.md",
     "tool.md",
+    "tools.md",
 )
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 

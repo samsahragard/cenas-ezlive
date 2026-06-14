@@ -52,6 +52,7 @@ SOURCES: dict[str, tuple[str, str]] = {
     "toastdm": ("CENA_L3_SRC_TOASTDM", r"C:\Users\sam\cena-perfdb\datamart\datamart.sqlite"),
     "ordersdc": ("CENA_L3_SRC_ORDERSDC", r"C:\Users\sam\cena-driverdc\_live\ordersdc.sqlite"),
     "driverdc": ("CENA_L3_SRC_DRIVERDC", r"C:\Users\sam\cena-driverdc\_live\driverdc.sqlite"),
+    "toast_webhook": ("CENA_L3_SRC_TOAST_WEBHOOK", r"C:\Users\sam\cena-ai-assistant\toast_webhook\toast_webhook.sqlite"),
 }
 
 # Caps (contract section 2)
@@ -113,30 +114,91 @@ def _copy_one_source(alias: str, source: str, snap_dir: Path) -> dict:
     try:
         if not os.path.exists(source):
             raise FileNotFoundError(f"source file not found: {source}")
-        src_conn = sqlite3.connect(_sqlite_uri(source, "mode=ro"), uri=True)
         if tmp.exists():
             tmp.unlink()
-        dst_conn = sqlite3.connect(str(tmp))
-        src_conn.backup(dst_conn)
-        # cheap row hint: total rows across user tables of the (small) copy
-        try:
+            
+        if alias == "toast_webhook":
+            # For toast_webhook, we perform a compacted/filtered table copy to avoid syncing 1.72 GB of raw logs
+            src_conn = sqlite3.connect(_sqlite_uri(source, "mode=ro"), uri=True)
+            dst_conn = sqlite3.connect(str(tmp))
+            dst_conn.execute("PRAGMA journal_mode=WAL")
+            
+            exclude_tables = {"toast_webhook_event", "toast_webhook_delivery_attempt", "toast_order_snapshot"}
             tables = [
-                r[0] for r in dst_conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' "
-                    "AND name NOT LIKE 'sqlite_%'"
-                )
+                row[0] for row in src_conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                if row[0] not in exclude_tables and not row[0].startswith("sqlite_")
             ]
+            
+            for table in tables:
+                # Copy schema
+                schema = src_conn.execute(
+                    f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table}'"
+                ).fetchone()[0]
+                dst_conn.execute(schema)
+                
+                # Copy data
+                cursor = src_conn.execute(f"SELECT * FROM {table}")
+                cols = [d[0] for d in cursor.description]
+                placeholders = ",".join(["?"] * len(cols))
+                rows = cursor.fetchall()
+                dst_conn.executemany(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})", rows)
+                
+            # Copy indexes
+            for row in src_conn.execute("SELECT sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL"):
+                sql = row[0]
+                for table in tables:
+                    if f"ON {table}" in sql or f"on {table}" in sql or f'ON "{table}"' in sql:
+                        try:
+                            dst_conn.execute(sql)
+                        except Exception:
+                            pass
+                        break
+            # Nullify large JSON columns to keep the file size minimal for cloud syncing
+            try:
+                dst_conn.execute("UPDATE toast_order_current SET order_json = ''")
+                dst_conn.execute("UPDATE toast_check_current SET check_json = ''")
+                dst_conn.execute("UPDATE toast_selection_current SET selection_json = ''")
+                dst_conn.execute("UPDATE toast_payment_current SET payment_json = ''")
+                dst_conn.execute("UPDATE toast_dimension_item SET payload_json = ''")
+                dst_conn.execute("UPDATE employee_toast_fact SET summary_json = ''")
+            except Exception:
+                pass
+                
+            dst_conn.commit()
+            dst_conn.execute("VACUUM")
             status["row_hint"] = sum(
                 dst_conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
                 for t in tables
             )
             status["table_count"] = len(tables)
-        except sqlite3.Error:
-            status["row_hint"] = None
-        dst_conn.close()
-        dst_conn = None
-        src_conn.close()
-        src_conn = None
+            dst_conn.close()
+            dst_conn = None
+            src_conn.close()
+            src_conn = None
+        else:
+            src_conn = sqlite3.connect(_sqlite_uri(source, "mode=ro"), uri=True)
+            dst_conn = sqlite3.connect(str(tmp))
+            src_conn.backup(dst_conn)
+            # cheap row hint: total rows across user tables of the (small) copy
+            try:
+                tables = [
+                    r[0] for r in dst_conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' "
+                        "AND name NOT LIKE 'sqlite_%'"
+                    )
+                ]
+                status["row_hint"] = sum(
+                    dst_conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+                    for t in tables
+                )
+                status["table_count"] = len(tables)
+            except sqlite3.Error:
+                status["row_hint"] = None
+            dst_conn.close()
+            dst_conn = None
+            src_conn.close()
+            src_conn = None
+            
         os.replace(tmp, dest)
         status["ok"] = True
         status["copied_at"] = _utc_now_iso()

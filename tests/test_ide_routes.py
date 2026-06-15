@@ -393,8 +393,8 @@ def test_scheduling_tools_partner_access(app_with_user, monkeypatch):
     from app.models import Position, Employee, Schedule, Shift
  
     # Add a mock position and employee in DB
-    pos = Position(id=1, name="Server", store_key="tomball")
-    emp = Employee(id=1, full_name="John Server", email="john@x.test", active=True)
+    pos = Position(name="Server", store_key="tomball")
+    emp = Employee(full_name="John Server", email="john@x.test", active=True)
     db.add_all([pos, emp])
     db.commit()
  

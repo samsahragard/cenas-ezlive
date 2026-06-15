@@ -2,6 +2,7 @@ import os
 import json
 import sqlite3
 import logging
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, g, session, abort
 from google import genai
@@ -176,6 +177,17 @@ def write_file_tool(filePath: str, content: str) -> str:
         filePath: The relative path of the file to write.
         content: The text content to be written.
     """
+    user = None
+    try:
+        from flask import has_request_context, g
+        if has_request_context():
+            user = getattr(g, "current_user", None)
+    except Exception:
+        pass
+        
+    if not user or user.id != 1:
+        raise PermissionError("Access denied: You are not authorized to make modifications to the app.")
+
     resolved = safe_resolve(filePath)
     resolved.parent.mkdir(parents=True, exist_ok=True)
     resolved.write_text(content, encoding="utf-8")
@@ -536,6 +548,551 @@ def fetch_toast_live_data_tool(dataType: str, location: str) -> dict | list:
     else:
         raise ValueError("Invalid dataType. Must be 'tables', 'clockins', or 'sales'.")
 
+
+def check_scheduling_access(user, store_key: str):
+    if not store_key or store_key.lower().strip() not in ("tomball", "copperfield"):
+        raise ValueError("Invalid store_key. Must be 'tomball' or 'copperfield'.")
+    if user is None:
+        raise PermissionError("Access denied: User is not logged in.")
+    
+    role = getattr(user, "permission_level", "driver")
+    manager_roles = {"corporate", "corporate_chef", "gm", "manager", "km", "assistant_km", "prep_manager", "foh_manager", "expo"}
+    if role == "partner":
+        return
+    
+    if role not in manager_roles:
+        raise PermissionError("Access denied: Hourly staff is not permitted to modify schedules.")
+        
+    if role == "corporate":
+        return
+        
+    scopes = [s.strip().lower() for s in (user.store_scope or "").split(",")]
+    if store_key.lower().strip() not in scopes:
+        raise PermissionError(f"Access denied: You are not authorized to manage the schedule for store '{store_key}'.")
+
+
+def _sync_shift_tags(db, shift_id: int, tag_ids, now: datetime) -> None:
+    from app.models import Tag, ShiftTag
+    clean_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in tag_ids or []:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid in seen:
+            continue
+        seen.add(tid)
+        clean_ids.append(tid)
+    if clean_ids:
+        valid_ids = {
+            tid for (tid,) in db.query(Tag.id).filter(Tag.id.in_(clean_ids)).all()
+        }
+    else:
+        valid_ids = set()
+    db.query(ShiftTag).filter_by(shift_id=shift_id).delete()
+    for tid in clean_ids:
+        if tid in valid_ids:
+            db.add(ShiftTag(shift_id=shift_id, tag_id=tid, created_at=now))
+def get_schedule_board_tool(store_key: str, week_start: str) -> dict:
+    """
+    Retrieves the weekly schedule board for a given store and week start date, 
+    including all draft and published shifts, their IDs, start/end times, and assigned employees/positions.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        store_key: The location/store key. Must be 'tomball' or 'copperfield'.
+        week_start: The start date of the week in YYYY-MM-DD format (must be a Sunday).
+    """
+    from app.db import SessionLocal
+    from app.models import Schedule, Shift, Position, Employee, ShiftTag
+    from datetime import date, timedelta
+    
+    user = getattr(g, "current_user", None)
+    check_scheduling_access(user, store_key)
+    
+    try:
+        week_start_dt = date.fromisoformat(week_start)
+    except Exception as e:
+        raise ValueError(f"Invalid week_start format. Expected YYYY-MM-DD. Error: {str(e)}")
+        
+    if week_start_dt.weekday() != 6:
+        week_start_dt = week_start_dt - timedelta(days=(week_start_dt.weekday() + 1) % 7)
+        
+    store_clean = store_key.lower().strip()
+    
+    db = SessionLocal()
+    try:
+        sched = db.query(Schedule).filter_by(store_key=store_clean, week_start=week_start_dt).first()
+        if not sched:
+            # check legacy saturday week start
+            legacy = week_start_dt - timedelta(days=1)
+            sched = db.query(Schedule).filter_by(store_key=store_clean, week_start=legacy).first()
+            
+        shifts = []
+        if sched:
+            for sh in db.query(Shift).filter_by(schedule_id=sched.id).all():
+                emp_name = None
+                if sh.employee_id:
+                    emp = db.query(Employee).filter_by(id=sh.employee_id).first()
+                    emp_name = emp.full_name if emp else None
+                    
+                pos = db.query(Position).filter_by(id=sh.position_id).first()
+                pos_name = pos.name if pos else None
+                
+                tag_ids = [st.tag_id for st in db.query(ShiftTag).filter_by(shift_id=sh.id).all()]
+                shifts.append({
+                    "id": sh.id,
+                    "employee_id": sh.employee_id,
+                    "employee_name": emp_name,
+                    "position_id": sh.position_id,
+                    "position_name": pos_name,
+                    "start_at": sh.start_at.isoformat() if sh.start_at else None,
+                    "end_at": sh.end_at.isoformat() if sh.end_at else None,
+                    "break_minutes": sh.break_minutes,
+                    "status": sh.status,
+                    "notes": sh.notes,
+                    "tag_ids": tag_ids,
+                    "published_at": sh.published_at.isoformat() if sh.published_at else None
+                })
+                
+        return {
+            "ok": True,
+            "schedule": {
+                "id": sched.id,
+                "store_key": sched.store_key,
+                "week_start": sched.week_start.isoformat(),
+                "status": sched.status,
+                "published_at": sched.published_at.isoformat() if sched.published_at else None
+            } if sched else None,
+            "shifts": shifts
+        }
+    finally:
+        db.close()
+
+
+def create_schedule_tool(store_key: str, week_start: str) -> dict:
+    """
+    Creates a new draft schedule for a specific store and week.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        store_key: The location/store key. Must be 'tomball' or 'copperfield'.
+        week_start: The start date of the week in YYYY-MM-DD format (must be a Sunday).
+    """
+    from app.db import SessionLocal
+    from app.models import Schedule
+    
+    user = getattr(g, "current_user", None)
+    check_scheduling_access(user, store_key)
+    
+    try:
+        week_start_dt = date.fromisoformat(week_start)
+    except Exception as e:
+        raise ValueError(f"Invalid week_start format. Expected YYYY-MM-DD. Error: {str(e)}")
+        
+    if week_start_dt.weekday() != 6:
+        week_start_dt = week_start_dt - timedelta(days=(week_start_dt.weekday() + 1) % 7)
+        
+    db = SessionLocal()
+    try:
+        store_clean = store_key.lower().strip()
+        existing = db.query(Schedule).filter_by(store_key=store_clean, week_start=week_start_dt).first()
+        if not existing:
+            legacy = week_start_dt - timedelta(days=1)
+            existing = db.query(Schedule).filter_by(store_key=store_clean, week_start=legacy).first()
+            
+        if existing:
+            return {
+                "ok": False,
+                "error": "A schedule for that week already exists.",
+                "schedule_id": existing.id,
+                "status": existing.status
+            }
+            
+        now = datetime.utcnow()
+        sched = Schedule(
+            store_key=store_clean,
+            week_start=week_start_dt,
+            status="draft",
+            created_by=user.id if user else None,
+            created_at=now,
+            updated_at=now
+        )
+        db.add(sched)
+        db.commit()
+        db.refresh(sched)
+        return {
+            "ok": True,
+            "schedule_id": sched.id,
+            "store_key": sched.store_key,
+            "week_start": sched.week_start.isoformat(),
+            "status": sched.status
+        }
+    finally:
+        db.close()
+
+
+def create_shift_tool(
+    schedule_id: int,
+    start_at: str,
+    end_at: str,
+    position_name: str,
+    employee_name: str | None = None,
+    employee_id: int | None = None,
+    break_minutes: int = 0,
+    notes: str | None = None,
+    tag_ids: list[int] | None = None,
+    publish: bool = False
+) -> dict:
+    """
+    Creates a new shift under a schedule.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        schedule_id: The ID of the schedule.
+        start_at: The start datetime of the shift in ISO format (YYYY-MM-DDTHH:MM:SS).
+        end_at: The end datetime of the shift in ISO format (YYYY-MM-DDTHH:MM:SS).
+        position_name: The name of the position (e.g. 'Server', 'Cook').
+        employee_name: Optional name of the employee to assign.
+        employee_id: Optional ID of the employee to assign.
+        break_minutes: The break duration in minutes (default 0).
+        notes: Optional shift notes.
+        tag_ids: Optional list of tag IDs to apply.
+        publish: If True, publishes the shift immediately making it visible.
+    """
+    from app.db import SessionLocal
+    from app.models import Schedule, Shift, Position, Employee
+    from app.services import scheduling_timeoff, scheduling_availability
+    
+    db = SessionLocal()
+    try:
+        sched = db.query(Schedule).filter_by(id=schedule_id).first()
+        if not sched:
+            raise ValueError(f"Schedule with ID {schedule_id} not found.")
+            
+        user = getattr(g, "current_user", None)
+        check_scheduling_access(user, sched.store_key)
+        
+        try:
+            start_dt = datetime.fromisoformat(start_at)
+            end_dt = datetime.fromisoformat(end_at)
+        except Exception as e:
+            raise ValueError(f"Invalid datetime format. Expected YYYY-MM-DDTHH:MM:SS. Error: {str(e)}")
+            
+        resolved_emp_id = None
+        if employee_id is not None:
+            resolved_emp_id = employee_id
+        elif employee_name and employee_name.strip():
+            emp = db.query(Employee).filter(Employee.full_name.ilike(employee_name.strip())).first()
+            if not emp:
+                raise ValueError(f"Employee with name '{employee_name}' not found.")
+            resolved_emp_id = emp.id
+            
+        pos = db.query(Position).filter(Position.name.ilike(position_name.strip())).first()
+        if not pos:
+            raise ValueError(f"Position '{position_name}' not found.")
+        position_id = pos.id
+        
+        status = "assigned" if resolved_emp_id else "open"
+        if resolved_emp_id:
+            blocker = scheduling_timeoff.conflict(resolved_emp_id, start_dt.date())
+            if blocker:
+                return {"ok": False, "error": blocker}
+                
+        warn = scheduling_availability.warning(resolved_emp_id, start_dt) if resolved_emp_id else None
+        
+        now = datetime.utcnow()
+        pub_at = now if publish else None
+        
+        sh = Shift(
+            schedule_id=schedule_id,
+            employee_id=resolved_emp_id,
+            position_id=position_id,
+            start_at=start_dt,
+            end_at=end_dt,
+            break_minutes=break_minutes,
+            status=status,
+            notes=notes,
+            published_at=pub_at,
+            created_at=now,
+            updated_at=now
+        )
+        db.add(sh)
+        db.flush()
+        
+        _sync_shift_tags(db, sh.id, tag_ids or [], now)
+        db.commit()
+        
+        return {
+            "ok": True,
+            "shift_id": sh.id,
+            "status": sh.status,
+            "warning": warn
+        }
+    finally:
+        db.close()
+
+
+def update_shift_tool(
+    shift_id: int,
+    employee_name_or_id: str | int | None = None,
+    position_name: str | None = None,
+    start_at: str | None = None,
+    end_at: str | None = None,
+    break_minutes: int | None = None,
+    notes: str | None = None,
+    tag_ids: list[int] | None = None,
+    publish: bool | None = None
+) -> dict:
+    """
+    Updates an existing shift.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        shift_id: The ID of the shift to update.
+        employee_name_or_id: The employee name, ID, or "open"/"unassign" to make the shift open.
+        position_name: The new position name.
+        start_at: The new start datetime in ISO format (YYYY-MM-DDTHH:MM:SS).
+        end_at: The new end datetime in ISO format (YYYY-MM-DDTHH:MM:SS).
+        break_minutes: The new break duration in minutes.
+        notes: The new shift notes.
+        tag_ids: The list of tag IDs to apply.
+        publish: If True, publishes the shift. If False, unpublishes the shift.
+    """
+    from app.db import SessionLocal
+    from app.models import Schedule, Shift, Position, Employee
+    from app.services import scheduling_timeoff, scheduling_availability
+    
+    db = SessionLocal()
+    try:
+        sh = db.query(Shift).filter_by(id=shift_id).first()
+        if not sh:
+            raise ValueError(f"Shift with ID {shift_id} not found.")
+            
+        sched = db.query(Schedule).filter_by(id=sh.schedule_id).first()
+        if not sched:
+            raise ValueError(f"Schedule for shift ID {shift_id} not found.")
+            
+        user = getattr(g, "current_user", None)
+        check_scheduling_access(user, sched.store_key)
+        
+        if start_at is not None:
+            sh.start_at = datetime.fromisoformat(start_at)
+        if end_at is not None:
+            sh.end_at = datetime.fromisoformat(end_at)
+            
+        if position_name is not None:
+            pos = db.query(Position).filter(Position.name.ilike(position_name.strip())).first()
+            if not pos:
+                raise ValueError(f"Position '{position_name}' not found.")
+            sh.position_id = pos.id
+            
+        if break_minutes is not None:
+            sh.break_minutes = int(break_minutes)
+            
+        if notes is not None:
+            sh.notes = notes
+            
+        if employee_name_or_id is not None:
+            val = str(employee_name_or_id).strip().lower()
+            if val in ("", "open", "unassign", "none", "null"):
+                sh.employee_id = None
+                sh.status = "open"
+            else:
+                try:
+                    emp_id = int(employee_name_or_id)
+                    emp = db.query(Employee).filter_by(id=emp_id).first()
+                except ValueError:
+                    emp = db.query(Employee).filter(Employee.full_name.ilike(str(employee_name_or_id).strip())).first()
+                if not emp:
+                    raise ValueError(f"Employee '{employee_name_or_id}' not found.")
+                sh.employee_id = emp.id
+                sh.status = "assigned"
+                
+        if sh.employee_id and sh.start_at:
+            blocker = scheduling_timeoff.conflict(sh.employee_id, sh.start_at.date())
+            if blocker:
+                return {"ok": False, "error": blocker}
+                
+        warn = (scheduling_availability.warning(sh.employee_id, sh.start_at)
+                if (sh.employee_id and sh.start_at) else None)
+                
+        now = datetime.utcnow()
+        if publish is not None:
+            sh.published_at = now if publish else None
+            
+        if tag_ids is not None:
+            _sync_shift_tags(db, sh.id, tag_ids, now)
+            
+        sh.updated_at = now
+        db.commit()
+        return {
+            "ok": True,
+            "shift_id": sh.id,
+            "status": sh.status,
+            "warning": warn
+        }
+    finally:
+        db.close()
+
+
+def delete_shift_tool(shift_id: int) -> dict:
+    """
+    Deletes an existing shift.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        shift_id: The ID of the shift to delete.
+    """
+    from app.db import SessionLocal
+    from app.models import Schedule, Shift, ShiftTag
+    
+    db = SessionLocal()
+    try:
+        sh = db.query(Shift).filter_by(id=shift_id).first()
+        if not sh:
+            raise ValueError(f"Shift with ID {shift_id} not found.")
+            
+        sched = db.query(Schedule).filter_by(id=sh.schedule_id).first()
+        if not sched:
+            raise ValueError(f"Schedule for shift ID {shift_id} not found.")
+            
+        user = getattr(g, "current_user", None)
+        check_scheduling_access(user, sched.store_key)
+        
+        db.query(ShiftTag).filter_by(shift_id=sh.id).delete()
+        db.delete(sh)
+        db.commit()
+        return {"ok": True, "deleted": shift_id}
+    finally:
+        db.close()
+
+
+def copy_shifts_tool(
+    from_schedule_id: int,
+    to_schedule_id: int,
+    unassign: bool = False,
+    skip_checks: bool = False
+) -> dict:
+    """
+    Copies all shifts from one schedule to another, adjusting dates relative to the week start.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        from_schedule_id: The ID of the source schedule.
+        to_schedule_id: The ID of the destination schedule.
+        unassign: If True, copies shifts as unassigned (open).
+        skip_checks: If True, skips approved time-off conflict checks.
+    """
+    from app.db import SessionLocal
+    from app.models import Schedule, Shift, ShiftTag
+    from app.services import scheduling_timeoff
+    
+    db = SessionLocal()
+    try:
+        src = db.query(Schedule).filter_by(id=from_schedule_id).first()
+        dst = db.query(Schedule).filter_by(id=to_schedule_id).first()
+        if not src or not dst:
+            raise ValueError("Source or destination schedule not found.")
+            
+        user = getattr(g, "current_user", None)
+        check_scheduling_access(user, src.store_key)
+        check_scheduling_access(user, dst.store_key)
+        
+        offset = dst.week_start - src.week_start
+        now = datetime.utcnow()
+        copied = 0
+        opened_for_timeoff = 0
+        
+        for sh in db.query(Shift).filter_by(schedule_id=src.id).all():
+            new_start = sh.start_at + offset
+            new_end = sh.end_at + offset
+            emp_id = None if unassign else sh.employee_id
+            status = "assigned" if emp_id else "open"
+            
+            if emp_id and not skip_checks and scheduling_timeoff.conflict(emp_id, new_start.date()):
+                emp_id, status = None, "open"
+                opened_for_timeoff += 1
+                
+            nsh = Shift(
+                schedule_id=dst.id,
+                employee_id=emp_id,
+                position_id=sh.position_id,
+                start_at=new_start,
+                end_at=new_end,
+                break_minutes=sh.break_minutes,
+                status=status,
+                notes=sh.notes,
+                published_at=None,
+                created_at=now,
+                updated_at=now
+            )
+            db.add(nsh)
+            db.flush()
+            
+            for st in db.query(ShiftTag).filter_by(shift_id=sh.id).all():
+                db.add(ShiftTag(shift_id=nsh.id, tag_id=st.tag_id, created_at=now))
+            copied += 1
+            
+        db.commit()
+        return {
+            "ok": True,
+            "copied": copied,
+            "opened_for_timeoff": opened_for_timeoff,
+            "to_schedule_id": dst.id
+        }
+    finally:
+        db.close()
+
+
+def publish_schedule_tool(schedule_id: int) -> dict:
+    """
+    Publishes a schedule, making all shifts in it visible to employees.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        schedule_id: The ID of the schedule to publish.
+    """
+    from app.db import SessionLocal
+    from app.models import Schedule, Shift
+    from app.services import scheduling_alarms
+    
+    db = SessionLocal()
+    try:
+        sched = db.query(Schedule).filter_by(id=schedule_id).first()
+        if not sched:
+            raise ValueError(f"Schedule with ID {schedule_id} not found.")
+            
+        user = getattr(g, "current_user", None)
+        check_scheduling_access(user, sched.store_key)
+        
+        now = datetime.utcnow()
+        sched.status = "published"
+        if sched.published_at is None:
+            sched.published_at = now
+        sched.updated_at = now
+        
+        for sh in db.query(Shift).filter_by(schedule_id=sched.id).filter(Shift.published_at.is_(None)).all():
+            sh.published_at = now
+            
+        db.commit()
+        
+        try:
+            scheduling_alarms.create_for_schedule(sched.id)
+        except Exception:
+            pass
+            
+        return {
+            "ok": True,
+            "schedule_id": sched.id,
+            "status": sched.status,
+            "published_at": sched.published_at.isoformat()
+        }
+    finally:
+        db.close()
+
+
 # Flask API Web Routes
 @assistant_bp.route("/assistant", methods=["GET"])
 @assistant_login_required
@@ -574,6 +1131,9 @@ def api_file_content():
 @assistant_bp.route("/api/assistant/save-file", methods=["POST"])
 @partner_required
 def api_save_file():
+    user = getattr(g, "current_user", None)
+    if not user or user.id != 1:
+        return jsonify({"success": False, "error": "Access denied: You are not authorized to make modifications to the app."}), 403
     body = request.get_json(silent=True) or {}
     relative_path = body.get("path")
     content = body.get("content")
@@ -620,9 +1180,33 @@ def api_assistant_chat():
             
         # Dynamically build tools list based on tier
         if user_tier == "partner":
-            tools_list = [list_files_tool, read_file_tool, write_file_tool, query_sales_db_tool, fetch_toast_live_data_tool]
+            tools_list = [
+                list_files_tool, 
+                read_file_tool, 
+                query_sales_db_tool, 
+                fetch_toast_live_data_tool,
+                create_schedule_tool,
+                create_shift_tool,
+                update_shift_tool,
+                delete_shift_tool,
+                copy_shifts_tool,
+                publish_schedule_tool,
+                get_schedule_board_tool
+            ]
+            if user.id == 1:
+                tools_list.append(write_file_tool)
         elif user_tier == "manager":
-            tools_list = [query_sales_db_tool, fetch_toast_live_data_tool]
+            tools_list = [
+                query_sales_db_tool, 
+                fetch_toast_live_data_tool,
+                create_schedule_tool,
+                create_shift_tool,
+                update_shift_tool,
+                delete_shift_tool,
+                copy_shifts_tool,
+                publish_schedule_tool,
+                get_schedule_board_tool
+            ]
         else:
             tools_list = [query_sales_db_tool]
             
@@ -732,15 +1316,30 @@ Live Operations, Open Tables, Clocked-in Staff, and Live Sales/Store Queries:
 - Use `fetch_toast_live_data_tool` with `dataType='clockins'` to get currently clocked-in staff, their positions, clock-in times, and regular/overtime hours so far today.
 - Use `fetch_toast_live_data_tool` with `dataType='sales'` to get today's live sales summary (check counts, closed vs open checks, net sales closed, total guests) and top items rung in.
 - This tool bypasses the database and routes live data directly from the Toast API.
+
+Scheduling Operations (Create, Read, Update, Delete, Copy, Publish):
+- Only Partners and Managers have access to scheduling operations tools. Hourly staff cannot access these tools.
+- Use `get_schedule_board_tool` to retrieve the weekly schedule board, including draft and published shifts, shift IDs, employees, and positions, for a given week start and store key. Use this tool first to check existing shifts, find IDs, or read the schedule.
+- Use `create_schedule_tool` to create a new draft schedule for a store and a Sunday week start.
+- Use `create_shift_tool` to add a new shift to a schedule. You can specify employee_name or employee_id, start_at/end_at (as YYYY-MM-DDTHH:MM:SS), position_name (e.g. 'Server', 'Cook'), break_minutes, notes, and whether to publish.
+- Use `update_shift_tool` to modify an existing shift's employee assignment (use "open" or "unassign" to make it open), position, datetimes, break, or notes.
+- Use `delete_shift_tool` to remove a shift.
+- Use `copy_shifts_tool` to bulk-copy shifts from one schedule to another.
+- Use `publish_schedule_tool` to publish a draft schedule.
+- When creating or editing shifts, check and report any conflict or availability warning messages returned by the tools.
 """
 
         if user_tier == "partner":
+            write_allowed = (user.id == 1)
+            write_inst = "You have access to the write_file_tool to make modifications to the app." if write_allowed else "You are NOT authorized to write/modify files, and write_file_tool is excluded from your tools. If they ask to modify files or save changes, explain that this is restricted to Sam's login."
             system_instruction = base_instruction + f"""
 IDENTITY VERIFICATION & GATING RULES:
 - You are speaking to {user_name}, who is logged in as a 'partner'.
 - On the first turn of a conversation, you MUST explicitly greet {user_name} by name, state/verify their role as 'partner', and confirm they have full access.
-- As a partner, they have full access to everything: codebase files, database schemas, raw SQL queries, hourly pay rates, and labor costs.
-- You have access to files tools (list_files_tool, read_file_tool, write_file_tool), query_sales_db_tool, and fetch_toast_live_data_tool.
+- As a partner, they have access to codebase files, database schemas, raw SQL queries, hourly pay rates, and labor costs.
+- You have access to files tools: list_files_tool and read_file_tool.
+- You also have full access to manage employee schedules and shifts. You can create schedules, create shifts, update shifts, delete shifts, copy shifts, and publish schedules using the scheduling tools: create_schedule_tool, create_shift_tool, update_shift_tool, delete_shift_tool, copy_shifts_tool, publish_schedule_tool, and get_schedule_board_tool.
+- {write_inst}
 - In addition to sales, you have access to the 'toastdm.dm_time_entry' table and the 'toast_labor' database to query labor costs, hourly pay rates, and hours worked.
 """
         elif user_tier == "manager":
@@ -753,7 +1352,7 @@ IDENTITY VERIFICATION & GATING RULES:
   2. Database schemas, raw SQL queries, or internal table/column structures. Never explain SQL queries or print them.
   3. Hourly pay rates (individual hourly pay) or total labor costs (labor cost sum, hourly rate avg, base_pay, or total labor spend).
 - If they ask for any codebase, file, schema, raw SQL, or labor cost/pay rate information, you MUST politely refuse, stating that you have verified their role as '{user_role}' and that such information is restricted to Partners only.
-- You have query_sales_db_tool and fetch_toast_live_data_tool. You MUST NOT query labor costs or hourly pay rates, but you can fetch live operational data via fetch_toast_live_data_tool.
+- You have query_sales_db_tool, fetch_toast_live_data_tool, and the scheduling tools. You also have access to manage employee schedules and shifts for your authorized store(s) (configured in your store scope). You can create schedules, create shifts, update shifts, delete shifts, copy shifts, and publish schedules using the scheduling tools: create_schedule_tool, create_shift_tool, update_shift_tool, delete_shift_tool, copy_shifts_tool, publish_schedule_tool, and get_schedule_board_tool. You MUST NOT query labor costs or hourly pay rates, but you can fetch live operational data via fetch_toast_live_data_tool.
 - Do NOT output SQL query text or database names under any circumstance to this user.
 """
         else:  # hourly
@@ -866,6 +1465,23 @@ IDENTITY VERIFICATION & GATING RULES:
                         if user_tier not in ("partner", "manager"):
                             raise PermissionError("Access denied: fetch_toast_live_data_tool is restricted to partners and managers.")
                         outcome = fetch_toast_live_data_tool(**args)
+                    elif name in ("create_schedule_tool", "create_shift_tool", "update_shift_tool", "delete_shift_tool", "copy_shifts_tool", "publish_schedule_tool", "get_schedule_board_tool"):
+                        if user_tier not in ("partner", "manager"):
+                            raise PermissionError(f"Access denied: {name} is restricted to partners and managers.")
+                        if name == "create_schedule_tool":
+                            outcome = create_schedule_tool(**args)
+                        elif name == "create_shift_tool":
+                            outcome = create_shift_tool(**args)
+                        elif name == "update_shift_tool":
+                            outcome = update_shift_tool(**args)
+                        elif name == "delete_shift_tool":
+                            outcome = delete_shift_tool(**args)
+                        elif name == "copy_shifts_tool":
+                            outcome = copy_shifts_tool(**args)
+                        elif name == "publish_schedule_tool":
+                            outcome = publish_schedule_tool(**args)
+                        elif name == "get_schedule_board_tool":
+                            outcome = get_schedule_board_tool(**args)
                     else:
                         raise ValueError(f"Unknown tool name: {name}")
                 except Exception as err:

@@ -22,9 +22,17 @@ def app_with_user(db_session, monkeypatch):
 
     monkeypatch.setenv("ALLOW_DEV_SECRET", "1")
     monkeypatch.setenv("SECRET_KEY", "devkey")
+    monkeypatch.setenv("DISABLE_DOCCK_TICKER", "1")
 
     import app.db as appdb
+    import app.services.scheduling_timeoff as st
+    import app.services.scheduling_availability as sa
+    import app.services.scheduling_alarms as sal
     monkeypatch.setattr(appdb, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(st, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(sa, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(sal, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
 
     from app import create_app
     app = create_app()
@@ -369,4 +377,223 @@ def test_fetch_toast_live_data_tool_sales(app_with_user, monkeypatch):
         assert len(res["top_items_rung_in"]) == 2
         assert res["top_items_rung_in"][0]["name"] == "Fajitas"
         assert res["top_items_rung_in"][0]["quantity"] == 3
+
+
+def test_scheduling_tools_partner_access(app_with_user, monkeypatch):
+    app, client_for, db = app_with_user
+    from app.web.assistant_routes import (
+        create_schedule_tool,
+        create_shift_tool,
+        update_shift_tool,
+        copy_shifts_tool,
+        publish_schedule_tool,
+        delete_shift_tool,
+        get_schedule_board_tool
+    )
+    from app.models import Position, Employee, Schedule, Shift
+ 
+    # Add a mock position and employee in DB
+    pos = Position(id=1, name="Server", store_key="tomball")
+    emp = Employee(id=1, full_name="John Server", email="john@x.test", active=True)
+    db.add_all([pos, emp])
+    db.commit()
+ 
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(permission_level="partner").first()
+ 
+        # 1. Create schedule
+        res = create_schedule_tool("tomball", "2026-06-21")
+        assert res["ok"] is True
+        sched_id = res["schedule_id"]
+        assert res["store_key"] == "tomball"
+        assert res["status"] == "draft"
+ 
+        # 2. Create shift
+        res = create_shift_tool(
+            schedule_id=sched_id,
+            start_at="2026-06-21T10:00:00",
+            end_at="2026-06-21T16:00:00",
+            position_name="Server",
+            employee_name="John Server",
+            break_minutes=30,
+            notes="Morning server shift"
+        )
+        assert res["ok"] is True
+        shift_id = res["shift_id"]
+        assert res["status"] == "assigned"
+        
+        # 2.5 Get schedule board
+        res_board = get_schedule_board_tool("tomball", "2026-06-21")
+        assert res_board["ok"] is True
+        assert res_board["schedule"]["id"] == sched_id
+        assert res_board["schedule"]["store_key"] == "tomball"
+        assert res_board["schedule"]["status"] == "draft"
+        assert len(res_board["shifts"]) == 1
+        assert res_board["shifts"][0]["id"] == shift_id
+        assert res_board["shifts"][0]["employee_name"] == "John Server"
+        assert res_board["shifts"][0]["position_name"] == "Server"
+        assert res_board["shifts"][0]["notes"] == "Morning server shift"
+        assert res_board["shifts"][0]["start_at"] == "2026-06-21T10:00:00"
+        assert res_board["shifts"][0]["end_at"] == "2026-06-21T16:00:00"
+ 
+        # 3. Update shift
+        res = update_shift_tool(
+            shift_id=shift_id,
+            notes="Updated server shift notes"
+        )
+        assert res["ok"] is True
+        
+        # Verify db updated
+        db.expire_all()
+        sh = db.query(Shift).filter_by(id=shift_id).first()
+        assert sh.notes == "Updated server shift notes"
+
+        # 4. Copy shifts (create another schedule first)
+        res_dst = create_schedule_tool("tomball", "2026-06-28")
+        assert res_dst["ok"] is True
+        dst_sched_id = res_dst["schedule_id"]
+
+        res_copy = copy_shifts_tool(
+            from_schedule_id=sched_id,
+            to_schedule_id=dst_sched_id
+        )
+        assert res_copy["ok"] is True
+        assert res_copy["copied"] == 1
+
+        # 5. Publish schedule
+        res_pub = publish_schedule_tool(sched_id)
+        assert res_pub["ok"] is True
+        assert res_pub["status"] == "published"
+
+        # 6. Delete shift
+        res_del = delete_shift_tool(shift_id)
+        assert res_del["ok"] is True
+        assert res_del["deleted"] == shift_id
+
+
+def test_scheduling_tools_manager_and_hourly_gating(app_with_user):
+    app, client_for, db = app_with_user
+    from app.web.assistant_routes import create_schedule_tool, get_schedule_board_tool
+    
+    # 1. Store scoped manager (GM scoped to Tomball)
+    manager_user = User(
+        id=5, full_name="Tomball GM", email="tomball_gm@x.test",
+        passcode_hash="x", permission_level="gm",
+        store_scope="tomball", active=True, first_login_done=True
+    )
+    db.add(manager_user)
+    db.commit()
+
+    with app.test_request_context():
+        g.current_user = manager_user
+        
+        # Should succeed for Tomball
+        res = create_schedule_tool("tomball", "2026-07-05")
+        assert res["ok"] is True
+        
+        res_board = get_schedule_board_tool("tomball", "2026-07-05")
+        assert res_board["ok"] is True
+        
+        # Should raise PermissionError for Copperfield
+        with pytest.raises(PermissionError) as exc_info:
+            create_schedule_tool("copperfield", "2026-07-05")
+        assert "not authorized" in str(exc_info.value)
+        
+        with pytest.raises(PermissionError) as exc_info:
+            get_schedule_board_tool("copperfield", "2026-07-05")
+        assert "not authorized" in str(exc_info.value)
+
+    # 2. Hourly employee (driver)
+    hourly_user = User(
+        id=6, full_name="Hourly driver", email="driver@x.test",
+        passcode_hash="x", permission_level="driver",
+        active=True, first_login_done=True
+    )
+    db.add(hourly_user)
+    db.commit()
+
+    with app.test_request_context():
+        g.current_user = hourly_user
+        # Should raise PermissionError
+        with pytest.raises(PermissionError) as exc_info:
+            create_schedule_tool("tomball", "2026-07-12")
+        assert "not permitted to modify schedules" in str(exc_info.value)
+        
+        with pytest.raises(PermissionError) as exc_info:
+            get_schedule_board_tool("tomball", "2026-07-12")
+        assert "not permitted to modify schedules" in str(exc_info.value)
+
+
+def test_api_save_file_gating(app_with_user):
+    app, client_for, db = app_with_user
+    
+    # Create a second partner user (non-Sam, ID 10)
+    partner2 = User(
+        id=10, full_name="Masood Partner", email="masood_partner@x.test",
+        passcode_hash="x", permission_level="partner",
+        active=True, first_login_done=True,
+    )
+    db.add(partner2)
+    db.commit()
+    
+    # 1. Partner with ID 1 (Sam Sahragard): allowed to save file
+    c = client_for(1, partner_auth_ok=True)
+    r = c.post("/api/assistant/save-file", json={
+        "path": "test_temp_write.txt",
+        "content": "test content"
+    })
+    assert r.status_code == 200
+    data = json.loads(r.data.decode("utf-8"))
+    assert data["success"] is True
+    
+    p = Path("test_temp_write.txt")
+    assert p.exists()
+    assert p.read_text(encoding="utf-8") == "test content"
+    p.unlink()
+
+    # 2. Partner with ID 10 (Masood Partner - non-Sam partner): blocked from save file with JSON 403
+    c2 = client_for(10, partner_auth_ok=True)
+    r2 = c2.post("/api/assistant/save-file", json={
+        "path": "test_temp_write.txt",
+        "content": "test content c2"
+    })
+    assert r2.status_code == 403
+    data2 = json.loads(r2.data.decode("utf-8"))
+    assert data2["success"] is False
+    assert "Access denied" in data2["error"]
+    assert not p.exists()
+
+    # 3. Non-partner user (Masood C, ID 2): blocked by partner_required decorator (HTML 403)
+    c3 = client_for(2, partner_auth_ok=True)
+    r3 = c3.post("/api/assistant/save-file", json={
+        "path": "test_temp_write.txt",
+        "content": "test content c3"
+    })
+    assert r3.status_code == 403
+    assert b"Forbidden" in r3.data
+
+    # 4. Direct write_file_tool execution gating
+    from app.web.assistant_routes import write_file_tool
+    
+    # Allowed for Sam (ID 1)
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(id=1).first()
+        try:
+            res = write_file_tool("test_temp_write.txt", "tool content")
+            assert "Successfully wrote" in res
+            assert p.exists()
+            p.unlink()
+        except PermissionError:
+            pytest.fail("Sam (ID 1) should be allowed to call write_file_tool.")
+            
+    # Denied for Masood Partner (ID 10)
+    with app.test_request_context():
+        g.current_user = db.query(User).filter_by(id=10).first()
+        with pytest.raises(PermissionError) as exc_info:
+            write_file_tool("test_temp_write.txt", "tool content")
+        assert "not authorized" in str(exc_info.value)
+        assert not p.exists()
+
+
+
 

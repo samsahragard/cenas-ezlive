@@ -145,6 +145,147 @@ def _profile_choice_response(user_match, driver_match):
     })
 
 
+def _store_scope_from_employee(db, emp_id: int, level: str) -> str | None:
+    if level in ("partner", "corporate"):
+        return None
+    from app.models import EmployeePosition, EmployeeStoreAssignment
+
+    stores = {
+        (sk or "").strip().lower()
+        for (sk,) in db.query(EmployeeStoreAssignment.store_key)
+                     .filter(EmployeeStoreAssignment.employee_id == emp_id)
+                     .all()
+    }
+    if not stores:
+        stores = {
+            (sk or "").strip().lower()
+            for (sk,) in db.query(EmployeePosition.store_key)
+                         .filter(EmployeePosition.employee_id == emp_id,
+                                 EmployeePosition.store_key.isnot(None))
+                         .all()
+        }
+    stores = sorted(sk for sk in stores if sk in {"tomball", "copperfield"})
+    if not stores:
+        return None
+    return stores[0] if len(stores) == 1 else ",".join(stores)
+
+
+def _management_level_for_employee(db, emp) -> str | None:
+    from app.models import EmployeePosition, Position
+    from app.services.permission_catalog import ROLE_RANK, position_role
+    from app.services.role_buckets import SECTION_MANAGEMENT, section_for_position
+
+    rows = (db.query(Position.name)
+              .join(EmployeePosition, EmployeePosition.position_id == Position.id)
+              .filter(EmployeePosition.employee_id == emp.id)
+              .all())
+    best_role = None
+    best_rank = None
+    for (name,) in rows:
+        if section_for_position(name) != SECTION_MANAGEMENT:
+            continue
+        role = position_role(name)
+        if not role:
+            continue
+        rank = ROLE_RANK.get(role)
+        if rank is None:
+            continue
+        if best_rank is None or rank > best_rank or (rank == best_rank and role < best_role):
+            best_role, best_rank = role, rank
+    return best_role
+
+
+def _find_user_for_employee(db, emp, phone_digits: str | None, preferred_user=None):
+    from app.services.ezcater_known_drivers_seed import normalize_phone
+
+    if preferred_user is not None:
+        return preferred_user
+    if getattr(emp, "user_id", None):
+        linked = db.get(User, emp.user_id)
+        if linked is not None:
+            return linked
+    digits = phone_digits or normalize_phone(getattr(emp, "phone", None) or "")
+    if digits:
+        for cand in db.query(User).filter(User.phone.isnot(None)).all():
+            if normalize_phone(cand.phone) == digits:
+                return cand
+    email = (getattr(emp, "email", None) or "").strip().lower()
+    if email:
+        hit = db.query(User).filter(User.email.ilike(email)).all()
+        if len(hit) == 1:
+            return hit[0]
+    name = (getattr(emp, "full_name", None) or "").strip().lower()
+    if name:
+        hit = db.query(User).filter(User.full_name.ilike(name)).all()
+        if len(hit) == 1:
+            return hit[0]
+    return None
+
+
+def _ensure_management_user_for_employee(
+    db,
+    emp,
+    *,
+    passcode_hash: str | None,
+    phone_digits: str | None = None,
+    preferred_user=None,
+):
+    """Create/repair the manager User profile for a roster employee who holds
+    a management position. Returns the User, or None for hourly-only employees.
+
+    This is deliberately limited to management-section positions. It closes the
+    Janet/Gina class of bug where an active KM/GM/FOH Manager roster row has no
+    Employee.user_id link yet, so the shared keypad would otherwise treat them
+    as an hourly employee.
+    """
+    level = _management_level_for_employee(db, emp)
+    if not level or not passcode_hash:
+        return None
+
+    scope = _store_scope_from_employee(db, emp.id, level)
+    user = _find_user_for_employee(db, emp, phone_digits, preferred_user)
+    from app.services.permission_catalog import ROLE_RANK
+
+    if user is None:
+        user = User(
+            full_name=(getattr(emp, "full_name", None) or "").strip() or "Manager",
+            email=(getattr(emp, "email", None) or None),
+            phone=(getattr(emp, "phone", None) or None),
+            passcode_hash=passcode_hash,
+            permission_level=level,
+            store_scope=scope,
+            active=True,
+            first_login_done=True,
+            session_version=1,
+        )
+        db.add(user)
+        db.flush()
+    else:
+        current_role = (user.permission_level or "").strip().lower()
+        current_rank = ROLE_RANK.get(current_role, -1)
+        new_rank = ROLE_RANK.get(level, -1)
+        if new_rank > current_rank:
+            user.permission_level = level
+            user.store_scope = scope
+        elif current_role not in ("partner", "corporate"):
+            user.store_scope = scope
+        user.passcode_hash = passcode_hash
+        user.active = True
+        user.first_login_done = True
+        user.failed_attempts = 0
+        user.lockout_until = None
+        user.session_version = (user.session_version or 0) + 1
+        if not (user.phone or "").strip() and getattr(emp, "phone", None):
+            user.phone = emp.phone
+        if not (user.email or "").strip() and getattr(emp, "email", None):
+            user.email = emp.email
+        if not (user.full_name or "").strip() and getattr(emp, "full_name", None):
+            user.full_name = emp.full_name
+    emp.user_id = user.id
+    db.commit()
+    return user
+
+
 def _clear_employee_session_keys() -> None:
     for key in (
         "employee_id", "employee_name", "employee_session_version",
@@ -526,10 +667,10 @@ def login_submit():
             """Return an employee-login response when this phone + PIN really
             matches a pure Team Roster employee identity.
 
-            Managers who have a linked Employee row should never be dropped
-            into the employee portal from the shared keypad; their User account
-            is the primary profile. Sam's owner view-login above remains the
-            special door for opening a pure employee view on purpose.
+            Employees holding management positions are first repaired/linked to
+            a User profile and opened as that manager. Sam's owner view-login
+            above remains the special door for opening a pure employee view on
+            purpose.
             """
             if not digits:
                 return None
@@ -538,7 +679,11 @@ def login_submit():
             emp = _find_employee_by_phone(db, digits)
             if emp is None:
                 return None
-            if getattr(emp, "user_id", None):
+            is_management_emp = _management_level_for_employee(db, emp) is not None
+            pure_employee_allowed = phone_matched_user is None and not driver_ok
+            if not is_management_emp and not pure_employee_allowed:
+                return None
+            if getattr(emp, "user_id", None) and not is_management_emp:
                 return None
 
             if emp.lockout_until and emp.lockout_until > now:
@@ -554,9 +699,35 @@ def login_submit():
                     return jsonify({"ok": True, "next": "/employee/login?needpick=1"})
                 return jsonify({"ok": True, "next": "/employee/dashboard"})
 
+            def _manager_signed_in():
+                manager_user = _ensure_management_user_for_employee(
+                    db,
+                    emp,
+                    passcode_hash=emp.passcode_hash,
+                    phone_digits=digits,
+                    preferred_user=phone_matched_user,
+                )
+                if manager_user is None:
+                    return None
+                if driver_ok:
+                    if requested_profile == "driver":
+                        return _finalize_driver_login(db, driver_match, nxt, now)
+                    if requested_profile == "user":
+                        return _finalize_user_login(db, manager_user, nxt, now)
+                    if requested_profile:
+                        return jsonify({
+                            "ok": False,
+                            "error": "That profile is not available.",
+                        }), 400
+                    return _profile_choice_response(manager_user, driver_match)
+                return _finalize_user_login(db, manager_user, nxt, now)
+
             if getattr(emp, "passcode_hash", None) and _check(emp.passcode_hash, passcode):
                 emp.failed_attempts = 0
                 emp.lockout_until = None
+                manager_login = _manager_signed_in()
+                if manager_login is not None:
+                    return manager_login
                 db.commit()
                 return _emp_signed_in()
 
@@ -568,6 +739,9 @@ def login_submit():
                 emp.lockout_until = None
                 emp.session_version = (emp.session_version or 0) + 1
                 row.used = True
+                manager_login = _manager_signed_in()
+                if manager_login is not None:
+                    return manager_login
                 db.commit()
                 return _emp_signed_in()
             _bump_failed(emp)
@@ -608,10 +782,6 @@ def login_submit():
 
         if requested_profile and requested_profile not in {"user", "driver"}:
             return jsonify({"ok": False, "error": "That profile is not available."}), 400
-        if requested_profile == "user" and not user_ok:
-            return jsonify({"ok": False, "error": "That profile is not available."}), 400
-        if requested_profile == "driver" and not driver_ok:
-            return jsonify({"ok": False, "error": "That profile is not available."}), 400
 
         # Manager/User is the primary identity. This prevents linked managers
         # from landing in the employee portal because an Employee row shares
@@ -619,22 +789,23 @@ def login_submit():
         if user_ok:
             return _finalize_user_login(db, phone_matched_user, nxt, now)
 
+        if digits:
+            employee_login = _try_employee_phone_login()
+            if employee_login is not None:
+                return employee_login
+
         if driver_ok:
+            if requested_profile == "user":
+                return jsonify({"ok": False, "error": "That profile is not available."}), 400
             return _finalize_driver_login(db, driver_match, nxt, now)
+        if requested_profile:
+            return jsonify({"ok": False, "error": "That profile is not available."}), 400
 
         # Legacy fallback: only when no phone was typed at all.
         if not digits:
             user_match = _find_user_by_passcode(db, passcode)
             if user_match is not None:
                 return _finalize_user_login(db, user_match, nxt, now)
-
-        # Pure employee fallback only when there is no active User on this
-        # phone. A phone-matched User row, even with a wrong PIN, must not
-        # cascade into the employee profile.
-        if digits and phone_matched_user is None:
-            employee_login = _try_employee_phone_login()
-            if employee_login is not None:
-                return employee_login
 
         if user_lockout_mins is not None:
             return jsonify({

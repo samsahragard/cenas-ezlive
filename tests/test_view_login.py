@@ -394,6 +394,143 @@ def test_manager_driver_profile_choice_finalizes_selected_session(app_profile_ch
         assert s.get("employee_id") is None
 
 
+def _position_id(db, name):
+    from app.models import Position
+
+    pos = db.query(Position).filter(Position.name == name).first()
+    if pos is None:
+        pos = Position(name=name, store_key=None)
+        db.add(pos)
+        db.flush()
+    return pos.id
+
+
+def test_unlinked_km_employee_logs_in_as_manager_profile(app_profile_choice):
+    app, SessionLocal = app_profile_choice
+    from app.models import Employee, EmployeePosition, EmployeeStoreAssignment, User
+    from werkzeug.security import generate_password_hash
+
+    db = SessionLocal()
+    emp = Employee(
+        full_name="Janet KM",
+        phone="5557778888",
+        email="janetkm@test.local",
+        active=True,
+        session_version=1,
+        passcode_hash=generate_password_hash("11223"),
+    )
+    db.add(emp)
+    db.flush()
+    km_id = _position_id(db, "KM")
+    db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key="tomball"))
+    db.add(EmployeePosition(employee_id=emp.id, position_id=km_id, store_key="tomball"))
+    db.commit()
+    emp_id = emp.id
+    db.close()
+
+    c = app.test_client()
+    r = c.post("/keypad-login", json={"phone": "5557778888", "pin": "11223"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["next"] == "/dos/today"
+    with c.session_transaction() as s:
+        assert s.get("user_id") is not None
+        assert s.get("employee_id") is None
+        assert s.get("driver_id") is None
+
+    db = SessionLocal()
+    try:
+        emp = db.get(Employee, emp_id)
+        user = db.get(User, emp.user_id)
+        assert user is not None
+        assert user.permission_level == "km"
+        assert user.store_scope == "tomball"
+        assert user.phone == "5557778888"
+    finally:
+        db.close()
+
+
+def test_unlinked_km_employee_with_driver_gets_profile_choice(app_profile_choice):
+    app, SessionLocal = app_profile_choice
+    from app.models import Driver, Employee, EmployeePosition, EmployeeStoreAssignment, User
+    from werkzeug.security import generate_password_hash
+
+    db = SessionLocal()
+    emp = Employee(
+        full_name="Gina KM",
+        phone="5558889999",
+        email="ginakm2@test.local",
+        active=True,
+        session_version=1,
+        passcode_hash=generate_password_hash("33445"),
+    )
+    db.add(emp)
+    db.flush()
+    km_id = _position_id(db, "KM")
+    db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key="tomball"))
+    db.add(EmployeePosition(employee_id=emp.id, position_id=km_id, store_key="tomball"))
+    driver = Driver(
+        name="Gina KM",
+        location="tomball",
+        phone="5558889999",
+        active=True,
+        status="active",
+        session_version=9,
+        first_login_done=True,
+        passcode_hash=generate_password_hash("33445"),
+    )
+    db.add(driver)
+    db.commit()
+    emp_id = emp.id
+    driver_id = driver.id
+    db.close()
+
+    c = app.test_client()
+    r = c.post("/keypad-login", json={"phone": "5558889999", "pin": "33445"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["choose_profile"] is True
+    assert [choice["profile"] for choice in body["choices"]] == ["user", "driver"]
+    with c.session_transaction() as s:
+        assert s.get("user_id") is None
+        assert s.get("driver_id") is None
+        assert s.get("employee_id") is None
+
+    db = SessionLocal()
+    try:
+        emp = db.get(Employee, emp_id)
+        user = db.get(User, emp.user_id)
+        assert user is not None
+        assert user.permission_level == "km"
+    finally:
+        db.close()
+
+    r = c.post(
+        "/keypad-login",
+        json={"phone": "5558889999", "pin": "33445", "profile": "user"},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["next"] == "/dos/today"
+    with c.session_transaction() as s:
+        assert s.get("user_id") is not None
+        assert s.get("driver_id") is None
+        assert s.get("employee_id") is None
+
+    driver_client = app.test_client()
+    r = driver_client.post(
+        "/keypad-login",
+        json={"phone": "5558889999", "pin": "33445", "profile": "driver"},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["next"] == "/my-profile"
+    with driver_client.session_transaction() as s:
+        assert s.get("driver_id") == driver_id
+        assert s.get("user_id") is None
+        assert s.get("employee_id") is None
+
+
 def test_store_root_next_lands_on_permitted_today_page(app_expo_user):
     app, _ = app_expo_user
     c = app.test_client()

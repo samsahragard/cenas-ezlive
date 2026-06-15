@@ -120,7 +120,8 @@ def _user_profile_label(u) -> str:
         "gm": "GM",
         "manager": "Manager",
         "foh_manager": "FOH Manager",
-        "km": "KM",
+        "km": "Kitchen Manager",
+        "assistant_km": "Assistant Kitchen Manager",
         "expo": "Expo",
     }
     return labels.get(role, role.replace("_", " ").replace("-", " ").title() or "Manager")
@@ -709,7 +710,7 @@ def login_submit():
                 )
                 if manager_user is None:
                     return None
-                if driver_ok:
+                if driver_profile_available:
                     if requested_profile == "driver":
                         return _finalize_driver_login(db, driver_match, nxt, now)
                     if requested_profile == "user":
@@ -767,11 +768,19 @@ def login_submit():
             and bool(driver_match.passcode_hash)
             and _check(driver_match.passcode_hash, passcode)
         )
+        # A verified manager/KM with a same-phone driver profile should get the
+        # profile picker even if the driver PIN is stale/different. The manager
+        # credential proves the human identity for this phone; picking Driver
+        # then opens that linked driver profile.
+        driver_profile_available = (
+            driver_match is not None
+            and driver_lockout_mins is None
+        )
 
         # When one person has both a manager User and a Driver row, do not
         # guess. Return choices first; the client repeats the same login with
         # profile=user or profile=driver.
-        if user_ok and driver_ok:
+        if user_ok and driver_profile_available:
             if requested_profile == "user":
                 return _finalize_user_login(db, phone_matched_user, nxt, now)
             if requested_profile == "driver":

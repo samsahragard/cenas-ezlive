@@ -315,7 +315,7 @@ def test_manager_driver_phone_login_returns_profile_choices(app_profile_choice):
         status="active",
         session_version=7,
         first_login_done=True,
-        passcode_hash=generate_password_hash("13579"),
+        passcode_hash=generate_password_hash("99999"),
     )
     db.add_all([user, driver])
     db.commit()
@@ -359,7 +359,7 @@ def test_manager_driver_profile_choice_finalizes_selected_session(app_profile_ch
         status="active",
         session_version=8,
         first_login_done=True,
-        passcode_hash=generate_password_hash("86420"),
+        passcode_hash=generate_password_hash("99999"),
     )
     db.add_all([user, driver])
     db.commit()
@@ -524,7 +524,7 @@ def test_unlinked_km_employee_with_driver_gets_profile_choice(app_profile_choice
         status="active",
         session_version=9,
         first_login_done=True,
-        passcode_hash=generate_password_hash("33445"),
+        passcode_hash=generate_password_hash("99999"),
     )
     db.add(driver)
     db.commit()
@@ -539,6 +539,7 @@ def test_unlinked_km_employee_with_driver_gets_profile_choice(app_profile_choice
     assert body["ok"] is True
     assert body["choose_profile"] is True
     assert [choice["profile"] for choice in body["choices"]] == ["user", "driver"]
+    assert [choice["label"] for choice in body["choices"]] == ["Kitchen Manager", "Driver"]
     with c.session_transaction() as s:
         assert s.get("user_id") is None
         assert s.get("driver_id") is None

@@ -1691,6 +1691,8 @@ class VaultHandler(BaseHTTPRequestHandler):
             return self._sync_file_post()      # raw body, not JSON
         if route == "/sync/tombstone":
             return self._sync_tombstone()
+        if route == "/sync/kb":
+            return self._sync_kb()             # raw body, not JSON
         body = self._body()
         if route in ("/api/open", "/api/reveal"):
             return self._json({"ok": False, "error": "local-only"}, 400)
@@ -1794,6 +1796,36 @@ class VaultHandler(BaseHTTPRequestHandler):
             conn.close()
         self._json({"ok": True, "relpath": rel, "size": len(data),
                     "quarantined": bool(quarantined)})
+
+    def _sync_kb(self):
+        # Receive the KB tree (kb.json) from the local sync worker and write it
+        # to KB_FILE (/var/data/kb.json), which the UI hot-reloads on mtime.
+        # Auth is already enforced (Basic). Verify sha256 + that the body parses
+        # as a categories-shaped JSON doc BEFORE anything touches the disk.
+        sha = (self.headers.get("X-Sha256") or "").strip().lower()
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            n = 0
+        data = self.rfile.read(n) if n > 0 else b""
+        if not sha or hashlib.sha256(data).hexdigest() != sha:
+            return self._json({"ok": False, "error": "sha256 mismatch"}, 400)
+        try:
+            obj = json.loads(data.decode("utf-8"))
+        except Exception:
+            return self._json({"ok": False, "error": "not valid JSON"}, 400)
+        if not (isinstance(obj, dict) and isinstance(obj.get("categories"), list)):
+            return self._json({"ok": False, "error": "kb shape invalid"}, 400)
+        try:
+            os.makedirs(os.path.dirname(KB_FILE) or ".", exist_ok=True)
+            tmp = KB_FILE + ".part"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, KB_FILE)
+        except OSError as e:
+            return self._json({"ok": False, "error": "write failed: %s" % e}, 500)
+        return self._json({"ok": True, "bytes": len(data),
+                           "categories": len(obj.get("categories") or [])})
 
     def _sync_tombstone(self):
         body = self._body()

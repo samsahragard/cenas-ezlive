@@ -520,7 +520,8 @@ def _handle_view_login(code: str, nxt: str):
         return jsonify({"ok": True, "next": dest})
 
     from app.models import Employee
-    from app.web.employee_auth import _establish_employee_session
+    from app.web.employee_auth import (_establish_employee_session,
+                                       _management_employee_json_response)
     db = SessionLocal()
     try:
         emp = (db.query(Employee)
@@ -528,17 +529,18 @@ def _handle_view_login(code: str, nxt: str):
                  .first())
         if emp is None:
             return jsonify({"ok": False, "error": "Phone or passcode doesn't match."}), 401
+        manager_resp = _management_employee_json_response(db, emp, nxt=nxt)
+        if manager_resp is not None:
+            log.info("view-login: owner opened employee_id=%s manager profile", emp.id)
+            return manager_resp
         stores = _establish_employee_session(emp)
         log.info("view-login: owner opened employee_id=%s portal", emp.id)
     finally:
         db.close()
 
-    # View-login is a PURE employee view: drop the UNIFY manager-fold that
-    # _establish_employee_session sets for a LINKED employee (Employee.user_id).
-    # Without this, a linked employee (a manager) carries user_id into the
-    # session, so "/" routes to /partner/ and the employee->/partner firewall
-    # 403s it (employee_id present without partner_auth_ok) -- the "Forbidden"
-    # the owner hit. The owner wants the employee's portal, not the manager's.
+    # View-login is a pure employee view only for hourly employees. Managers/KMs
+    # are handled above and opened as manager profiles, so they never render the
+    # employee app under a stale Employee session.
     session.pop("user_id", None)
     session.pop("user_session_version", None)
 
@@ -668,9 +670,7 @@ def login_submit():
             matches a pure Team Roster employee identity.
 
             Employees holding management positions are first repaired/linked to
-            a User profile and opened as that manager. Sam's owner view-login
-            above remains the special door for opening a pure employee view on
-            purpose.
+            a User profile and opened as that manager.
             """
             if not digits:
                 return None

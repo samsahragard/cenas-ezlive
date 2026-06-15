@@ -301,6 +301,95 @@ def _post_login_response(stores):
     return jsonify({"ok": True, "next": "/employee/dashboard"}), 200
 
 
+def _clear_employee_profile_session_keys() -> None:
+    for key in (
+        "employee_id", "employee_name", "employee_session_version",
+        "active_store", "active_position_id", "active_position_name",
+    ):
+        session.pop(key, None)
+
+
+def _user_is_management_profile(user) -> bool:
+    if user is None or not getattr(user, "active", False):
+        return False
+    role = (getattr(user, "permission_level", "") or "").strip().lower()
+    legacy_management = {
+        "partner", "corporate", "corporate_chef", "gm", "manager",
+        "foh_manager", "km", "assistant_km", "expo",
+    }
+    if role in legacy_management:
+        return True
+    try:
+        from app.services.role_buckets import SECTION_MANAGEMENT, section_for_role
+        return section_for_role(role) == SECTION_MANAGEMENT
+    except Exception:
+        return False
+
+
+def _management_user_for_employee(db, emp):
+    """Return/create the manager User for an Employee that must not use the
+    employee-only portal. Linked manager Users win; otherwise a management
+    position repairs/creates the User profile through the keypad bridge."""
+    uid = getattr(emp, "user_id", None)
+    if uid:
+        from app.models import User as _User
+        linked = db.get(_User, uid)
+        if _user_is_management_profile(linked):
+            return linked
+
+    from app.web.keypad_auth import _ensure_management_user_for_employee
+    return _ensure_management_user_for_employee(
+        db,
+        emp,
+        passcode_hash=getattr(emp, "passcode_hash", None),
+        phone_digits=None,
+    )
+
+
+def _employee_holds_management_position(db, emp) -> bool:
+    try:
+        from app.web.keypad_auth import _management_level_for_employee
+        return _management_level_for_employee(db, emp) is not None
+    except Exception:
+        return False
+
+
+def _open_management_session_for_employee(user) -> None:
+    for key in ("driver_id", "driver_name", "driver_location",
+                "driver_session_version"):
+        session.pop(key, None)
+    _clear_employee_profile_session_keys()
+    session.permanent = True
+    session["user_id"] = user.id
+    session["user_session_version"] = getattr(user, "session_version", None)
+    session["auth_ok"] = True
+    if (getattr(user, "permission_level", "") or "").strip().lower() == "partner":
+        session["partner_auth_ok"] = True
+    else:
+        session.pop("partner_auth_ok", None)
+
+
+def _management_next_for_user(user, nxt: str | None = None) -> str:
+    from app.web.keypad_auth import _landing_for_user, _next_for_user
+    return _next_for_user(user, nxt) if nxt else _landing_for_user(user)
+
+
+def _management_employee_json_response(db, emp, nxt: str | None = None):
+    user = _management_user_for_employee(db, emp)
+    if user is None:
+        return None
+    _open_management_session_for_employee(user)
+    return jsonify({"ok": True, "next": _management_next_for_user(user, nxt)}), 200
+
+
+def _management_employee_redirect(db, emp):
+    user = _management_user_for_employee(db, emp)
+    if user is None:
+        return None
+    _open_management_session_for_employee(user)
+    return redirect(_management_next_for_user(user))
+
+
 # --------------------------------------------------------------------------
 # Endpoints
 # --------------------------------------------------------------------------
@@ -1374,4 +1463,47 @@ def install(app):
         if emp is None or not emp.active or (sv is not None and sv != emp.session_version):
             for k in ("employee_id", "employee_name", "employee_session_version", "auth_ok"):
                 session.pop(k, None)
+        return None
+
+    @app.before_request
+    def _employee_management_profile_gate():
+        """Managers/KMs should not render the employee-only app.
+
+        The shared keypad now repairs unlinked KM/manager rows into User
+        profiles, but an already-open employee session can still request
+        /employee/dashboard or the employee JSON endpoints. This gate closes
+        that stale-session door: linked manager Users and management-position
+        Employees are moved into the manager session before any /employee/*
+        page/API responds.
+        """
+        eid = session.get("employee_id")
+        path = request.path or "/"
+        if not eid or not path.startswith("/employee"):
+            return None
+        if path.startswith("/employee/logout") or path.startswith("/employee/setup"):
+            return None
+
+        db = SessionLocal()
+        try:
+            emp = db.query(Employee).filter_by(id=eid).first()
+            if emp is None or not emp.active:
+                return None
+            try:
+                resp = _management_employee_redirect(db, emp)
+            except Exception:
+                db.rollback()
+                log.exception("employee manager gate failed for employee_id=%s", eid)
+                if _employee_holds_management_position(db, emp):
+                    _clear_employee_profile_session_keys()
+                    session.pop("auth_ok", None)
+                    return redirect("/keypad-login")
+                return None
+            if resp is not None:
+                return resp
+            if _employee_holds_management_position(db, emp):
+                _clear_employee_profile_session_keys()
+                session.pop("auth_ok", None)
+                return redirect("/keypad-login")
+        finally:
+            db.close()
         return None

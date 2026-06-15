@@ -27,7 +27,8 @@ os.environ.setdefault("ALLOW_DEV_SECRET", "1")  # create_app needs a dev secret
 import pytest
 from werkzeug.security import generate_password_hash
 
-from app.models import Driver, Employee, EmployeeSetupToken, User
+from app.models import (Driver, Employee, EmployeePosition, EmployeeSetupToken,
+                        EmployeeStoreAssignment, Position, User)
 from app.web import employee_setup as setup_mod
 
 
@@ -68,6 +69,15 @@ def _make_employee(db, *, full_name="Test Emp", email="emp@test.local",
     db.add(e)
     db.commit()
     return e
+
+
+def _position_id(db, name):
+    pos = db.query(Position).filter(Position.name == name).first()
+    if pos is None:
+        pos = Position(name=name, store_key=None)
+        db.add(pos)
+        db.flush()
+    return pos.id
 
 
 def _live_token(db, emp_id):
@@ -301,6 +311,37 @@ def test_login_with_reset_code_signs_in_and_consumes_token(app_bound):
     r2 = c.post("/employee/login/passcode",
                 json={"identifier": "cara@test.local", "passcode": code})
     assert r2.status_code == 200
+
+
+def test_employee_passcode_login_for_km_returns_manager_profile(app_bound):
+    flask_app, db = app_bound
+    emp = Employee(
+        full_name="Gina KM",
+        phone="5557771111",
+        email="gina-session@test.local",
+        active=True,
+        session_version=1,
+        passcode_hash=generate_password_hash("44556"),
+    )
+    db.add(emp)
+    db.flush()
+    km_id = _position_id(db, "KM")
+    db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key="tomball"))
+    db.add(EmployeePosition(employee_id=emp.id, position_id=km_id, store_key="tomball"))
+    db.commit()
+
+    c = flask_app.test_client()
+    r = c.post(
+        "/employee/login/passcode",
+        json={"identifier": "5557771111", "passcode": "44556"},
+    )
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["ok"] is True
+    assert r.get_json()["next"] == "/dos/today"
+    with c.session_transaction() as s:
+        assert s.get("user_id") is not None
+        assert s.get("employee_id") is None
+        assert s.get("driver_id") is None
 
 
 def test_login_wrong_value_rejected(app_bound):

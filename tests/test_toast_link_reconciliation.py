@@ -27,6 +27,7 @@ def link_app(db_session, monkeypatch):
     from app.web import schedules_v2_roster as roster_mod
     from app.web import store_routes as store_mod
     from app.web import toast_link_routes as toast_mod
+    from app.web import partner_settings as partner_settings_mod
     from app.services import toast_employee_profiles as profile_mod
 
     db_session.add(User(
@@ -49,7 +50,8 @@ def link_app(db_session, monkeypatch):
     flask_app.config["WTF_CSRF_ENABLED"] = False
 
     sess = lambda: db_session
-    for mod in (appdb, perm_mod, sv2_mod, roster_mod, store_mod, toast_mod, profile_mod):
+    for mod in (appdb, perm_mod, sv2_mod, roster_mod, store_mod, toast_mod,
+                partner_settings_mod, profile_mod):
         if hasattr(mod, "SessionLocal"):
             monkeypatch.setattr(mod, "SessionLocal", sess, raising=False)
 
@@ -70,9 +72,16 @@ def link_app(db_session, monkeypatch):
             return fake_toast
 
     monkeypatch.setattr(toast_mod, "ToastClient", FakeToastClass, raising=True)
+    monkeypatch.setattr(partner_settings_mod, "ToastClient", FakeToastClass, raising=True)
     monkeypatch.setattr(profile_mod, "ToastClient", FakeToastClass, raising=True)
     monkeypatch.setattr(
         toast_mod,
+        "restaurant_guids",
+        lambda: {"tomball": "guid-tomball", "copperfield": "guid-copperfield"},
+        raising=True,
+    )
+    monkeypatch.setattr(
+        partner_settings_mod,
         "restaurant_guids",
         lambda: {"tomball": "guid-tomball", "copperfield": "guid-copperfield"},
         raising=True,
@@ -126,6 +135,9 @@ def test_manual_link_returns_as_confirmed_and_is_removed_from_candidate_pools(li
         json={"cena_emp_id": 10, "toast_id": "toast-a", "toast_name": "Austin Martinez"},
     )
     assert linked.status_code == 200, linked.get_data(as_text=True)
+    emp = db.get(Employee, 10)
+    assert emp.toast_employee_guid == "toast-a"
+    assert emp.toast_employee_name == "Austin Martinez"
 
     after = client.get("/dos/schedules-v2/toast/match-suggestions")
     assert after.status_code == 200, after.get_data(as_text=True)
@@ -227,6 +239,61 @@ def test_relink_updates_employee_and_moves_duplicate_toast_link(link_app):
     assert moved.status_code == 200, moved.get_data(as_text=True)
     rows = db.query(CenaToastLink).filter_by(store_key="tomball").all()
     assert [(r.cena_employee_id, r.toast_id) for r in rows] == [(12, "toast-b")]
+    assert db.get(Employee, 11).toast_employee_guid is None
+    assert db.get(Employee, 12).toast_employee_guid == "toast-b"
+
+
+def test_unlink_clears_employee_toast_identity(link_app):
+    flask_app, db = link_app
+    client = _client(flask_app)
+    emp = _employee(db, 13, "Austin Markham", "tomball")
+    emp.toast_employee_guid = "toast-a"
+    emp.toast_employee_name = "Austin Markham"
+    db.add(CenaToastLink(
+        cena_employee_id=13,
+        store_key="tomball",
+        toast_id="toast-a",
+        toast_name="Austin Markham",
+        confirmed_by=1,
+    ))
+    db.commit()
+
+    resp = client.post("/dos/schedules-v2/toast/unlink", json={"cena_emp_id": 13})
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    assert db.query(CenaToastLink).filter_by(cena_employee_id=13).count() == 0
+    assert db.get(Employee, 13).toast_employee_guid is None
+
+
+def test_unlink_clears_employee_identity_without_legacy_row(link_app):
+    flask_app, db = link_app
+    client = _client(flask_app)
+    emp = _employee(db, 15, "Austin Markham", "tomball")
+    emp.toast_employee_guid = "toast-a"
+    emp.toast_employee_name = "Austin Markham"
+    db.commit()
+
+    resp = client.post("/dos/schedules-v2/toast/unlink", json={"cena_emp_id": 15})
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    assert db.get(Employee, 15).toast_employee_guid is None
+
+
+def test_roster_name_edit_warns_when_linked_toast_name_drifts(link_app):
+    flask_app, db = link_app
+    client = _client(flask_app)
+    emp = _employee(db, 14, "Austin Markham", "tomball")
+    emp.toast_employee_guid = "toast-a"
+    emp.toast_employee_name = "Austin Markham"
+    db.commit()
+
+    resp = client.post(
+        "/dos/schedules-v2/employees/14/update",
+        json={"full_name": "Completely Different"},
+    )
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    assert body["employee"]["full_name"] == "Completely Different"
+    assert body["warnings"]
+    assert "Austin Markham" in body["warnings"][0]
 
 
 def test_link_rejects_employee_not_assigned_to_url_store(link_app):
@@ -297,6 +364,7 @@ def test_toast_profile_reconcile_reuses_existing_employee_by_phone(link_app):
 
     row = db.query(CenaToastLink).filter_by(store_key="tomball", toast_id="toast-a").one()
     assert row.cena_employee_id == 30
+    assert db.get(Employee, 30).toast_employee_guid == "toast-a"
     assert db.query(Employee).filter(Employee.phone == "9362529997").count() == 1
 
 
@@ -338,3 +406,30 @@ def test_team_link_page_defaults_to_url_store_and_contains_cleanup_controls(link
     assert 'data-link-act="change-link"' in html
     assert 'data-link-act="ignore-toast"' in html
     assert 'data-link-act="delete-cena"' in html
+
+
+def test_partner_settings_toast_link_page_links_employee_source_of_truth(link_app):
+    flask_app, db = link_app
+    client = _client(flask_app)
+    _employee(db, 77, "Austin Markham", "tomball")
+
+    page = client.get("/partner/settings/toast-links?store=tomball")
+    assert page.status_code == 200, page.get_data(as_text=True)
+    html = page.get_data(as_text=True)
+    assert "Roster Links" in html
+    assert "Austin Markham" in html
+
+    resp = client.post(
+        "/partner/settings/toast-links/link",
+        data={
+            "store_key": "tomball",
+            "employee_id": "77",
+            "toast_employee_guid": "toast-a",
+        },
+    )
+    assert resp.status_code == 302, resp.get_data(as_text=True)
+    emp = db.get(Employee, 77)
+    assert emp.toast_employee_guid == "toast-a"
+    assert emp.toast_employee_name == "Austin Markham"
+    legacy = db.query(CenaToastLink).filter_by(cena_employee_id=77, store_key="tomball").one()
+    assert legacy.toast_id == "toast-a"

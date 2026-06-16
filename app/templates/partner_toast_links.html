@@ -1,0 +1,154 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'partner_settings' %}
+{% block title %}Toast Links - Cenas Kitchen{% endblock %}
+
+{% block page_module %}SETTINGS{% endblock %}
+{% block page_module_class %}mod-settings{% endblock %}
+{% block page_title %}<span class="word-primary">Toast</span> <span class="ck-accent">Roster Links</span>{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">Audit which Cenas roster profile owns each verified Toast employee identity.</p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .toast-link-wrap { display: grid; gap: 14px; }
+  .toast-link-tabs { display: flex; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.12); }
+  .toast-link-tab {
+    color: rgba(255,255,255,.72);
+    text-decoration: none;
+    padding: 8px 0 10px;
+    font-weight: 700;
+    border-bottom: 2px solid transparent;
+  }
+  .toast-link-tab.active { color: var(--accent-soft); border-color: var(--accent-soft); }
+  .toast-link-panel { display: none; }
+  .toast-link-panel.active { display: block; }
+  .toast-link-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .toast-link-table th {
+    text-align: left;
+    color: rgba(255,255,255,.54);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 8px 8px;
+    border-bottom: 1px solid rgba(255,255,255,.12);
+  }
+  .toast-link-table td { padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,.07); vertical-align: top; }
+  .toast-link-name { font-weight: 800; color: #fff7e8; }
+  .toast-link-meta { color: rgba(255,255,255,.58); font-size: 12px; margin-top: 2px; }
+  .toast-link-status {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(255,255,255,.72);
+    white-space: nowrap;
+  }
+  .toast-link-status.linked { color: #8fd28f; border-color: rgba(143,210,143,.4); background: rgba(143,210,143,.09); }
+  .toast-link-status.legacy { color: var(--accent-soft); border-color: rgba(244,178,82,.45); background: rgba(244,178,82,.08); }
+  .toast-link-warning { color: #ffb2a9; font-size: 12px; line-height: 1.35; margin-top: 6px; max-width: 380px; }
+  .toast-link-form { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+  .toast-link-select {
+    min-width: 220px;
+    max-width: 280px;
+    color: #fff7e8;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+  }
+  .toast-link-btn {
+    border: 1px solid rgba(244,178,82,.48);
+    background: rgba(244,178,82,.14);
+    color: #fff7e8;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .toast-link-btn.secondary { border-color: rgba(255,255,255,.16); background: transparent; color: rgba(255,255,255,.66); }
+  .toast-link-error { color: #ffb2a9; padding: 10px 8px; border: 1px solid rgba(255,122,122,.24); border-radius: 8px; background: rgba(255,122,122,.07); margin-bottom: 10px; }
+  @media (max-width: 760px) {
+    .toast-link-table, .toast-link-table tbody, .toast-link-table tr, .toast-link-table td { display: block; width: 100%; }
+    .toast-link-table thead { display: none; }
+    .toast-link-table tr { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.12); }
+    .toast-link-table td { border-bottom: 0; padding: 5px 0; }
+    .toast-link-form { justify-content: flex-start; flex-wrap: wrap; }
+    .toast-link-select { min-width: min(100%, 260px); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="panel toast-link-wrap">
+  <div class="toast-link-tabs">
+    {% for store in stores %}
+      <a class="toast-link-tab {% if store.selected %}active{% endif %}" href="{{ url_for('partner_settings.toast_links', store=store.key) }}">{{ store.label }}</a>
+    {% endfor %}
+  </div>
+
+  {% for store in stores %}
+    <div class="toast-link-panel {% if store.selected %}active{% endif %}">
+      {% if store.toast_error %}
+        <div class="toast-link-error">{{ store.toast_error }}</div>
+      {% endif %}
+      <table class="toast-link-table">
+        <thead>
+          <tr>
+            <th>Roster profile</th>
+            <th>Status</th>
+            <th>Toast profile</th>
+            <th style="text-align:right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in store.roster_rows %}
+            <tr>
+              <td>
+                <div class="toast-link-name">{{ row.employee.full_name }}</div>
+                <div class="toast-link-meta">ID {{ row.employee.id }}</div>
+                {% if row.warning %}<div class="toast-link-warning">{{ row.warning }}</div>{% endif %}
+              </td>
+              <td>
+                <span class="toast-link-status {% if row.status == 'Linked' %}linked{% elif row.status == 'Legacy link' %}legacy{% endif %}">{{ row.status }}</span>
+              </td>
+              <td>
+                <div class="toast-link-name">{{ row.current_name or 'Not linked' }}</div>
+                {% if row.current_guid %}<div class="toast-link-meta">{{ row.current_guid }}</div>{% endif %}
+              </td>
+              <td>
+                <form class="toast-link-form" method="POST" action="{{ url_for('partner_settings.toast_links_link') }}">
+                  <input type="hidden" name="store_key" value="{{ store.key }}">
+                  <input type="hidden" name="employee_id" value="{{ row.employee.id }}">
+                  <select class="toast-link-select" name="toast_employee_guid" required>
+                    <option value="">Select Toast employee...</option>
+                    {% for toast in store.toast_rows %}
+                      <option value="{{ toast.toast_id }}" {% if toast.toast_id == row.current_guid %}selected{% endif %}>{{ toast.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <button class="toast-link-btn" type="submit">Link</button>
+                </form>
+                {% if row.current_guid %}
+                  <form class="toast-link-form" method="POST" action="{{ url_for('partner_settings.toast_links_unlink') }}" style="margin-top:6px;">
+                    <input type="hidden" name="store_key" value="{{ store.key }}">
+                    <input type="hidden" name="employee_id" value="{{ row.employee.id }}">
+                    <button class="toast-link-btn secondary" type="submit">Unlink</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          {% if not store.roster_rows %}
+            <tr><td colspan="4" class="toast-link-meta">No active roster profiles for this store.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+</section>
+{% endblock %}

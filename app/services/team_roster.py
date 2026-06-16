@@ -153,6 +153,8 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
             # inline assign editor can PRE-CHECK the current per-store positions.
             # Purely additive -- the flattened positions[] above is untouched.
             "address": getattr(e, "address", None),
+            "toast_employee_guid": getattr(e, "toast_employee_guid", None),
+            "toast_employee_name": getattr(e, "toast_employee_name", None),
             "positions_by_store": emp_pos_by_store.get(e.id, {}),
             "_dom": dom, "_stores": emp_stores.get(e.id, set()),
         }

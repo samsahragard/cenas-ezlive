@@ -149,9 +149,12 @@ def _confirmed_link_rows(
     ignored_toast: set[str],
 ) -> list[dict]:
     """Saved links rendered as first-class rows on the Link tab."""
-    from app.models import CenaToastLink
+    from app.models import CenaToastLink, Employee, EmployeeStoreAssignment
+    from app.services.toast_identity import name_mismatch_warning
 
     rows: list[dict] = []
+    seen_cena: set[int] = set()
+    seen_toast: set[str] = set()
     for link in (db.query(CenaToastLink)
                    .filter(CenaToastLink.store_key == store)
                    .order_by(CenaToastLink.cena_employee_id)
@@ -160,21 +163,73 @@ def _confirmed_link_rows(
             cena_emp_id = int(link.cena_employee_id)
         except (TypeError, ValueError):
             continue
-        toast_id = str(link.toast_id or "").strip()
+        emp = db.get(Employee, cena_emp_id)
+        toast_id = str(
+            (getattr(emp, "toast_employee_guid", None) or link.toast_id or "")
+        ).strip()
         if cena_emp_id in ignored_cena or toast_id in ignored_toast:
             continue
         cena = cena_by_id.get(cena_emp_id)
         if not cena:
             continue
         toast = toast_by_id.get(toast_id)
+        toast_name = (
+            getattr(emp, "toast_employee_name", None)
+            or link.toast_name
+            or (toast or {}).get("name")
+            or toast_id[:8]
+        )
         rows.append({
             "cena_emp_id": cena_emp_id,
             "cena_name": cena.get("name") or "",
             "cena_phone": cena.get("phone") or "",
             "toast_id": toast_id,
-            "toast_name": (link.toast_name or (toast or {}).get("name") or toast_id[:8]),
+            "toast_name": toast_name,
             "toast_phone": (toast or {}).get("phone") or "",
+            "name_warning": name_mismatch_warning(cena.get("name"), toast_name),
         })
+        seen_cena.add(cena_emp_id)
+        seen_toast.add(toast_id)
+
+    # New source of truth: Employee.toast_employee_guid. This catches employees
+    # linked by the partner Settings audit even if a legacy cache row is missing.
+    emp_rows = (
+        db.query(Employee)
+          .join(EmployeeStoreAssignment,
+                EmployeeStoreAssignment.employee_id == Employee.id)
+          .filter(EmployeeStoreAssignment.store_key == store,
+                  Employee.toast_employee_guid.isnot(None),
+                  Employee.toast_employee_guid != "")
+          .order_by(Employee.full_name)
+          .all()
+    )
+    for emp in emp_rows:
+        cena_emp_id = int(emp.id)
+        toast_id = str(emp.toast_employee_guid or "").strip()
+        if (
+            cena_emp_id in seen_cena
+            or cena_emp_id in ignored_cena
+            or not toast_id
+            or toast_id in seen_toast
+            or toast_id in ignored_toast
+        ):
+            continue
+        cena = cena_by_id.get(cena_emp_id)
+        if not cena:
+            continue
+        toast = toast_by_id.get(toast_id)
+        toast_name = emp.toast_employee_name or (toast or {}).get("name") or toast_id[:8]
+        rows.append({
+            "cena_emp_id": cena_emp_id,
+            "cena_name": cena.get("name") or "",
+            "cena_phone": cena.get("phone") or "",
+            "toast_id": toast_id,
+            "toast_name": toast_name,
+            "toast_phone": (toast or {}).get("phone") or "",
+            "name_warning": name_mismatch_warning(cena.get("name"), toast_name),
+        })
+        seen_cena.add(cena_emp_id)
+        seen_toast.add(toast_id)
     return _sort_by_profile_name(rows, "cena_name")
 
 

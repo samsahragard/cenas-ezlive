@@ -40,8 +40,9 @@ def sync_toast_snapshots(only_store: str | None = None, reconcile_profiles: bool
     toast_employee_summary() and upsert ToastEmployeeSnapshot. Per-row commit so
     a partial failure still persists the good rows + a concurrent worker sees
     freshness quickly. Returns {total, synced, failed, profiles?}; never raises out."""
-    from app.models import CenaToastLink, ToastEmployeeSnapshot
+    from app.models import ToastEmployeeSnapshot
     from app.services.toast_employee_profiles import reconcile_toast_employee_profiles
+    from app.services.toast_identity import identity_pairs_for_sync
     from app.web.toast_link_routes import toast_employee_summary
 
     profile_summary = None
@@ -55,10 +56,7 @@ def sync_toast_snapshots(only_store: str | None = None, reconcile_profiles: bool
     db = SessionLocal()
     total = ok = failed = 0
     try:
-        q = db.query(CenaToastLink.store_key, CenaToastLink.toast_id).distinct()
-        if only_store:
-            q = q.filter(CenaToastLink.store_key == only_store)
-        pairs = [(s, t) for (s, t) in q.all() if s and t]
+        pairs = identity_pairs_for_sync(db, only_store=only_store)
         for store_key, toast_id in pairs:
             total += 1
             try:

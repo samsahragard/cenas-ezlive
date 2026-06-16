@@ -3176,6 +3176,14 @@ class Employee(Base):
     # ALTER adds it to the populated employees table (app/__init__.py), same
     # mechanism as store_key/user_id/session_version.
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Durable Toast identity (Sam 2026-06-16): managers verify this once from
+    # Toast and every sales/labor/tip lookup can join by GUID instead of
+    # re-guessing names at boot. CenaToastLink stays as a compatibility/display
+    # cache while older screens migrate.
+    toast_employee_guid: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    toast_employee_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Email-pivot (2026-05-30): set by the employee during email self-setup; NULL =
     # not set up yet. Numeric PIN (4-8 digits), hashed. Login = identifier (email or

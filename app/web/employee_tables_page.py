@@ -6,8 +6,9 @@ import re
 from flask import jsonify, redirect, render_template, request, session
 
 from app.db import SessionLocal
-from app.models import CenaToastLink, Employee
+from app.models import Employee
 from app.services.employee_table_timelines import employee_table_timelines_payload
+from app.services.toast_identity import links_for_employee
 from app.web.employee_auth import employee_auth
 
 
@@ -74,11 +75,7 @@ def employee_tables_data():
         emp = db.query(Employee).filter(Employee.id == emp_id).first()
         if emp is None:
             return jsonify({"ok": False, "error": "unknown employee"}), 404
-        links = (
-            db.query(CenaToastLink)
-            .filter(CenaToastLink.cena_employee_id == emp.id)
-            .all()
-        )
+        links = links_for_employee(db, emp)
         if not links:
             return jsonify({"ok": True, "linked": False, "timelines": []}), 200
         payload = employee_table_timelines_payload(

@@ -14,7 +14,6 @@ from sqlalchemy import or_
 
 from app.models import (
     CANONICAL_POSITIONS,
-    CenaToastLink,
     Employee,
     EmployeePosition,
     EmployeeStoreAssignment,
@@ -28,6 +27,7 @@ from app.models import (
     ShiftTag,
     TimeOffRequest,
 )
+from app.services.toast_identity import linked_employee_store_keys
 
 STORE_ALIASES = {
     "tomball": "tomball",
@@ -127,10 +127,7 @@ def _eligible_employee_lookup(db) -> tuple[dict[str, list[Employee]], dict[tuple
         (row.employee_id, row.store_key)
         for row in db.query(EmployeeStoreAssignment).all()
     }
-    linked = {
-        (row.cena_employee_id, row.store_key)
-        for row in db.query(CenaToastLink.cena_employee_id, CenaToastLink.store_key).all()
-    }
+    linked = linked_employee_store_keys(db)
     canonical_pids = {
         pid for (pid,) in db.query(Position.id).filter(Position.name.in_(CANONICAL_POSITIONS)).all()
     }

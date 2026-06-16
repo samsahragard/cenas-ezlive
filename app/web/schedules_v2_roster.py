@@ -34,6 +34,11 @@ from app.models import (CANONICAL_POSITIONS, CenaToastIgnore, CenaToastLink, Emp
                         EmployeeAvailability, EmployeePosition,
                         EmployeeStoreAssignment, EmployeeUnavailabilityBlock,
                         Position, User)
+from app.services.toast_identity import (
+    clear_employee_toast_identity,
+    name_mismatch_warning,
+    set_employee_toast_identity,
+)
 from app.web.permissions import current_user_id, load_current_user, require_level
 from app.web.schedules_v2 import (_MGR, _store, _highest_section_role,
                                  apply_section_placement_to_user)
@@ -197,14 +202,14 @@ def _emp_email_valid(email: str) -> bool:
 @store_bp.route("/schedules-v2/employees/<int:emp_id>/update", methods=["POST"])
 @require_level(_MGR)
 def sv2_employee_update(emp_id):
-    """EDIT CONTACT: update an existing employee's phone / email / address from
-    the Team roster. Body {phone, email, address} -- each optional; only the keys
-    PRESENT in the body are written (so the FE can patch one field). Email is the
-    login identity, so it is validated (shape) + uniqueness-checked (case-
-    insensitive, excluding this employee) exactly like sv2_employee_add; phone is
-    the SMS-identity UNIQUE so a duplicate is rejected too. address is free text.
-    -> 200 {ok, employee:{id,full_name,phone,email,address}}; 400 bad email;
-    404 unknown employee; 409 duplicate email/phone.
+    """EDIT CONTACT: update an existing employee's name / phone / email / address
+    from the Team roster. Each key is optional and only PRESENT keys are written
+    (so the FE can patch one field). Email is the login identity, so it is
+    validated (shape) + uniqueness-checked (case-insensitive, excluding this
+    employee) exactly like sv2_employee_add; phone is the SMS-identity UNIQUE so
+    a duplicate is rejected too. address is free text.
+    -> 200 {ok, employee:{id,full_name,phone,email,address}, warnings?};
+    400 bad email; 404 unknown employee; 409 duplicate email/phone.
     """
     data = request.get_json(silent=True) or {}
     db = SessionLocal()
@@ -215,6 +220,16 @@ def sv2_employee_update(emp_id):
 
         # Only mutate fields the caller actually sent (presence, not truthiness:
         # address="" clears it; an absent key is left untouched).
+        warnings: list[str] = []
+        if "full_name" in data:
+            full_name = (data.get("full_name") or "").strip()
+            if not full_name:
+                return jsonify({"ok": False, "error": "Name is required."}), 400
+            warning = name_mismatch_warning(full_name, emp.toast_employee_name)
+            if warning:
+                warnings.append(warning)
+            emp.full_name = full_name
+
         if "email" in data:
             email = (data.get("email") or "").strip()
             if not _emp_email_valid(email):
@@ -246,7 +261,9 @@ def sv2_employee_update(emp_id):
         return jsonify({"ok": True, "employee": {
             "id": emp.id, "full_name": emp.full_name,
             "phone": emp.phone, "email": emp.email, "address": emp.address,
-        }}), 200
+            "toast_employee_guid": emp.toast_employee_guid,
+            "toast_employee_name": emp.toast_employee_name,
+        }, "warnings": warnings}), 200
     finally:
         db.close()
 
@@ -731,7 +748,8 @@ def sv2_toast_link():
         return jsonify({"ok": False, "error": "store not resolved"}), 400
     db = SessionLocal()
     try:
-        if _link_employee_for_store(db, cena_emp_id, store) is None:
+        emp = _link_employee_for_store(db, cena_emp_id, store)
+        if emp is None:
             return jsonify({"ok": False,
                             "error": "That profile is not active at this store."}), 400
 
@@ -743,6 +761,14 @@ def sv2_toast_link():
                    CenaToastLink.toast_id == toast_id,
                    CenaToastLink.cena_employee_id != cena_emp_id)
            .delete(synchronize_session=False))
+        # Same rule for the new Employee-owned source: one Toast GUID should not
+        # sit on multiple roster profiles. Clear duplicates before saving the
+        # verified profile.
+        for other in (db.query(Employee)
+                        .filter(Employee.id != cena_emp_id,
+                                Employee.toast_employee_guid == toast_id)
+                        .all()):
+            clear_employee_toast_identity(other, toast_id)
         _clear_link_ignores(db, store, cena_emp_id, toast_id)
 
         row = (db.query(CenaToastLink)
@@ -759,6 +785,7 @@ def sv2_toast_link():
             row.toast_name = toast_name
             row.confirmed_by = uid
             row.confirmed_at = now
+        set_employee_toast_identity(emp, toast_id, toast_name)
         db.commit()
         return jsonify({"ok": True, "link": {"cena_emp_id": cena_emp_id,
                                              "toast_id": toast_id,
@@ -784,9 +811,23 @@ def sv2_toast_unlink():
         return jsonify({"ok": False, "error": "store not resolved"}), 400
     db = SessionLocal()
     try:
+        row = (db.query(CenaToastLink)
+                 .filter_by(cena_employee_id=cena_emp_id, store_key=store)
+                 .first())
+        old_toast_id = (row.toast_id if row is not None else None)
         (db.query(CenaToastLink)
            .filter_by(cena_employee_id=cena_emp_id, store_key=store)
            .delete(synchronize_session=False))
+        emp = db.get(Employee, cena_emp_id)
+        if old_toast_id:
+            remaining = (db.query(CenaToastLink.id)
+                           .filter(CenaToastLink.cena_employee_id == cena_emp_id,
+                                   CenaToastLink.toast_id == old_toast_id)
+                           .first())
+            if emp is not None and remaining is None:
+                clear_employee_toast_identity(emp, old_toast_id)
+        elif emp is not None:
+            clear_employee_toast_identity(emp)
         db.commit()
         return jsonify({"ok": True}), 200
     finally:
@@ -828,13 +869,30 @@ def sv2_toast_ignore():
                                 "error": "That profile is not active at this store."}), 400
             source_id = str(cena_emp_id)
             display_name = emp.full_name or display_name
+            row = (db.query(CenaToastLink)
+                     .filter_by(cena_employee_id=cena_emp_id, store_key=store)
+                     .first())
+            old_toast_id = row.toast_id if row is not None else None
             (db.query(CenaToastLink)
                .filter_by(cena_employee_id=cena_emp_id, store_key=store)
                .delete(synchronize_session=False))
+            if old_toast_id:
+                remaining = (db.query(CenaToastLink.id)
+                               .filter(CenaToastLink.cena_employee_id == cena_emp_id,
+                                       CenaToastLink.toast_id == old_toast_id)
+                               .first())
+                if remaining is None:
+                    clear_employee_toast_identity(emp, old_toast_id)
+            else:
+                clear_employee_toast_identity(emp)
         else:
             source_id = str(data.get("toast_id") or "").strip()
             if not source_id:
                 return jsonify({"ok": False, "error": "toast_id required"}), 400
+            for emp in (db.query(Employee)
+                          .filter(Employee.toast_employee_guid == source_id)
+                          .all()):
+                clear_employee_toast_identity(emp, source_id)
             (db.query(CenaToastLink)
                .filter(CenaToastLink.store_key == store,
                        CenaToastLink.toast_id == source_id)

@@ -52,7 +52,8 @@ from flask import (Blueprint, abort, jsonify, redirect, render_template,
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
-from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition, CenaToastLink, Shift, Schedule, Position
+from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition, Shift, Schedule, Position
+from app.services.toast_identity import links_for_employee
 from app.services.ezcater_known_drivers_seed import normalize_phone
 
 log = logging.getLogger(__name__)
@@ -635,9 +636,7 @@ def my_performance():
         emp = db.query(Employee).filter(Employee.id == emp_id).first()
         if emp is None:
             return jsonify({"ok": False, "error": "unknown employee"}), 404
-        links = (db.query(CenaToastLink)
-                   .filter(CenaToastLink.cena_employee_id == emp.id)
-                   .all())
+        links = links_for_employee(db, emp)
         if not links:
             return jsonify({"ok": True, "linked": False}), 200
 
@@ -793,8 +792,7 @@ def performance_center():
         emp = db.query(Employee).filter(Employee.id == emp_id).first()
         if emp is None:
             return jsonify({"ok": False, "error": "unknown employee"}), 404
-        links = (db.query(CenaToastLink)
-                   .filter(CenaToastLink.cena_employee_id == emp.id).all())
+        links = links_for_employee(db, emp)
         if not links:
             return jsonify({"ok": True, "linked": False}), 200
 
@@ -946,7 +944,7 @@ def performance_center():
 
         def _live_today_tips():
             """LIVE credit-card tips for THIS employee TODAY, scoped strictly to
-            their OWN confirmed Toast server guid(s) (CenaToastLink.toast_id) -- the
+            their OWN confirmed Toast server guid(s) -- the
             same payment.tipAmount source the manager Server-Performance page shows,
             never another employee's row. Reads the shared 30-min orders cache
             (refresh=False) so it piggybacks the manager pull -- no extra Toast load.

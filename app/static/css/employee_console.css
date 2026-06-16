@@ -2066,6 +2066,44 @@ body::after {
   white-space: nowrap;
 }
 
+.ro-day-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(98px, 1fr);
+  gap: 8px;
+  margin: 4px 0 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.ro-day-tabs::-webkit-scrollbar { display: none; }
+.ro-day-tab {
+  border: 1px solid rgba(246,189,89,.18);
+  border-radius: 14px;
+  background: rgba(12,18,30,.72);
+  color: #d7e5fb;
+  display: grid;
+  gap: 2px;
+  min-height: 54px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.ro-day-tab strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+.ro-day-tab span {
+  color: #9facbd;
+  font: 800 10px var(--cfp-mono);
+}
+.ro-day-tab.is-on {
+  background: linear-gradient(135deg, #f6bd59, #ff9b4a);
+  border-color: rgba(255,211,128,.9);
+  color: #1a0d05;
+}
+.ro-day-tab.is-on span {
+  color: rgba(26,13,5,.72);
+}
 .ro-week {
   display: grid;
   gap: 14px;
@@ -2090,28 +2128,73 @@ body::after {
   font: 800 11px var(--cfp-mono);
 }
 .ro-pos {
-  border-top: 1px solid rgba(255,255,255,.075);
-  padding-top: 12px;
-  margin-top: 12px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 14px;
+  margin-top: 10px;
+  overflow: hidden;
+  background: rgba(0,0,0,.16);
 }
 .ro-pos:first-of-type {
-  border-top: 0;
-  padding-top: 0;
   margin-top: 0;
 }
 .ro-pos-head {
+  width: 100%;
+  border: 0;
+  background: rgba(255,255,255,.035);
+  color: inherit;
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 9px;
+  padding: 12px;
+  text-align: left;
 }
-.ro-pos-head strong {
+.ro-pos-main {
+  display: grid;
+  gap: 3px;
+}
+.ro-pos-main strong {
   color: #f6bd59;
+  font-size: 15px;
   font-weight: 900;
 }
-.ro-pos-head span {
+.ro-pos-main em {
   color: #9facbd;
+  font-style: normal;
   font-size: 12px;
+}
+.ro-counts {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.ro-counts b {
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 999px;
+  color: #d7e5fb;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+.ro-chevron {
+  color: #f6bd59;
+  font-style: normal;
+  font-weight: 900;
+  transition: transform .16s ease;
+}
+.ro-pos.is-open .ro-chevron {
+  transform: rotate(180deg);
+}
+.ro-pos-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+.ro-pos-body[hidden] {
+  display: none;
 }
 .ro-sub {
   display: grid;

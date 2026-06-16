@@ -1,0 +1,203 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_module %}CATERING{% endblock %}
+{% block page_module_class %}mod-catering{% endblock %}
+{% block page_title %}Developer{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cdev-page {
+    color: var(--text-1);
+    padding: 18px 20px 34px;
+  }
+  .cdev-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
+    border: 1px solid rgba(241, 190, 95, 0.26);
+    background: rgba(28, 12, 4, 0.66);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .cdev-title {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1;
+    color: #f6c65a;
+    letter-spacing: 0;
+  }
+  .cdev-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-top: 10px;
+    color: rgba(255, 244, 225, 0.78);
+    font-size: 12px;
+  }
+  .cdev-meta span {
+    white-space: nowrap;
+  }
+  .cdev-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .cdev-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(241, 190, 95, 0.32);
+    color: #ffe8b4;
+    background: rgba(54, 25, 10, 0.68);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .cdev-table-wrap {
+    overflow: auto;
+    border: 1px solid rgba(241, 190, 95, 0.22);
+    border-radius: 8px;
+    background: rgba(12, 6, 3, 0.74);
+  }
+  .cdev-table {
+    width: 100%;
+    min-width: 900px;
+    border-collapse: collapse;
+  }
+  .cdev-table th,
+  .cdev-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(241, 190, 95, 0.14);
+    vertical-align: top;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .cdev-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #2a1207;
+    color: #ffd986;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .cdev-section {
+    width: 170px;
+    color: #f0b951;
+    font-weight: 800;
+  }
+  .cdev-label {
+    width: 210px;
+    color: #fff5dd;
+    font-weight: 800;
+  }
+  .cdev-amount {
+    width: 160px;
+    color: #fdf3d3;
+    font-weight: 900;
+  }
+  .cdev-calc {
+    color: rgba(255, 244, 225, 0.86);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+  }
+  .cdev-subhead {
+    margin: 22px 0 10px;
+    font-size: 15px;
+    color: #ffd986;
+  }
+  .cdev-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+  }
+  .cdev-item {
+    border: 1px solid rgba(241, 190, 95, 0.18);
+    border-radius: 8px;
+    background: rgba(29, 13, 6, 0.62);
+    padding: 10px 12px;
+    min-width: 0;
+  }
+  .cdev-item-name {
+    font-weight: 900;
+    color: #fff3d2;
+    overflow-wrap: anywhere;
+  }
+  .cdev-item-meta {
+    margin-top: 5px;
+    color: rgba(255, 244, 225, 0.68);
+    font-size: 12px;
+  }
+  @media (max-width: 760px) {
+    .cdev-page { padding: 12px 10px 24px; }
+    .cdev-head { display: block; padding: 14px; }
+    .cdev-title { font-size: 24px; }
+    .cdev-actions { justify-content: flex-start; margin-top: 12px; }
+    .cdev-table { min-width: 760px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cdev-page">
+  <header class="cdev-head">
+    <div>
+      <h1 class="cdev-title">{{ order.external_order_id }}</h1>
+      <div class="cdev-meta">
+        <span>{{ order.delivery_date or 'No date' }}</span>
+        <span>{{ order.deliver_at or 'No time' }}</span>
+        <span>{{ order.reported_store or order.origin_store_id or 'Store' }}</span>
+        <span>{{ order.headcount or 0 }} headcount</span>
+      </div>
+    </div>
+    <div class="cdev-actions">
+      <a class="cdev-btn" href="{{ back_url }}">Back</a>
+      <a class="cdev-btn" href="/orders/view/{{ external_order_id }}">Normal View</a>
+    </div>
+  </header>
+
+  <div class="cdev-table-wrap">
+    <table class="cdev-table">
+      <thead>
+        <tr>
+          <th>Section</th>
+          <th>Breakdown</th>
+          <th>Amount</th>
+          <th>Calculation</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.rows %}
+        <tr>
+          <td class="cdev-section">{{ row.section }}</td>
+          <td class="cdev-label">{{ row.label }}</td>
+          <td class="cdev-amount">{{ row.amount }}</td>
+          <td class="cdev-calc">{{ row.calculation }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if detail["items"] %}
+  <h2 class="cdev-subhead">Raw Items</h2>
+  <div class="cdev-items">
+    {% for item in detail["items"] %}
+    <div class="cdev-item">
+      <div class="cdev-item-name">{{ item.qty }} x {{ item.name }}</div>
+      <div class="cdev-item-meta">{{ item.package_type }}{% if item.packaging %} / {{ item.packaging }}{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

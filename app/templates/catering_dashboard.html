@@ -13,8 +13,9 @@
    (Ez Orders -> /<store>/orders, Ez Market -> /ez-market, Ez Manage
    -> /ez-manage, Ez Drivers -> /<store>/drivers, In-House ->
    /<store>/in-house-catering, Live Map ->
-   /partner/developer/ezcater-live-map). All existing catering functionality is
-   left as-is — the pages are simply iframed, not rewritten.
+   /partner/developer/ezcater-live-map, Developer ->
+   /<store>/catering/developer). All existing catering functionality
+   is left as-is — the pages are simply iframed, not rewritten.
 
    The iframed pages are themselves full base_dashboard pages, so each
    one carries its own sidebar / topbar / bottom-nav / role badge. The
@@ -24,8 +25,8 @@
    chrome the iframe stays hidden until its load+strip completes.
 
    LAZY-LOAD: each iframe carries a data-src, not a src. JS sets src
-   from data-src the first time that tab is activated, so the five
-   catering pages do not all load at once — only the default tab
+   from data-src the first time that tab is activated, so the catering
+   tab pages do not all load at once — only the default tab
    (Ez Orders) loads on page load.
 
    Extends base_dashboard.html — so the role-matched dashboard badge
@@ -394,7 +395,8 @@
   'ez-manage':  '<path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>',
   'ez-drivers': '<path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>',
   'in-house':   '<path d="M12 3 4 9v12h5v-7h6v7h5V9z"/>',
-  'live-map':   '<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>'
+  'live-map':   '<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>',
+  'developer':  '<path d="M8.7 16.3 4.4 12l4.3-4.3L7.3 6.3 1.6 12l5.7 5.7 1.4-1.4zm6.6 0 4.3-4.3-4.3-4.3 1.4-1.4 5.7 5.7-5.7 5.7-1.4-1.4zM13.1 4l-4 16h1.8l4-16h-1.8z"/>'
 } %}
 
 <div class="catdash" id="catdash">
@@ -489,7 +491,7 @@
      swaps the visible panel in place (no navigation).
 
      Each tab's panel holds ONE iframe of the real, fully-functional
-     catering page. The iframe carries data-src, not src — so the five
+     catering page. The iframe carries data-src, not src — so the
      catering pages do not all load at once. The default tab's iframe
      is loaded immediately; every other iframe loads the first time its
      tab is activated.

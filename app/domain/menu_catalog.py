@@ -804,6 +804,12 @@ SHEET_COMPONENTS = {
          "kind": "lb", 
          "sort": 60
      },
+     "Queso Blanco": {
+         "section": "COLD_FOOD",
+         "label": "Queso Blanco (Lb)",
+         "kind": "lb",
+         "sort": 65
+     },
      "Sour Cream": {
          "section": "COLD_FOOD", 
          "label": "Sour Cream (Lb)", 
@@ -887,6 +893,12 @@ SHEET_COMPONENTS = {
          "label": "Chips (Lb)", 
          "kind": "lb", 
          "sort": 110
+     },
+     "Churros": {
+         "section": "DRINKS_DESSERTS",
+         "label": "Churros (Pieces)",
+         "kind": "qty",
+         "sort": 120
      }
           
-}  
+}

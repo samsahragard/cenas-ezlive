@@ -155,6 +155,20 @@ def labor_report(start: datetime, end: datetime,
             }
         entries_by_loc[loc] = client.fetch_time_entries(loc, rg, start, end, refresh=refresh)
 
+    # Supplement from db
+    try:
+        from app.db import SessionLocal
+        from app.models import Employee
+        db = SessionLocal()
+        try:
+            db_emps = db.query(Employee).filter(Employee.toast_employee_guid.isnot(None)).all()
+            for emp in db_emps:
+                all_employees[emp.toast_employee_guid] = emp.toast_employee_name or emp.full_name
+        finally:
+            db.close()
+    except Exception:
+        log.exception("labor_report: DB employee seed failed (non-fatal)")
+
     # Net sales: sum of check.amount across cached order files for the date range.
     # Orders cache is populated by server_perf_report (or refresh=True here pulls them).
     net_sales = 0.0
@@ -433,6 +447,20 @@ def server_perf_report(start: datetime, end: datetime,
                 if jr.get("guid") in service_job_guids_loc:
                     service_employee_guids.add(e["guid"])
                     break
+
+    # Supplement from db
+    try:
+        from app.db import SessionLocal
+        from app.models import Employee
+        db = SessionLocal()
+        try:
+            db_emps = db.query(Employee).filter(Employee.toast_employee_guid.isnot(None)).all()
+            for emp in db_emps:
+                employee_lookup[emp.toast_employee_guid] = emp.toast_employee_name or emp.full_name
+        finally:
+            db.close()
+    except Exception:
+        log.exception("server_perf_report: DB employee seed failed (non-fatal)")
 
     # Fetch orders per date × location
     dates = []

@@ -135,7 +135,7 @@ def _employee_name_map(client, loc: dict) -> dict[str, str]:
     except Exception:
         log.warning("floor_performance: employee names unavailable for %s",
                     loc["key"])
-        return {}
+        rows = []
     out: dict[str, str] = {}
     for e in rows:
         if not isinstance(e, dict):
@@ -147,6 +147,20 @@ def _employee_name_map(client, loc: dict) -> dict[str, str]:
         last = str(e.get("lastName") or "").strip()
         name = f"{first} {last}".strip() or str(e.get("email") or "").strip()
         out[guid] = name or guid[:8]
+
+    # Supplement from db
+    try:
+        from app.db import SessionLocal
+        from app.models import Employee
+        db = SessionLocal()
+        try:
+            db_emps = db.query(Employee).filter(Employee.toast_employee_guid.isnot(None)).all()
+            for emp in db_emps:
+                out[emp.toast_employee_guid] = emp.toast_employee_name or emp.full_name
+        finally:
+            db.close()
+    except Exception:
+        log.exception("floor_performance: DB employee seed failed (non-fatal)")
     return out
 
 

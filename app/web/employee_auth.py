@@ -549,6 +549,22 @@ def my_performance():
         links = (db.query(CenaToastLink)
                    .filter(CenaToastLink.cena_employee_id == emp.id)
                    .all())
+        if not links and emp.toast_employee_guid:
+            # Construct mock links in memory from Employee toast fields and store assignments (Sam #3250)
+            from app.models import EmployeeStoreAssignment
+            stores = db.query(EmployeeStoreAssignment).filter_by(employee_id=emp.id).all()
+            mock_links = []
+            for s in stores:
+                if s.store_key:
+                    mock_links.append(SimpleNamespace(
+                        toast_id=emp.toast_employee_guid,
+                        toast_name=emp.toast_employee_name or emp.full_name,
+                        store_key=s.store_key,
+                        cena_employee_id=emp.id
+                    ))
+            if mock_links:
+                links = mock_links
+
         if not links:
             return jsonify({"ok": True, "linked": False}), 200
 
@@ -706,6 +722,22 @@ def performance_center():
             return jsonify({"ok": False, "error": "unknown employee"}), 404
         links = (db.query(CenaToastLink)
                    .filter(CenaToastLink.cena_employee_id == emp.id).all())
+        if not links and emp.toast_employee_guid:
+            # Construct mock links in memory from Employee toast fields and store assignments (Sam #3250)
+            from app.models import EmployeeStoreAssignment
+            stores = db.query(EmployeeStoreAssignment).filter_by(employee_id=emp.id).all()
+            mock_links = []
+            for s in stores:
+                if s.store_key:
+                    mock_links.append(SimpleNamespace(
+                        toast_id=emp.toast_employee_guid,
+                        toast_name=emp.toast_employee_name or emp.full_name,
+                        store_key=s.store_key,
+                        cena_employee_id=emp.id
+                    ))
+            if mock_links:
+                links = mock_links
+
         if not links:
             return jsonify({"ok": True, "linked": False}), 200
 

@@ -541,6 +541,29 @@ class DeveloperChatMessageArchive(Base):
         DateTime, default=datetime.utcnow, nullable=False)
 
 
+class CenaChatLog(Base):
+    """Logs of CENA AI Assistant interactions across all employees.
+    Provides Sam with an audit trail to daily review and rate responses
+    ('good' vs 'needs_address') for system improvements.
+    """
+    __tablename__ = "cena_chat_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    user_tier: Mapped[str] = mapped_column(String(20), nullable=False)  # partner | manager | hourly
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    response: Mapped[str] = mapped_column(Text, nullable=False)
+    feedback_status: Mapped[str] = mapped_column(String(20), default="unreviewed", nullable=False)  # unreviewed | good | needs_address
+    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class DevChatAttributionCorrection(Base):
     """Sidecar table mapping a developer_chat row to its corrected author
     when the original author column got misattributed (e.g. the
@@ -3161,6 +3184,14 @@ class Employee(Base):
     # B3 migration map back to Sling; null for app-created employees
     sling_id: Mapped[str | None] = mapped_column(
         String(64), unique=True, nullable=True, index=True
+    )
+    # Toast alignment (Bulletproof mapping, Sam #3250): direct connection
+    # to Toast server GUID. Saves names to bypass Toast API failures.
+    toast_employee_guid: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    toast_employee_name: Mapped[str | None] = mapped_column(
+        String(150), nullable=True
     )
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
     # E.164-ish; the SMS login identity. NULLABLE (B3, samai #1812): a Sling

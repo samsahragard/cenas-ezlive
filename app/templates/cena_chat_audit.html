@@ -1,0 +1,680 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}CENA Chat Audit — Cenas Kitchen{% endblock %}
+{% block page_title %}CENA Chat Audit{% endblock %}
+{% block page_module %}CENA{% endblock %}
+
+{% block head_extra %}
+<style>
+  .cca-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 6px;
+  }
+
+  /* Summary Metrics Row */
+  .cca-summary {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: rgba(15, 8, 5, 0.85);
+    border: 1px solid rgba(217, 164, 54, 0.14);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .cca-summary .metric-pill {
+    background: rgba(217, 164, 54, 0.05);
+    border: 1px solid rgba(217, 164, 54, 0.16);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cca-summary .metric-pill.good {
+    background: rgba(40, 167, 69, 0.08);
+    border-color: rgba(40, 167, 69, 0.25);
+  }
+  .cca-summary .metric-pill.needs-address {
+    background: rgba(220, 53, 69, 0.08);
+    border-color: rgba(220, 53, 69, 0.25);
+  }
+  .cca-summary .metric-pill.unreviewed {
+    background: rgba(108, 117, 125, 0.08);
+    border-color: rgba(108, 117, 125, 0.25);
+  }
+  .cca-summary .metric-pill .label {
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .cca-summary .metric-pill .val {
+    font-weight: 700;
+    font-size: 16px;
+  }
+
+  /* Interactive Filters Section */
+  .cca-controls {
+    display: flex;
+    gap: 12px;
+    background: rgba(15, 8, 5, 0.85);
+    border: 1px solid rgba(217, 164, 54, 0.14);
+    border-radius: 12px;
+    padding: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .cca-search-container {
+    flex: 1;
+    min-width: 250px;
+    position: relative;
+  }
+  .cca-search-input {
+    width: 100%;
+    background: rgba(25, 14, 8, 0.6);
+    color: #f3eedf;
+    border: 1px solid rgba(217, 164, 54, 0.22);
+    border-radius: 8px;
+    padding: 10px 12px 10px 38px;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .cca-search-input:focus {
+    outline: none;
+    border-color: #d9a436;
+    box-shadow: 0 0 8px rgba(217, 164, 54, 0.2);
+  }
+  .cca-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.5;
+    font-size: 16px;
+  }
+  .cca-filter-select {
+    background: rgba(25, 14, 8, 0.6);
+    color: #f3eedf;
+    border: 1px solid rgba(217, 164, 54, 0.22);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    min-width: 160px;
+  }
+  .cca-filter-select:focus {
+    outline: none;
+    border-color: #d9a436;
+  }
+
+  /* Log Row / Card */
+  .cca-card {
+    background: rgba(15, 8, 5, 0.85);
+    border: 1px solid rgba(217, 164, 54, 0.14);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .cca-card:hover {
+    border-color: rgba(217, 164, 54, 0.28);
+  }
+  .cca-card.border-good {
+    border-left: 5px solid rgba(40, 167, 69, 0.7);
+  }
+  .cca-card.border-needs-address {
+    border-left: 5px solid rgba(220, 53, 69, 0.7);
+  }
+  .cca-card.border-unreviewed {
+    border-left: 5px solid rgba(108, 117, 125, 0.6);
+  }
+
+  /* Card Header */
+  .cca-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .cca-user-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .cca-user-name {
+    font-weight: 600;
+    color: #f3eedf;
+    font-size: 15px;
+  }
+  .cca-tier-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+  .cca-tier-badge.partner {
+    background: rgba(217, 164, 54, 0.15);
+    color: #d9a436;
+    border: 1px solid rgba(217, 164, 54, 0.3);
+  }
+  .cca-tier-badge.manager {
+    background: rgba(91, 202, 197, 0.15);
+    color: #5bcac5;
+    border: 1px solid rgba(91, 202, 197, 0.3);
+  }
+  .cca-tier-badge.hourly {
+    background: rgba(149, 199, 95, 0.15);
+    color: #95c75f;
+    border: 1px solid rgba(149, 199, 95, 0.3);
+  }
+  .cca-timestamp {
+    font-size: 12px;
+    opacity: 0.5;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Status Badges */
+  .cca-status-pill {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .cca-status-pill.good {
+    background: rgba(40, 167, 69, 0.15);
+    color: #5cd870;
+    border: 1px solid rgba(40, 167, 69, 0.3);
+  }
+  .cca-status-pill.needs-address {
+    background: rgba(220, 53, 69, 0.15);
+    color: #f36c7a;
+    border: 1px solid rgba(220, 53, 69, 0.3);
+  }
+  .cca-status-pill.unreviewed {
+    background: rgba(108, 117, 125, 0.15);
+    color: #b1b6ba;
+    border: 1px solid rgba(108, 117, 125, 0.3);
+  }
+
+  /* Conversation Bubbles */
+  .cca-conversation {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .cca-bubble {
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    position: relative;
+  }
+  .cca-bubble .bubble-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.45;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cca-bubble.user-bubble {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .cca-bubble.user-bubble .bubble-label {
+    color: #f3eedf;
+  }
+  .cca-bubble.cena-bubble {
+    background: rgba(217, 164, 54, 0.03);
+    border: 1px solid rgba(217, 164, 54, 0.08);
+  }
+  .cca-bubble.cena-bubble .bubble-label {
+    color: #d9a436;
+  }
+  .cca-bubble-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Review Block */
+  .cca-review-block {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(217, 164, 54, 0.06);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .cca-review-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #d9a436;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cca-rating-selector {
+    display: flex;
+    gap: 8px;
+  }
+  .cca-rate-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: #faf6ec;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cca-rate-btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .cca-rate-btn.good.active {
+    background: rgba(40, 167, 69, 0.2);
+    border-color: #4cd162;
+    color: #5cd870;
+    box-shadow: 0 0 10px rgba(40, 167, 69, 0.15);
+  }
+  .cca-rate-btn.needs-address.active {
+    background: rgba(220, 53, 69, 0.2);
+    border-color: #f75566;
+    color: #f36c7a;
+    box-shadow: 0 0 10px rgba(220, 53, 69, 0.15);
+  }
+  .cca-rate-btn.unreviewed.active {
+    background: rgba(108, 117, 125, 0.2);
+    border-color: #a4abb0;
+    color: #faf6ec;
+  }
+  
+  .cca-notes-input {
+    background: rgba(15, 8, 5, 0.8);
+    color: #f3eedf;
+    border: 1px solid rgba(217, 164, 54, 0.18);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 50px;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+  .cca-notes-input:focus {
+    outline: none;
+    border-color: #d9a436;
+  }
+  
+  .cca-action-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .cca-save-btn {
+    background: #d9a436;
+    color: #2b1c0a;
+    border: 0;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cca-save-btn:hover {
+    background: #e5b348;
+  }
+  .cca-save-btn:active {
+    transform: scale(0.98);
+  }
+  
+  .cca-save-status {
+    font-size: 12px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .cca-save-status.visible {
+    opacity: 1;
+  }
+  .cca-save-status.success {
+    color: #5cd870;
+  }
+  .cca-save-status.error {
+    color: #f36c7a;
+  }
+
+  .cca-empty {
+    padding: 60px 20px;
+    text-align: center;
+    opacity: 0.6;
+    background: rgba(15, 8, 5, 0.6);
+    border: 1px dashed rgba(217, 164, 54, 0.18);
+    border-radius: 12px;
+  }
+
+  @media (max-width: 768px) {
+    .cca-controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .cca-filter-select {
+      width: 100%;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cca-wrap">
+  
+  {% set total_count = logs|length %}
+  {% set good_count = logs|selectattr('feedback_status', 'equalto', 'good')|list|length %}
+  {% set needs_address_count = logs|selectattr('feedback_status', 'equalto', 'needs_address')|list|length %}
+  {% set unreviewed_count = logs|selectattr('feedback_status', 'equalto', 'unreviewed')|list|length %}
+
+  <!-- Summary Cards -->
+  <div class="cca-summary">
+    <div class="metric-pill">
+      <span class="label">Total Turns</span>
+      <span class="val" id="total-val">{{ total_count }}</span>
+    </div>
+    <div class="metric-pill unreviewed">
+      <span class="label">Unreviewed</span>
+      <span class="val" id="unreviewed-val">{{ unreviewed_count }}</span>
+    </div>
+    <div class="metric-pill good">
+      <span class="label">Good Responses</span>
+      <span class="val" id="good-val">{{ good_count }}</span>
+    </div>
+    <div class="metric-pill needs-address">
+      <span class="label">Needs Address</span>
+      <span class="val" id="needs-address-val">{{ needs_address_count }}</span>
+    </div>
+  </div>
+
+  <!-- Interactive Controls -->
+  <div class="cca-controls">
+    <div class="cca-search-container">
+      <i class="ti ti-search cca-search-icon"></i>
+      <input type="text" id="cca-search" class="cca-search-input" placeholder="Search chats by employee name, question, response, or notes...">
+    </div>
+    <select id="cca-filter-status" class="cca-filter-select">
+      <option value="all">All Ratings</option>
+      <option value="unreviewed">Unreviewed Only</option>
+      <option value="good">Good Only</option>
+      <option value="needs_address">Needs Address Only</option>
+    </select>
+  </div>
+
+  <!-- Chats Cards -->
+  {% if not logs %}
+    <div class="cca-empty">
+      No CENA assistant chat logs found in the database.
+    </div>
+  {% else %}
+    <div class="cca-list" id="cca-list">
+      {% for log in logs %}
+        <div class="cca-card border-{{ log.feedback_status }} mb-3" 
+             data-id="{{ log.id }}"
+             data-status="{{ log.feedback_status }}"
+             data-searchable="{{ (log.user_name or '')|lower }} {{ (log.question or '')|lower }} {{ (log.response or '')|lower }} {{ (log.review_notes or '')|lower }}">
+          
+          <div class="cca-card-header">
+            <div class="cca-user-info">
+              <i class="ti ti-user-circle" style="font-size: 20px; opacity: 0.8;"></i>
+              <span class="cca-user-name">{{ log.user_name }}</span>
+              <span class="cca-tier-badge {{ log.user_tier }}">{{ log.user_tier }}</span>
+              <span class="cca-timestamp" title="{{ log.created_at.isoformat() }} UTC">
+                {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+              </span>
+            </div>
+            
+            <div class="cca-status-indicator">
+              <span class="cca-status-pill {{ log.feedback_status }}">
+                {% if log.feedback_status == 'good' %}
+                  <i class="ti ti-circle-check"></i> Good
+                {% elif log.feedback_status == 'needs_address' %}
+                  <i class="ti ti-alert-circle"></i> Needs Address
+                {% else %}
+                  <i class="ti ti-circle-dotted"></i> Unreviewed
+                {% endif %}
+              </span>
+            </div>
+          </div>
+
+          <div class="cca-conversation">
+            <div class="cca-bubble user-bubble">
+              <div class="bubble-label">
+                <i class="ti ti-message"></i> Question
+              </div>
+              <div class="cca-bubble-content">{{ log.question }}</div>
+            </div>
+            
+            <div class="cca-bubble cena-bubble">
+              <div class="bubble-label">
+                <i class="ti ti-cpu"></i> CENA Response
+              </div>
+              <div class="cca-bubble-content">{{ log.response }}</div>
+            </div>
+          </div>
+
+          <!-- Partner Action Console -->
+          <div class="cca-review-block">
+            <div class="cca-review-title">
+              <i class="ti ti-shield-check"></i> Partner Audit Panel
+            </div>
+            
+            <div class="cca-rating-selector" data-log-id="{{ log.id }}">
+              <button type="button" class="cca-rate-btn unreviewed {% if log.feedback_status == 'unreviewed' %}active{% endif %}" data-value="unreviewed">
+                <i class="ti ti-circle-dotted"></i> Clear Review
+              </button>
+              <button type="button" class="cca-rate-btn good {% if log.feedback_status == 'good' %}active{% endif %}" data-value="good">
+                <i class="ti ti-circle-check"></i> Good
+              </button>
+              <button type="button" class="cca-rate-btn needs-address {% if log.feedback_status == 'needs_address' %}active{% endif %}" data-value="needs_address">
+                <i class="ti ti-alert-circle"></i> Needs Address
+              </button>
+            </div>
+            
+            <textarea class="cca-notes-input" placeholder="Add custom notes about this response, e.g., prompt improvements or training guidelines..." rows="2">{{ log.review_notes or '' }}</textarea>
+            
+            <div class="cca-action-row">
+              <span class="cca-save-status" id="status-{{ log.id }}"></span>
+              <button type="button" class="cca-save-btn" data-log-id="{{ log.id }}">
+                <i class="ti ti-device-floppy"></i> Save Review
+              </button>
+            </div>
+          </div>
+
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const searchInput = document.getElementById("cca-search");
+  const filterSelect = document.getElementById("cca-filter-status");
+  const cards = document.querySelectorAll(".cca-card");
+
+  // Client side search and filter
+  function applyFilters() {
+    const searchVal = searchInput.value.toLowerCase().trim();
+    const filterVal = filterSelect.value;
+
+    cards.forEach(card => {
+      const textMatches = !searchVal || card.getAttribute("data-searchable").includes(searchVal);
+      const statusMatches = filterVal === "all" || card.getAttribute("data-status") === filterVal;
+
+      if (textMatches && statusMatches) {
+        card.style.display = "flex";
+      } else {
+        card.style.display = "none";
+      }
+    });
+  }
+
+  if (searchInput) searchInput.addEventListener("input", applyFilters);
+  if (filterSelect) filterSelect.addEventListener("change", applyFilters);
+
+  // Rating and Notes persistence
+  const listContainer = document.getElementById("cca-list");
+  if (listContainer) {
+    listContainer.addEventListener("click", function(e) {
+      // 1. Handle Rating Button clicks
+      const rateBtn = e.target.closest(".cca-rate-btn");
+      if (rateBtn) {
+        const parentGroup = rateBtn.closest(".cca-rating-selector");
+        const buttons = parentGroup.querySelectorAll(".cca-rate-btn");
+        buttons.forEach(btn => btn.classList.remove("active"));
+        rateBtn.classList.add("active");
+        
+        // Update temporary state on the card
+        const card = rateBtn.closest(".cca-card");
+        const statusVal = rateBtn.getAttribute("data-value");
+        card.setAttribute("data-status", statusVal);
+      }
+
+      // 2. Handle Save Button clicks
+      const saveBtn = e.target.closest(".cca-save-btn");
+      if (saveBtn) {
+        const logId = saveBtn.getAttribute("data-log-id");
+        const card = saveBtn.closest(".cca-card");
+        const statusBtn = card.querySelector(".cca-rating-selector .cca-rate-btn.active");
+        const statusVal = statusBtn ? statusBtn.getAttribute("data-value") : "unreviewed";
+        const notesVal = card.querySelector(".cca-notes-input").value;
+        const statusMsgSpan = document.getElementById("status-" + logId);
+
+        // Visual loading indicator
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="ti ti-loader"></i> Saving...';
+        
+        fetch(`/api/assistant/chat-logs/${logId}/rate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            status: statusVal,
+            notes: notesVal
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Save Review';
+          
+          if (data.success) {
+            // Update Card classes
+            card.className = card.className.replace(/\bborder-(good|needs-address|unreviewed)\b/g, "");
+            card.classList.add("border-" + statusVal);
+            
+            // Update searchable content attribute
+            const cleanName = card.querySelector(".cca-user-name").innerText.toLowerCase();
+            const cleanQ = card.querySelector(".user-bubble .cca-bubble-content").innerText.toLowerCase();
+            const cleanR = card.querySelector(".cena-bubble .cca-bubble-content").innerText.toLowerCase();
+            card.setAttribute("data-searchable", `${cleanName} ${cleanQ} ${cleanR} ${notesVal.toLowerCase()}`);
+
+            // Update header pill badge inside the card
+            const pillContainer = card.querySelector(".cca-status-pill");
+            pillContainer.className = "cca-status-pill " + statusVal;
+            if (statusVal === 'good') {
+              pillContainer.innerHTML = '<i class="ti ti-circle-check"></i> Good';
+            } else if (statusVal === 'needs_address') {
+              pillContainer.innerHTML = '<i class="ti ti-alert-circle"></i> Needs Address';
+            } else {
+              pillContainer.innerHTML = '<i class="ti ti-circle-dotted"></i> Unreviewed';
+            }
+
+            // Show temporary success feedback
+            statusMsgSpan.className = "cca-save-status success visible";
+            statusMsgSpan.innerHTML = '<i class="ti ti-circle-check"></i> Saved';
+            
+            // Re-calculate the global summaries live
+            updateGlobalSummaries();
+          } else {
+            statusMsgSpan.className = "cca-save-status error visible";
+            statusMsgSpan.innerHTML = `<i class="ti ti-alert-circle"></i> Error: ${data.error || 'Failed'}`;
+          }
+          
+          setTimeout(() => {
+            statusMsgSpan.classList.remove("visible");
+          }, 3000);
+        })
+        .catch(err => {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Save Review';
+          statusMsgSpan.className = "cca-save-status error visible";
+          statusMsgSpan.innerHTML = '<i class="ti ti-alert-circle"></i> Network Error';
+          
+          setTimeout(() => {
+            statusMsgSpan.classList.remove("visible");
+          }, 3000);
+        });
+      }
+    });
+  }
+
+  function updateGlobalSummaries() {
+    const allCards = document.querySelectorAll(".cca-card");
+    let good = 0;
+    let needsAddress = 0;
+    let unreviewed = 0;
+    let total = allCards.length;
+
+    allCards.forEach(card => {
+      const status = card.getAttribute("data-status");
+      if (status === "good") good++;
+      else if (status === "needs_address") needsAddress++;
+      else if (status === "unreviewed") unreviewed++;
+    });
+
+    const totalVal = document.getElementById("total-val");
+    const goodVal = document.getElementById("good-val");
+    const needsAddressVal = document.getElementById("needs-address-val");
+    const unreviewedVal = document.getElementById("unreviewed-val");
+
+    if (totalVal) totalVal.innerText = total;
+    if (goodVal) goodVal.innerText = good;
+    if (needsAddressVal) needsAddressVal.innerText = needsAddress;
+    if (unreviewedVal) unreviewedVal.innerText = unreviewed;
+  }
+});
+</script>
+{% endblock %}

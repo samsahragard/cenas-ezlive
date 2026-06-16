@@ -1484,6 +1484,10 @@ def cron_roster_action():
             rows = q.all()
             removed = [{"id": r.id, "toast_name": r.toast_name} for r in rows]
             for r in rows:
+                emp = db.query(Employee).filter_by(id=r.cena_employee_id).first()
+                if emp:
+                    emp.toast_employee_guid = None
+                    emp.toast_employee_name = None
                 db.delete(r)
             db.commit()
             return jsonify({"ok": True, "unlinked": removed}), 200

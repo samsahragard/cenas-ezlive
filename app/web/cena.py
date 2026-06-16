@@ -369,6 +369,25 @@ def cena_audit_view():
         db.close()
 
 
+@cena_bp.route("/sam/cena-chat-audit", methods=["GET"])
+def cena_chat_audit():
+    gate = _require_sam_page()
+    if gate is not None:
+        return gate
+
+    db = SessionLocal()
+    try:
+        from app.models import CenaChatLog
+        logs = db.query(CenaChatLog).order_by(CenaChatLog.created_at.desc()).all()
+        return render_template(
+            "cena_chat_audit.html",
+            logs=logs,
+            page_title="CENA Chat Audit Console"
+        )
+    finally:
+        db.close()
+
+
 # ============================================================
 # POST /sam/cena/db-probe/driver-row — Sam-only diagnostic
 # ============================================================

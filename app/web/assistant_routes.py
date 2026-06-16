@@ -193,6 +193,43 @@ def write_file_tool(filePath: str, content: str) -> str:
     resolved.write_text(content, encoding="utf-8")
     return f"Successfully wrote {len(content)} characters to {filePath}"
 
+def search_manager_playbooks_tool(query: str) -> list[dict]:
+    """
+    Search the manager playbooks (operational guidelines) recursively for files under docs/manager_playbooks/ 
+    and return paragraphs or sections containing the matching search query.
+    Only Partners and Managers have access to this tool.
+    
+    Args:
+        query: The keyword or phrase to search for.
+    """
+    playbooks_dir = workspace_path / "docs" / "manager_playbooks"
+    results = []
+    if not playbooks_dir.exists() or not playbooks_dir.is_dir():
+        return [{"error": "Playbooks directory docs/manager_playbooks/ does not exist."}]
+    
+    query_words = [w.lower() for w in query.split() if w]
+    if not query_words:
+        return []
+        
+    for path in playbooks_dir.rglob("*"):
+        if path.is_file() and path.suffix.lower() in (".md", ".txt"):
+            try:
+                content = path.read_text(encoding="utf-8")
+                paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+                rel_path = path.relative_to(workspace_path).as_posix()
+                for p_idx, para in enumerate(paragraphs):
+                    para_lower = para.lower()
+                    if all(w in para_lower for w in query_words) or query.lower() in para_lower:
+                        results.append({
+                            "file": rel_path,
+                            "paragraph_index": p_idx,
+                            "content": para
+                        })
+            except Exception as e:
+                logger.warning(f"Failed to read playbook file {path}: {e}")
+                
+    return results[:15]
+
 def query_sales_db_tool(sqlQuery: str) -> list[dict]:
     """
     Runs an SQL SELECT query against the local SQLite restaurant sales database containing Toast check and order details.
@@ -1191,7 +1228,8 @@ def api_assistant_chat():
                 delete_shift_tool,
                 copy_shifts_tool,
                 publish_schedule_tool,
-                get_schedule_board_tool
+                get_schedule_board_tool,
+                search_manager_playbooks_tool
             ]
             if user.id == 1:
                 tools_list.append(write_file_tool)
@@ -1205,7 +1243,8 @@ def api_assistant_chat():
                 delete_shift_tool,
                 copy_shifts_tool,
                 publish_schedule_tool,
-                get_schedule_board_tool
+                get_schedule_board_tool,
+                search_manager_playbooks_tool
             ]
         else:
             tools_list = [query_sales_db_tool]
@@ -1217,6 +1256,19 @@ def api_assistant_chat():
             
         # Base System Instructions
         base_instruction = f"""You are CENA, the intelligent and premium AI assistant for Cena's Kitchen.
+Your job is to think through problems explicitly, not just deliver answers.
+
+When responding:
+- Name your constraints upfront (what you know, what you don't, what's feasible).
+- Show your reasoning chain—why this approach over alternatives.
+- Flag tradeoffs: what you're prioritizing vs. deprioritizing and why.
+- Default to what the user can actually execute, not what's theoretically ideal.
+- If critical context is missing (such as exact shift hours, employee matching, or dates), ask the user for confirmation or choices rather than assuming or using arbitrary values.
+- Be transparent. Users value seeing your thinking more than seeing confidence.
+
+Additional Specific Interaction Protocols:
+- Confirm Shift Hours: If a user asks you to schedule/create/edit a shift without specifying the exact start/end hours (e.g., "Add a Cook shift for Monday"), do NOT assume the hours. You must look up typical shift hours for that role (e.g., Cook AM: 9:00 AM – 4:00 PM vs Cook PM: 4:00 PM – 11:00 PM; Server AM: 10:00 AM – 4:00 PM vs Server PM: 4:00 PM – 10:00 PM, or retrieve the existing schedule board to see typical times), present these standard times as choices, and ask the user to confirm or choose before calling `create_shift_tool`.
+
 Your company is Cena's Kitchen (formerly Aguirre's Tex-Mex), website: https://cenaskitchen.com, app: https://app.cenaskitchen.com.
 Here is key company information you MUST know and can speak about:
 - Cuisine: Authentic Tex-Mex (fajitas, enchiladas, tacos, tostadas, house-made sauces)
@@ -1327,6 +1379,11 @@ Scheduling Operations (Create, Read, Update, Delete, Copy, Publish):
 - Use `copy_shifts_tool` to bulk-copy shifts from one schedule to another.
 - Use `publish_schedule_tool` to publish a draft schedule.
 - When creating or editing shifts, check and report any conflict or availability warning messages returned by the tools.
+
+Manager Playbooks & Decision Support:
+- Only Partners and Managers have access to the `search_manager_playbooks_tool`. Hourly staff cannot access this tool.
+- You have access to the `search_manager_playbooks_tool` which allows you to query operational guides and distilled leadership rules stored in `docs/manager_playbooks/`.
+- When managers ask for leadership advice, decision-making guidance, or how to handle specific employee situations (e.g. conflict, coaching, performance issues, policy questions), you MUST use `search_manager_playbooks_tool` to retrieve the relevant paragraphs or rules, and explicitly reference those playbooks and laws of leadership in your reasoning and recommendation.
 """
 
         if user_tier == "partner":
@@ -1461,6 +1518,10 @@ IDENTITY VERIFICATION & GATING RULES:
                         outcome = write_file_tool(**args)
                     elif name == "query_sales_db_tool":
                         outcome = query_sales_db_tool(**args)
+                    elif name == "search_manager_playbooks_tool":
+                        if user_tier not in ("partner", "manager"):
+                            raise PermissionError("Access denied: search_manager_playbooks_tool is restricted to partners and managers.")
+                        outcome = search_manager_playbooks_tool(**args)
                     elif name == "fetch_toast_live_data_tool":
                         if user_tier not in ("partner", "manager"):
                             raise PermissionError("Access denied: fetch_toast_live_data_tool is restricted to partners and managers.")
@@ -1513,6 +1574,31 @@ IDENTITY VERIFICATION & GATING RULES:
                 config=config
             )
             
+        # Log successful conversation turn to CenaChatLog
+        try:
+            from app.db import SessionLocal
+            from app.models import CenaChatLog
+            db_log = SessionLocal()
+            try:
+                emp_id = get_current_employee_id(user)
+                chat_log = CenaChatLog(
+                    user_id=user.id if user else None,
+                    employee_id=emp_id,
+                    user_name=user_name,
+                    user_tier=user_tier,
+                    question=message or "",
+                    response=response.text or "",
+                    feedback_status="unreviewed"
+                )
+                db_log.add(chat_log)
+                db_log.commit()
+            except Exception:
+                logger.exception("Failed to write CenaChatLog entry")
+            finally:
+                db_log.close()
+        except Exception:
+            pass
+
         return jsonify({
             "success": True,
             "text": response.text,
@@ -1549,3 +1635,35 @@ def _l3_investigation_answer(question: str) -> dict[str, Any] | None:
     if not isinstance(res, dict) or not res.get("ok") or not str(res.get("answer", "")).strip():
         return None
     return res
+
+@assistant_bp.route("/api/assistant/chat-logs/<int:log_id>/rate", methods=["POST"])
+@partner_required
+def api_rate_chat_log(log_id):
+    user = getattr(g, "current_user", None)
+    if not user or user.id != 1:
+        return jsonify({"success": False, "error": "Access denied: Review dashboard is restricted to Sam."}), 403
+        
+    body = request.get_json(silent=True) or {}
+    feedback_status = body.get("status")
+    review_notes = body.get("notes")
+    
+    if not feedback_status or feedback_status not in ("good", "needs_address", "unreviewed"):
+        return jsonify({"success": False, "error": "Invalid feedback status."}), 400
+        
+    from app.db import SessionLocal
+    from app.models import CenaChatLog
+    db = SessionLocal()
+    try:
+        log_entry = db.query(CenaChatLog).filter_by(id=log_id).first()
+        if not log_entry:
+            return jsonify({"success": False, "error": "Log entry not found."}), 404
+            
+        log_entry.feedback_status = feedback_status
+        log_entry.review_notes = review_notes
+        db.commit()
+        return jsonify({"success": True, "message": "Log updated successfully."})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        db.close()
+

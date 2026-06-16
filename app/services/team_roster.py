@@ -429,3 +429,50 @@ def backfill_manager_positions(db):
     if assigned:
         db.commit()
     return assigned
+
+
+def backfill_employee_toast_columns(db):
+    """Idempotent backfill (Sam #3250): migration 14/Bulletproof Toast mapping.
+    Backfills toast_employee_guid and toast_employee_name on the employees table
+    at boot time:
+      1. Fetch all links from cena_toast_link.
+      2. Match against LINK18 from app.web.perf_roster_link.
+      3. For active employees lacking toast_employee_guid, resolve from either
+         cena_toast_link or LINK18 and update Employee columns directly.
+    """
+    from app.models import CenaToastLink, Employee
+    from app.web.perf_roster_link import LINK18
+    
+    # 1. Load mappings from cena_toast_link database table
+    db_links = db.query(CenaToastLink).all()
+    # Map employee_id -> (toast_id, toast_name)
+    link_map = {}
+    for l in db_links:
+        if l.toast_id:
+            link_map[l.cena_employee_id] = (l.toast_id, l.toast_name)
+            
+    # 2. Layer on LINK18 audited mappings (overwrite or fill)
+    for row in LINK18:
+        cena_id = row["cena_employee_id"]
+        toast_id = row["toast_id"]
+        toast_name = row["toast_name"]
+        if cena_id not in link_map:
+            link_map[cena_id] = (toast_id, toast_name)
+            
+    # 3. Apply to employees lacking GUID
+    updated = 0
+    active_emps = db.query(Employee).filter(Employee.active.is_(True)).all()
+    for emp in active_emps:
+        if not emp.toast_employee_guid and emp.id in link_map:
+            t_id, t_name = link_map[emp.id]
+            emp.toast_employee_guid = t_id
+            emp.toast_employee_name = t_name
+            updated += 1
+            
+    if updated:
+        db.commit()
+        import logging
+        logging.getLogger(__name__).info(
+            "employee toast columns: backfilled %d employee guid/name columns", updated)
+    return updated
+

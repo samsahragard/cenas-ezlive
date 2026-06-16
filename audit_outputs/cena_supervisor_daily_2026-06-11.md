@@ -1,0 +1,75 @@
+# C.E.N.A. supervisor daily mine - 2026-06-11
+
+Turns in window (24h): 27
+Grades: {'medium': 3, 'ungraded': 12, 'high': 9, 'user_no': 3}
+Flag reasons: {'general_data_miss': 2, 'investigation_low_confidence': 1}
+Routes: {'general': 7, 'ck_engaged': 11, 'investigation': 3, 'ck_rescue': 3, 'ack': 1, 'deterministic': 2}
+Exemplar/eval candidates appended: 3
+
+## Schema coverage (tables with data Cena can NOT see)
+Curated tables: 28
+- UNMAPPED: appdb.alembic_version (1 rows)
+- UNMAPPED: appdb.processing_jobs (425 rows)
+- UNMAPPED: appdb.driver_logs (6 rows)
+- UNMAPPED: appdb.order_items (1158 rows)
+- UNMAPPED: appdb.processing_orders (425 rows)
+- UNMAPPED: appdb.prep_breakdowns (1158 rows)
+- UNMAPPED: appdb.developer_chat (104 rows)
+- UNMAPPED: appdb.developer_chat_attachment (464 rows)
+- UNMAPPED: appdb.driver_shift (18 rows)
+- UNMAPPED: appdb.driver_location (14317 rows)
+- UNMAPPED: appdb.users (21 rows)
+- UNMAPPED: appdb.driver_score (903 rows)
+- UNMAPPED: appdb.legal_access_log (36 rows)
+- UNMAPPED: appdb.signals (58 rows)
+- UNMAPPED: appdb.signal_acks (11 rows)
+- UNMAPPED: appdb.morning_briefs (308 rows)
+- UNMAPPED: appdb.user_audit_log (174 rows)
+- UNMAPPED: appdb.permission_denial (500 rows)
+- UNMAPPED: appdb.ribbon_category_preferences (4 rows)
+- UNMAPPED: appdb.sales_insights (26 rows)
+- UNMAPPED: appdb.sam_chat_sessions (24 rows)
+- UNMAPPED: appdb.sam_chat_messages (2790 rows)
+- UNMAPPED: appdb.ambient_signals (1 rows)
+- UNMAPPED: appdb.ambient_signal_runs (3115 rows)
+- UNMAPPED: appdb.cena_action_logs (2549 rows)
+- UNMAPPED: appdb.driver_notification (35 rows)
+- UNMAPPED: appdb.dev_chat_attribution_corrections (4 rows)
+- UNMAPPED: appdb.sample_approvals (9 rows)
+- UNMAPPED: appdb.ezcater_known_driver_archive_2026_05_18 (37 rows)
+- UNMAPPED: appdb.sam_chat_attachments (73 rows)
+- UNMAPPED: appdb.manager_daily_log (2 rows)
+- UNMAPPED: appdb.developer_chat_archive (8594 rows)
+- UNMAPPED: appdb.manager_attendance_shift (3 rows)
+- UNMAPPED: appdb.manager_attendance_event (3 rows)
+- UNMAPPED: appdb.driver_assignment_jobs (467 rows)
+- UNMAPPED: appdb.docck_agents (3 rows)
+- UNMAPPED: appdb.docck_heartbeats (71187 rows)
+- UNMAPPED: appdb.docck_restart_sequences (31 rows)
+- UNMAPPED: appdb.docck_alerts_sent (448 rows)
+- UNMAPPED: appdb.docck_circuit_breaker (3 rows)
+- UNMAPPED: appdb.docck_restart_steps (81 rows)
+- UNMAPPED: appdb.docck_tick_lease (1 rows)
+- UNMAPPED: appdb.positions (38 rows)
+- UNMAPPED: appdb.tags (14 rows)
+- UNMAPPED: appdb.employees (128 rows)
+- UNMAPPED: appdb.employee_store_assignments (127 rows)
+- UNMAPPED: appdb.schedules (37 rows)
+- UNMAPPED: appdb.shifts (2506 rows)
+- UNMAPPED: appdb.shift_tags (56 rows)
+- UNMAPPED: appdb.shift_alarms (128 rows)
+- UNMAPPED: appdb.employee_alarm_preferences (2 rows)
+- UNMAPPED: appdb.position_permission (128 rows)
+- UNMAPPED: appdb.employee_positions (217 rows)
+- UNMAPPED: appdb.cena_toast_link (101 rows)
+- UNMAPPED: appdb.toast_employee_snapshot (1 rows)
+- UNMAPPED: appdb.perf_period_cache (352 rows)
+- UNMAPPED: appdb.perf_shift_cache (1785 rows)
+- UNMAPPED: appdb.perf_rank_cache (88 rows)
+- UNMAPPED: appdb.sam_chat_suggestions (1 rows)
+- UNMAPPED: appdb.messages (1 rows)
+
+## Flagged turns
+- [2026-06-10T19:17:12Z] (medium/general_data_miss) How'd we do yesterday? -> ck_mode=l3_rescue
+- [2026-06-10T22:19:37Z] (medium/investigation_low_confidence) What's our number for the week? -> ck_mode=l3_rescue
+- [2026-06-11T00:13:52Z] (medium/general_data_miss) whos working in the kitchen tonight -> ck_mode=l3_rescue

@@ -411,13 +411,10 @@ def create_app():
                     ("lockout_until",   "TIMESTAMP"),
                     ("session_version", "INTEGER NOT NULL DEFAULT 0"),
                     # Unify LINK (Sam #2261, 2026-05-31): nullable FK -> users.id.
-                    # Raw ADD COLUMN can't carry the FK constraint on SQLite, but
-                    # the ORM ForeignKey declaration handles the Employee->User join;
-                    # the column itself is all the storage we need.
                     ("user_id",         "INTEGER"),
-                    # Roster edit-contact (2026-05-31, roster-edit branch): nullable
-                    # free-text mailing address, manager-editable from the Team roster.
                     ("address",         "VARCHAR(255)"),
+                    ("toast_employee_guid", "VARCHAR(64)"),
+                    ("toast_employee_name", "VARCHAR(150)"),
                 ]
                 added = []
                 with _eng_emp.begin() as conn:
@@ -428,6 +425,18 @@ def create_app():
                 if added:
                     logging.getLogger(__name__).info(
                         "employees table: backfilled missing columns %s", added)
+                
+                # Backfill newly added employee toast columns
+                try:
+                    from app.db import SessionLocal
+                    from app.services.team_roster import backfill_employee_toast_columns as _bf_toast
+                    db_backfill = SessionLocal()
+                    try:
+                        _bf_toast(db_backfill)
+                    finally:
+                        db_backfill.close()
+                except Exception:
+                    logging.getLogger(__name__).exception("employee toast columns backfill failed (non-fatal)")
     except Exception:
         logging.getLogger(__name__).exception("employees column backfill failed (non-fatal)")
 
@@ -1943,6 +1952,21 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception(
             "cena_toast_link table create failed (non-fatal)")
+
+    # Idempotent table create -- cena_chat_logs (persistent logging)
+    try:
+        from sqlalchemy import inspect as _sa_insp_ccl
+        from app.db import engine as _eng_ccl
+        from app.models import Base as _Base_ccl, CenaChatLog as _CCL_log
+        if _eng_ccl is not None:
+            if "cena_chat_logs" not in set(_sa_insp_ccl(_eng_ccl).get_table_names()):
+                _Base_ccl.metadata.create_all(
+                    bind=_eng_ccl, tables=[_CCL_log.__table__])
+                logging.getLogger(__name__).info(
+                    "cena_chat_logs (Cena persistent logging): table created")
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "cena_chat_logs table create failed (non-fatal)")
 
     # Start the IMAP poller for produce vendor pricing. No-op unless
     # PRODUCE_INGEST_ENABLED=1 is set (Render). Cross-process file lock

@@ -731,7 +731,8 @@ def sv2_toast_link():
         return jsonify({"ok": False, "error": "store not resolved"}), 400
     db = SessionLocal()
     try:
-        if _link_employee_for_store(db, cena_emp_id, store) is None:
+        emp = _link_employee_for_store(db, cena_emp_id, store)
+        if emp is None:
             return jsonify({"ok": False,
                             "error": "That profile is not active at this store."}), 400
 
@@ -744,6 +745,10 @@ def sv2_toast_link():
                    CenaToastLink.cena_employee_id != cena_emp_id)
            .delete(synchronize_session=False))
         _clear_link_ignores(db, store, cena_emp_id, toast_id)
+
+        # Synchronize columns directly on Employee model (Sam #3250)
+        emp.toast_employee_guid = toast_id
+        emp.toast_employee_name = toast_name
 
         row = (db.query(CenaToastLink)
                  .filter_by(cena_employee_id=cena_emp_id, store_key=store).first())
@@ -784,6 +789,12 @@ def sv2_toast_unlink():
         return jsonify({"ok": False, "error": "store not resolved"}), 400
     db = SessionLocal()
     try:
+        # Nullify synchronized columns directly on Employee model (Sam #3250)
+        emp = db.query(Employee).filter_by(id=cena_emp_id).first()
+        if emp:
+            emp.toast_employee_guid = None
+            emp.toast_employee_name = None
+
         (db.query(CenaToastLink)
            .filter_by(cena_employee_id=cena_emp_id, store_key=store)
            .delete(synchronize_session=False))

@@ -129,6 +129,12 @@ def perf_roster_link():
                     )
                     .first()
                 )
+                # Synchronize columns directly on Employee model (Sam #3250)
+                emp = db.query(Employee).filter_by(id=row["cena_employee_id"]).first()
+                if emp:
+                    emp.toast_employee_guid = row["toast_id"]
+                    emp.toast_employee_name = row["toast_name"]
+
                 if existing is not None:
                     continue
                 db.add(CenaToastLink(

@@ -144,7 +144,7 @@ def build_master_output(
         if b["choices"].get("packaging") != "individual":
             dressings = [e["raw_text"] for e in b["extras"] if e["name"] == "dressing"]
             if dressings:
-                dressing_oz = sum(li["total"] for li in b["sauces"] if li["name"] == "Dressing")
+                dressing_oz = sum(li["total"] for li in b["sauces"] if li["name"].startswith("Dressing"))
                 salad_dressing_parts.append(f"{', '.join(dressings)} | {_fmt_num(oz_to_lb(dressing_oz))}")
     if salad_dressing_parts:
         master["item.salad_dressing"] = " | ".join(salad_dressing_parts)
@@ -230,10 +230,12 @@ def build_kitchen_output(master: FlatMap) -> FlatMap:
         "component.Onions",
         "component.Pico De Gallo",
         "component.Guacamole",
+        "component.Queso Blanco",
         "component.Sour Cream",
         "component.Red Sauce",
         "component.Green Sauce",
         "component.Chips",
+        "component.Churros",
 
         "meta.individual",
 
@@ -323,10 +325,12 @@ def build_prep_expo_output(master: FlatMap) -> FlatMap:
         "component.Onions",
         "component.Pico De Gallo",
         "component.Guacamole",
+        "component.Queso Blanco",
         "component.Sour Cream",
         "component.Red Sauce",
         "component.Green Sauce",
         "component.Chips",
+        "component.Churros",
 
         "meta.individual",
 
@@ -425,6 +429,7 @@ MASTER_ROWS: list[RowSpec] = [
     # cold food
     {"key": "component.Pico De Gallo", "label": "Pico De Gallo (Lb)", "section": "Cold Food", "sort": 310},
     {"key": "component.Guacamole", "label": "Guacamole (Lb)", "section": "Cold Food", "sort": 320},
+    {"key": "component.Queso Blanco", "label": "Queso Blanco (Lb)", "section": "Cold Food", "sort": 325},
     {"key": "component.Sour Cream", "label": "Sour Cream (Lb)", "section": "Cold Food", "sort": 330},
     {"key": "component.Lettuce", "label": "Lettuce (Lb)", "section": "Cold Food", "sort": 331},
     {"key": "component.Avocado Diced", "label": "Avocado Diced (Lb)", "section": "Cold Food", "sort": 332},
@@ -440,6 +445,7 @@ MASTER_ROWS: list[RowSpec] = [
     {"key": "component.Red Sauce", "label": "Red Sauce (Lb)", "section": "Cold Food", "sort": 342},
     {"key": "component.Green Sauce", "label": "Green Sauce (Lb)", "section": "Cold Food", "sort": 350},
     {"key": "component.Chips", "label": "Chips (Lb)", "section": "Cold Food", "sort": 360},
+    {"key": "component.Churros", "label": "Churros (Pieces)", "section": "Drinks & Desserts", "sort": 361},
     # other menu items that are entirely unimportant
     {"key": "item.jumbo_brochette_shrimp", "label": "Brochette Shrimp (4-Pack)", "section": "A La Carte", "sort": 500},
     {"key": "item.andouille_grilled_sausage", "label": "Grilled Sausage (4-Pack)", "section": "A La Carte", "sort": 510},
@@ -523,6 +529,7 @@ KITCHEN_ROWS: list[RowSpec] = [
     # cold food breakdown
     {"key": "component.Pico De Gallo", "label": "Pico De Gallo (Lb)", "section": "Cold Food", "sort": 210},
     {"key": "component.Guacamole", "label": "Guacamole (Lb)", "section": "Cold Food", "sort": 220},
+    {"key": "component.Queso Blanco", "label": "Queso Blanco (Lb)", "section": "Cold Food", "sort": 225},
     {"key": "component.Sour Cream", "label": "Sour Cream (Lb)", "section": "Cold Food", "sort": 230},
     {"key": "component.Avocado Diced", "label": "Avocado Diced (Lb)", "section": "Cold Food", "sort": 332},
     {"key": "component.Tomatoes Diced", "label": "Tomatoes Diced (Lb)", "section": "Cold Food", "sort": 333},
@@ -533,6 +540,7 @@ KITCHEN_ROWS: list[RowSpec] = [
     {"key": "component.Black Olives", "label": "Black Olives (Lb)", "section": "Cold Food", "sort": 338},
     {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Cold Food", "sort": 339},
     {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Cold Food", "sort": 340},
+    {"key": "component.Churros", "label": "Churros (Pieces)", "section": "Drinks & Desserts", "sort": 341},
     # other menu items
     {"key": "item.jumbo_brochette_shrimp", "label": "Brochette Shrimp (4-Pack)", "section": "A La Carte", "sort": 400},
     {"key": "item.andouille_grilled_sausage", "label": "Grilled Sausage (4-Pack)", "section": "A La Carte", "sort": 410},
@@ -633,6 +641,7 @@ PREP_EXPO_ROWS: list[RowSpec] = [
     # cold food
     {"key": "component.Pico De Gallo", "label": "Pico De Gallo (lb)", "section": "Cold Food", "sort": 310},
     {"key": "component.Guacamole", "label": "Guacamole (lb)", "section": "Cold Food", "sort": 320},
+    {"key": "component.Queso Blanco", "label": "Queso Blanco (lb)", "section": "Cold Food", "sort": 325},
     {"key": "component.Sour Cream", "label": "Sour Cream (lb)", "section": "Cold Food", "sort": 330},
     {"key": "component.Avocado Diced", "label": "Avocado Diced (Lb)", "section": "Cold Food", "sort": 332},
     {"key": "component.Tomatoes Diced", "label": "Tomatoes Diced (Lb)", "section": "Cold Food", "sort": 333},
@@ -646,6 +655,7 @@ PREP_EXPO_ROWS: list[RowSpec] = [
     {"key": "component.Red Sauce", "label": "Red Sauce (lb)", "section": "Cold Food", "sort": 341},
     {"key": "component.Green Sauce", "label": "Green Sauce (lb)", "section": "Cold Food", "sort": 350},
     {"key": "component.Chips", "label": "Chips (lb)", "section": "Cold Food", "sort": 360},
+    {"key": "component.Churros", "label": "Churros (Pieces)", "section": "Drinks & Desserts", "sort": 361},
     # other menu items
     {"key": "item.jumbo_brochette_shrimp", "label": "Brochette Shrimp (4-Pack)", "section": "A La Carte", "sort": 500},
     {"key": "item.andouille_grilled_sausage", "label": "Grilled Sausage (4-Pack)", "section": "A La Carte", "sort": 510},

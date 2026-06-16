@@ -1168,31 +1168,76 @@ class ToastWebhookStore:
             return 0
         src = sqlite3.connect(app_db_path)
         src.row_factory = sqlite3.Row
+        
+        emp_stores = {}
+        try:
+            link_rows = src.execute("SELECT cena_employee_id, store_key FROM cena_toast_link").fetchall()
+            for row in link_rows:
+                c_id = row["cena_employee_id"]
+                s_key = row["store_key"]
+                if c_id not in emp_stores:
+                    emp_stores[c_id] = []
+                emp_stores[c_id].append(s_key)
+        except sqlite3.Error:
+            pass
+
         try:
             rows = src.execute(
                 """
-                SELECT cena_employee_id, store_key, toast_id
-                FROM cena_toast_link
-                WHERE toast_id IS NOT NULL AND TRIM(toast_id) <> ''
+                SELECT id, toast_employee_guid
+                FROM employees
+                WHERE toast_employee_guid IS NOT NULL AND TRIM(toast_employee_guid) <> ''
                 """
             ).fetchall()
         except sqlite3.Error:
             rows = []
-        finally:
-            src.close()
+            
         count = 0
-        for row in rows:
-            if self._upsert_identity(
-                conn,
-                store_key=row["store_key"],
-                toast_employee_guid=row["toast_id"],
-                cena_employee_id=row["cena_employee_id"],
-                source="cena_toast_link",
-                verified=True,
-                confidence=1.0,
-            ):
-                count += 1
+        if not rows:
+            try:
+                rows_fallback = src.execute(
+                    """
+                    SELECT cena_employee_id as id, toast_id as toast_employee_guid
+                    FROM cena_toast_link
+                    WHERE toast_id IS NOT NULL AND TRIM(toast_id) <> ''
+                    """
+                ).fetchall()
+                for row in rows_fallback:
+                    cena_id = row["id"]
+                    t_id = row["toast_employee_guid"]
+                    stores = emp_stores.get(cena_id, ["tomball", "copperfield"])
+                    for s_key in stores:
+                        if self._upsert_identity(
+                            conn,
+                            store_key=s_key,
+                            toast_employee_guid=t_id,
+                            cena_employee_id=cena_id,
+                            source="cena_toast_link",
+                            verified=True,
+                            confidence=1.0,
+                        ):
+                            count += 1
+            except sqlite3.Error:
+                pass
+        else:
+            for row in rows:
+                cena_id = row["id"]
+                t_id = row["toast_employee_guid"]
+                stores = emp_stores.get(cena_id, ["tomball", "copperfield"])
+                for s_key in stores:
+                    if self._upsert_identity(
+                        conn,
+                        store_key=s_key,
+                        toast_employee_guid=t_id,
+                        cena_employee_id=cena_id,
+                        source="employees_table",
+                        verified=True,
+                        confidence=1.0,
+                    ):
+                        count += 1
+        src.close()
         return count
+
 
     def _seed_identity_from_perf(
         self,

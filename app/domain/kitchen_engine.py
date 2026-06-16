@@ -7,9 +7,7 @@ from app.domain.rules_fajitas import rule_fajitas
 from app.domain.rules_brochette import rule_brochette
 from app.domain.rules_veggie import rule_veggie
 from app.domain.rules_salads import rule_salads
-
-def _is_half_gallon(container: str | None) -> bool:
-    return container == "half gallon"
+from app.domain.rules_premium import rule_premium
 
 def _empty_breakdown(item: NormalizedItem) -> PrepBreakdown:
     return {
@@ -44,7 +42,7 @@ def rule_beverages(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
     b["summary_line"] = f'{item["qty"]}x {item["source"]["raw_alias"]} — {flavor_str}{ice_str}'
     return b
 
-_TRAY_TYPES = {"fajitas", "veggie_fajitas", "brochette_shrimp", "enchiladas", "salads"}
+_TRAY_TYPES = {"fajitas", "veggie_fajitas", "brochette_shrimp", "premium", "enchiladas", "salads"}
 _PLATES_BUFFER = 3
 
 _SIDES_SMALL_SPOON_KEYS = {
@@ -60,7 +58,7 @@ _SIDES_TONGS_KEYS = {
 _SAUCE_KEYS = {"red_sauce", "green_sauce"}
 
 _PREP_TONG_COMPONENT_VALUES = {
-    "Chicken", "Beef", "Veggie", "Shrimp (4-Pack)", "Onions", "Lettuce", "Grated Cheese", "Bacon", "Chicken Diced", "Beef Diced",
+    "Chicken", "Beef", "Veggie", "Shrimp (4-Pack)", "Onions", "Lettuce", "Bacon", "Chicken Diced", "Beef Diced", "Churros",
 }
 
 _PREP_LARGE_SPOON_COMPONENT_VALUES = {
@@ -68,7 +66,7 @@ _PREP_LARGE_SPOON_COMPONENT_VALUES = {
 }
 
 _PREP_SMALL_SPOON_COMPONENT_VALUES = {
-    "Guacamole", "Sour Cream", "Avocado Diced", "Cucumber Diced", "Egg",
+    "Guacamole", "Sour Cream", "Avocado Diced", "Cucumber Diced", "Egg", "Grated Cheese", "Queso Blanco",
 }
 
 _PREP_SAUCE_COMPONENT_VALUES = {"Red Sauce", "Green Sauce"}
@@ -101,39 +99,31 @@ def rule_tableware(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
             except (ValueError, TypeError):
                 pass
 
-        trays = _tray_items(order)
-        tray_qty = sum(int(i["qty"]) for i in trays)
-
-        sides_spoons = sum(
-            i["qty"] for i in order["normalized_items"]
-            if i["package_type"] == "sides" and i["item_key"] in _SIDES_SMALL_SPOON_KEYS
-        )
-        sides_tongs = sum(
-            i["qty"] for i in order["normalized_items"]
+        sides_spoon_keys = {
+            i["item_key"] for i in order["normalized_items"]
+            if i["package_type"] == "sides" and i["item_key"] in (_SIDES_SMALL_SPOON_KEYS | _SAUCE_KEYS)
+        }
+        sides_tong_keys = {
+            i["item_key"] for i in order["normalized_items"]
             if i["package_type"] in {"sides", "a_la_carte"} and i["item_key"] in _SIDES_TONGS_KEYS
-        )
-        sides_large_spoons = 0
+        }
         for i in order["normalized_items"]:
             if i["package_type"] == "sides" and i["item_key"] in _SAUCE_KEYS:
-                if _is_half_gallon(i.get("container")):
-                    sides_large_spoons += i["qty"]
-                else:
-                    sides_spoons += i["qty"]
-        # Silverware: 1 set per guest
-        silverware = pdf.get("silverware") or order["headcount"]
+                sides_spoon_keys.add(i["item_key"])
+        # Silverware: 1 set per guest plus buffer
+        silverware = pdf.get("silverware") or (order["headcount"] + _PLATES_BUFFER)
 
-        # Catering large spoons: 1 per hot-food tray order (proteins + rice + beans served separately)
-        # Each fajita/shrimp tray order has ~3 hot containers → use tray_qty as a per-order spoon estimate
-        catering_large_spoons = pdf.get("catering_large_spoons") or sides_large_spoons
+        # Catering large spoons are added from cooked tray components after all breakdowns are built.
+        catering_large_spoons = pdf.get("catering_large_spoons") or 0
 
-        # Catering small spoons: condiment containers (guac, sour cream, pico) — 1 per tray order
-        catering_small_spoons = pdf.get("catering_small_spoons") or sides_spoons
+        # Catering small spoons: one per different side type, not per container count.
+        catering_small_spoons = pdf.get("catering_small_spoons") or len(sides_spoon_keys)
   
-        # Black tongs: 1 per tray (meats/shrimp transfer)
-        black_tongs = pdf.get("black_tongs") or sides_tongs
+        # Black tongs: one per different tong side/a-la-carte type.
+        black_tongs = pdf.get("black_tongs") or len(sides_tong_keys)
 
-        # Plates/bowls: 1 per tray + buffer
-        plates = pdf.get("plates_and_bowls") or (tray_qty + _PLATES_BUFFER)
+        # Plates/bowls: 1 per guest plus buffer
+        plates = pdf.get("plates_and_bowls") or (order["headcount"] + _PLATES_BUFFER)
 
         sub_counts = {
             "silverware": silverware,
@@ -146,10 +136,9 @@ def rule_tableware(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
         b["summary_line"] = _utensil_summary(sub_counts)
 
     elif item["item_key"] == "plates_and_bowls":
-        tray_qty = sum(int(i["qty"]) for i in _tray_items(order))
-        plates = tray_qty + _PLATES_BUFFER
+        plates = order["headcount"] + _PLATES_BUFFER
         b["utensil_sub_counts"] = {"plates_and_bowls": plates}
-        b["summary_line"] = f"{plates}x Plates/Bowls ({tray_qty} trays + {_PLATES_BUFFER} buffer)"
+        b["summary_line"] = f'{plates}x Plates/Bowls ({order["headcount"]} guests + {_PLATES_BUFFER} buffer)'
 
     else:
         b["summary_line"] = f'{item["qty"]}x {item["source"]["raw_alias"]}'
@@ -174,9 +163,11 @@ def _apply_prep_utensils(breakdowns: List[PrepBreakdown]) -> None:
         if b["package_type"] == "desserts" and b["item_key"] in _DESSERT_TONGS_KEYS:
             prep_tongs += 1
             seen_tongs.add(b["item_key"])
+        if b["package_type"] == "enchiladas" and b["choices"].get("packaging") != "individual":
+            prep_large_spoons += int(b.get("qty") or 0)
         if b["package_type"] not in _TRAY_TYPES:
             continue
-        for li in b.get("proteins", []) + b.get("sides", []):
+        for li in b.get("proteins", []) + b.get("sides", []) + b.get("sauces", []):
             name = li["name"]
             if name in _PREP_TONG_COMPONENT_VALUES and name not in seen_tongs:
                 prep_tongs += 1
@@ -199,6 +190,9 @@ def _apply_prep_utensils(breakdowns: List[PrepBreakdown]) -> None:
             if li["name"] == "Black Olives" and "Black Olives" not in seen_small:
                 prep_small_spoons += 1
                 seen_small.add("Black Olives")
+            if li["name"].startswith("Dressing") and "Dressing" not in seen_small:
+                prep_small_spoons += 1
+                seen_small.add("Dressing")
 
     for b in breakdowns:
         sub = b.get("utensil_sub_counts")
@@ -216,7 +210,7 @@ RULES: Dict[str, Callable[[NormalizedItem, NormalizedOrder], PrepBreakdown]] = {
     "fajitas": rule_fajitas,
     "veggie_fajitas": rule_veggie,         # you can split later if needed
     "brochette_shrimp": rule_brochette,
-    "premium": rule_other,      # or its own rule later
+    "premium": rule_premium,
     "enchiladas": rule_other,
     "beverages": rule_beverages,
     "a_la_carte": rule_other,

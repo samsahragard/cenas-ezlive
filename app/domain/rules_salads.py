@@ -3,10 +3,27 @@ from __future__ import annotations
 from app.domain.schemas import NormalizedItem, NormalizedOrder, PrepBreakdown
 from app.domain.rules_utils import make_weight_line, individual_summary
 
+
+def _dressing_note(dressings: list[str]) -> str:
+    return ", ".join(dressings) if dressings else "Not Specified"
+
+
+def salad_dressing_lines(headcount: int, dressings: list[str]) -> list[dict]:
+    if len(dressings) >= 2:
+        return [
+            make_weight_line(f"Dressing - {name}", 1.5 * headcount, 1.5)
+            for name in dressings
+        ]
+
+    name = dressings[0] if dressings else "Dressing"
+    return [make_weight_line(f"Dressing - {name}", 3.0 * headcount, 3.0)]
+
 def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
+    headcount = item["qty"]
+    dressings = [e["raw_text"] for e in item["extras"] if e["name"] == "dressing"]
+    dressing_note = _dressing_note(dressings)
+
     if item["choices"]["packaging"] == "individual":
-        dressings = [e["raw_text"] for e in item["extras"] if e["name"] == "dressing"]
-        dressing_note = ", ".join(dressings) if dressings else "Not Specified"
         return {
             "item_key": item["item_key"],
             "package_type": item["package_type"],
@@ -14,16 +31,12 @@ def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdo
             "choices": item["choices"],
             "proteins": [],
             "sides": [],
-            "sauces": [],
+            "sauces": salad_dressing_lines(headcount, dressings),
             "extras": [],
             "counts": [],
             "summary_line": f"{individual_summary(item['qty'], 'Cobb Salad')} | Dressing: {dressing_note}",
             "flags": item["flags"][:] + ["INDIVIDUAL_PACKAGING_SUMMARY_ONLY"],
         }
-    headcount = item["qty"]
-
-    dressings = [e["raw_text"] for e in item ["extras"] if e["name"] == "dressing"]
-    dressing_note = ", ".join(dressings) if dressings else "Not Specified"
 
     protein_choice = next((e["raw_text"] for e in item["extras"] if e["name"] == "protein"), "combo")
 
@@ -43,9 +56,7 @@ def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdo
         make_weight_line("Egg", 2.0 * headcount, 2.0),
         make_weight_line("Black Olives", 1.0 * headcount, 1.0),
     ]
-    sauces = [
-        make_weight_line("Dressing", 1.0 * headcount, 1.0),
-    ]
+    sauces = salad_dressing_lines(headcount, dressings)
 
     return {
         "item_key": item["item_key"],
@@ -63,9 +74,10 @@ def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdo
 
 def rule_fajitas_and_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
     headcount = item["qty"]
+    dressings = [e["raw_text"] for e in item["extras"] if e["name"] == "dressing"]
+    dressing_note = _dressing_note(dressings)
+
     if item["choices"]["packaging"] == "individual":
-        dressings = [e["raw_text"] for e in item["extras"] if e["name"] == "dressing"]
-        dressing_note = ", ".join(dressings) if dressings else "Not Specified"
         return {
             "item_key": item["item_key"],
             "package_type": item["package_type"],
@@ -73,16 +85,13 @@ def rule_fajitas_and_salad(item: NormalizedItem, order: NormalizedOrder) -> Prep
             "choices": item["choices"],
             "proteins": [],
             "sides": [],
-            "sauces": [],
+            "sauces": salad_dressing_lines(headcount, dressings),
             "extras": [],
             "counts": [],
             "summary_line": f"{individual_summary(item['qty'], 'Fajita Salad')} | Dressing: {dressing_note}",
             "flags": item["flags"][:] + ["INDIVIDUAL_PACKAGING_SUMMARY_ONLY"],
         }
     
-    dressings = [e["raw_text"] for e in item["extras"] if e["name"] == "dressing"]
-    dressing_note = ", ".join(dressings) if dressings else "Not Specified"
-
     protein_choice = next((e["raw_text"] for e in item["extras"] if e["name"] == "protein"), "mix")
 
     proteins = []
@@ -99,9 +108,7 @@ def rule_fajitas_and_salad(item: NormalizedItem, order: NormalizedOrder) -> Prep
         make_weight_line("Grated Cheese", 2.0 * headcount, 2.0),
     ]
 
-    sauces = [
-        make_weight_line("Dressing", 1.0 * headcount, 1.0),
-    ]
+    sauces = salad_dressing_lines(headcount, dressings)
 
     return {
         "item_key": item["item_key"],

@@ -238,6 +238,65 @@ def test_tableware_defaults_to_guest_count_plus_buffer():
     assert tableware["utensil_sub_counts"]["silverware"] == 13
 
 
+def test_individual_enchiladas_get_silverware_without_plates():
+    items = [
+        _item("cheese_enchiladas_individual", "enchiladas", qty=30, packaging="individual"),
+        _item("tableware", "non_food_items"),
+    ]
+
+    result = build_kitchen_result(_order(items, headcount=30))
+    tableware = next(b for b in result["breakdowns"] if b["item_key"] == "tableware")
+
+    assert tableware["utensil_sub_counts"]["silverware"] == 33
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 0
+    assert tableware["utensil_sub_counts"]["catering_large_spoons"] == 0
+
+
+def test_individual_fajitas_get_silverware_without_plates_or_serving_tools():
+    items = [
+        _item("fajitas_mixed", "fajitas", qty=50, packaging="individual", beans="charro", tortillas="flour"),
+        _item("tableware", "non_food_items"),
+    ]
+
+    result = build_kitchen_result(_order(items, headcount=50))
+    tableware = next(b for b in result["breakdowns"] if b["item_key"] == "tableware")
+
+    assert tableware["utensil_sub_counts"]["silverware"] == 53
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 0
+    assert tableware["utensil_sub_counts"]["black_tongs"] == 0
+    assert tableware["utensil_sub_counts"]["catering_large_spoons"] == 0
+    assert tableware["utensil_sub_counts"]["catering_small_spoons"] == 0
+
+
+def test_individual_executive_package_gets_silverware_without_plates():
+    items = [
+        _item("cenas_exec_spread", "premium", qty=60, packaging="individual"),
+        _item("tableware", "non_food_items"),
+    ]
+    items[0]["source"]["raw_alias"] = "Cenas Executive Fajita Spread"
+
+    result = build_kitchen_result(_order(items, headcount=60))
+    tableware = next(b for b in result["breakdowns"] if b["item_key"] == "tableware")
+
+    assert tableware["utensil_sub_counts"]["silverware"] == 63
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 0
+    assert tableware["utensil_sub_counts"]["black_tongs"] == 0
+    assert tableware["utensil_sub_counts"]["catering_large_spoons"] == 0
+    assert tableware["utensil_sub_counts"]["catering_small_spoons"] == 0
+
+
+def test_standalone_plates_item_is_zero_for_individual_packaging():
+    items = [
+        _item("fajitas_mixed", "fajitas", qty=50, packaging="individual"),
+        _item("plates_and_bowls", "non_food_items"),
+    ]
+
+    result = build_kitchen_result(_order(items, headcount=50))
+    plates = next(b for b in result["breakdowns"] if b["item_key"] == "plates_and_bowls")
+
+    assert plates["utensil_sub_counts"]["plates_and_bowls"] == 0
+
+
 def test_side_spoons_are_one_per_different_side_type():
     items = [
         _item("queso_and_chips", "sides", qty=1, container="quart"),

@@ -1382,8 +1382,13 @@ Scheduling Operations (Create, Read, Update, Delete, Copy, Publish):
 
 Manager Playbooks & Decision Support:
 - Only Partners and Managers have access to the `search_manager_playbooks_tool`. Hourly staff cannot access this tool.
-- You have access to the `search_manager_playbooks_tool` which allows you to query operational guides and distilled leadership rules stored in `docs/manager_playbooks/`.
+- You have access to the `search_manager_playbooks_tool` which allows you to query operational guides and distilled rules stored in `docs/manager_playbooks/`.
+- The available books and guides in `docs/manager_playbooks/` are:
+  1. The "Leadership Book": `distilled_leadership_rules.md` (distilled from John Maxwell's "21 Irrefutable Laws of Leadership").
+  2. The "Server/Hospitality Book": `setting_the_table_hospitality.md` (distilled from Danny Meyer's "Setting the Table").
+- When the user asks about or mentions "the books", "leadership books", "server books", "hospitality books", "laws of leadership", "rules of leadership", "setting the table", "hospitality rules", or "leadership rules", you MUST immediately call `search_manager_playbooks_tool` to search for relevant entries and use them to formulate your response.
 - When managers ask for leadership advice, decision-making guidance, or how to handle specific employee situations (e.g. conflict, coaching, performance issues, policy questions), you MUST use `search_manager_playbooks_tool` to retrieve the relevant paragraphs or rules, and explicitly reference those playbooks and laws of leadership in your reasoning and recommendation.
+
 """
 
         if user_tier == "partner":

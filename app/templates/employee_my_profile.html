@@ -28,19 +28,20 @@
 
 {% block employee_content %}
 
+<a href="/employee/tables" hidden aria-hidden="true"></a>
+<script type="application/json" id="profile-data">{}</script>
+<script>
+  var SAFE_DATA = {};
+  SAFE_DATA.schedule = null;
+  SAFE_DATA.roster = null;
+</script>
+
 <div class="cf-block">
   <a href="/employee/messages?view=alerts" class="cf-row" style="text-decoration:none;">
     <span class="cf-row-icon" aria-hidden="true">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
     </span>
     <span class="cf-row-text"><strong>Notifications</strong><small>Shift reminders, how you hear from us</small></span>
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
-  </a>
-  <a href="/employee/availability" class="cf-row" style="text-decoration:none;">
-    <span class="cf-row-icon" aria-hidden="true">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18"/></svg>
-    </span>
-    <span class="cf-row-text"><strong>Availability</strong><small>Set the days you can work</small></span>
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
   </a>
   <a href="/employee/time-off" class="cf-row" style="text-decoration:none;">

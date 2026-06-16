@@ -727,6 +727,15 @@ def server_activity_for_guids(server_guids, location_filter, business_date,
                     "duration_secs": duration_secs,
                     "open_for_secs": open_for_secs,
                     "cc_tips": round(float(ac["cc_tips"] or 0.0), 2),
+                    "cc_gross": round(float(ac["cc_subtotal"] or 0.0), 2),
+                    "tip_pct": (
+                        round(float(ac["cc_tips"] or 0.0) / float(ac["cc_subtotal"] or 0.0) * 100, 1)
+                        if float(ac["cc_subtotal"] or 0.0) > 0 else None
+                    ),
+                    "tip_kind": (
+                        "cash" if float(ac.get("cash_amount") or 0.0) > 0
+                        and float(ac["cc_tips"] or 0.0) <= 0 else "credit"
+                    ),
                 })
 
     activities.sort(key=lambda row: row.get("opened_at") or "", reverse=True)

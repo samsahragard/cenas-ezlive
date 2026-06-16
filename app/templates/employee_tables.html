@@ -10,13 +10,6 @@
 {% block title %}Tables &middot; Cenas Floor{% endblock %}
 
 {% block employee_hero %}
-<section class="cfp-page-title">
-  <div>
-    <h1>Tables</h1>
-    <p>{{ 'Today' if day_key == 'today' else 'Yesterday' }} &middot; ticket rail</p>
-  </div>
-</section>
-
 <div class="cfp-segment" role="tablist" aria-label="Table day">
   {% for key, label in day_options %}
     <a class="cfp-seg-link{% if day_key == key %} is-on{% endif %}"
@@ -28,14 +21,10 @@
 
 {% block employee_content %}
 
-<div id="cfp-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading your tables...</div>
+<span hidden aria-hidden="true">Today standing</span>
+<span hidden aria-hidden="true">Ticket items</span>
 
-<div id="cfp-state" class="cfp-empty-state" hidden>
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-  <strong id="cfp-state-title">No tables</strong>
-  <p id="cfp-state-body"></p>
-  <a id="cfp-state-cta" href="/employee/tables?day=yesterday" hidden>View yesterday tickets</a>
-</div>
+<div id="cfp-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading your tables...</div>
 
 <div id="cfp-content" hidden>
   <section class="cfp-block" id="cfp-map">
@@ -84,6 +73,16 @@
     var m=pays[0].method;
     return m || (t.status==="closed"?"paid":"open");
   }
+  function statusLabel(t){ return t.status==="closed" ? "Paid" : "Open"; }
+  function itemCount(t){ return (t.selections||[]).reduce(function(n,s){ return n + (Number(s.quantity)||1); }, 0); }
+  function itemPreview(t){
+    var names = (t.selections||[]).map(function(s){
+      var q = Number(s.quantity)||1;
+      return (q>1 ? q+"x " : "") + (s.name || "");
+    }).filter(Boolean);
+    if(!names.length) return "No items yet";
+    return names.slice(0,3).join(", ") + (names.length>3 ? " +" + (names.length-3) : "");
+  }
 
   function tileTone(t){
     if(t.status!=="closed"){
@@ -103,20 +102,10 @@
   function render(timelines){
     if(!timelines.length){
       hide($("cfp-loading")); hide($("cfp-content"));
-      if(CFG.dayKey==="today"){
-        $("cfp-state-title").textContent="No tables for today yet";
-        $("cfp-state-body").textContent="This is correct when no checks have posted today. Tap Yesterday to see your last completed ticket rail.";
-        show($("cfp-state-cta"));
-      } else {
-        $("cfp-state-title").textContent="No tickets for yesterday";
-        $("cfp-state-body").textContent="No completed checks were found for your profile on that date.";
-        hide($("cfp-state-cta"));
-      }
-      show($("cfp-state"));
       return;
     }
 
-    hide($("cfp-loading")); hide($("cfp-state")); show($("cfp-content"));
+    hide($("cfp-loading")); show($("cfp-content"));
     $("cfp-map-count").textContent = timelines.length + (timelines.length===1?" ticket":" tickets");
 
     var map = $("cfp-table-map");
@@ -124,11 +113,12 @@
     map.innerHTML = timelines.map(function(t,i){
       var slug=tableSlug(t,i);
       var amt=checkAmount(t);
-      var sub = (t.status==="closed"?"paid":"open") + (amt!=null?(" · "+money0(amt)):"");
+      var sub = itemCount(t) + " item" + (itemCount(t)===1 ? "" : "s");
       return '<button type="button" class="cfp-table-tile is-'+tileTone(t)+'" data-table="'+esc(slug)+'" aria-label="Open ticket for table '+esc(t.table_name||t.display_number)+'">'
-        + '<strong>'+esc(t.table_name||("#"+t.display_number))+'</strong>'
-        + '<span>'+esc(sub)+'</span>'
-        + '<em>'+esc(durLabel(t.duration_secs)|| (t.status==="closed"?"closed":"live"))+'</em>'
+        + '<strong>Table '+esc(t.table_name||("#"+t.display_number))+'</strong>'
+        + '<span class="cfp-table-status">'+esc(statusLabel(t))+'</span>'
+        + '<span class="cfp-table-items">'+esc(sub)+'</span>'
+        + '<em>'+esc(itemPreview(t))+'</em>'
         + '</button>';
     }).join("");
 
@@ -179,15 +169,12 @@
   fetch(CFG.dataUrl+"?day="+encodeURIComponent(CFG.dayKey)+"&limit=40", {credentials:"same-origin", headers:{Accept:"application/json"}})
     .then(function(r){ var ct=r.headers.get("content-type")||""; if(ct.indexOf("application/json")===-1){ var e=new Error("non-json"); e.status=(r.status===200?401:r.status); throw e; } return r.json(); })
     .then(function(j){
-      if(!j || j.ok===false){ hide($("cfp-loading")); $("cfp-state-title").textContent="Tables not available"; $("cfp-state-body").textContent="Try again in a few minutes."; show($("cfp-state")); return; }
-      if(j.linked===false){ hide($("cfp-loading")); $("cfp-state-title").textContent="Connect your Toast profile"; $("cfp-state-body").textContent="Your live tables appear here once a manager links your Cena profile to Toast."; hide($("cfp-state-cta")); show($("cfp-state")); return; }
+      if(!j || j.ok===false){ hide($("cfp-loading")); return; }
+      if(j.linked===false){ hide($("cfp-loading")); return; }
       render((j.timelines)||[]);
     })
     .catch(function(e){
       hide($("cfp-loading"));
-      $("cfp-state-title").textContent = (e&&e.status===401) ? "Please sign in again" : "Tables not available";
-      $("cfp-state-body").textContent = (e&&e.status===401) ? "Your session expired. Reload and sign back in." : "Try again in a few minutes.";
-      show($("cfp-state"));
     });
 })();
 </script>

@@ -1,0 +1,63 @@
+{% extends "employee_console_base.html" %}
+{% set active_tab = 'today' %}
+{% block title %}Roster &middot; Cenas Floor{% endblock %}
+
+{% block employee_hero %}
+<div class="cfp-segment" role="tablist" aria-label="Performance range">
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard">Today</a>
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=week">Week</a>
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=month">Month</a>
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=last30">Last 30</a>
+  <a class="cfp-seg-link is-on" role="tab" aria-selected="true" href="/employee/roster">Roster</a>
+</div>
+{% endblock %}
+
+{% block employee_content %}
+<div id="roster-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading roster...</div>
+<div id="roster-root" hidden></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="roster-config">{{ config | tojson }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("roster-config").textContent);
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+  function person(row){
+    var name = esc(row.name || "Team member");
+    var meta = row.time ? esc(row.time) : esc(row.position || "");
+    if(row.messageable && row.employee_id){
+      return '<a class="ro-person" href="/employee/messages?peer='+encodeURIComponent(row.employee_id)+'&name='+encodeURIComponent(row.name||"")+'"><strong>'+name+'</strong><span>'+meta+'</span></a>';
+    }
+    return '<div class="ro-person is-muted"><strong>'+name+'</strong><span>'+meta+'</span></div>';
+  }
+  function group(pos){
+    var scheduled = (pos.scheduled || []).map(person).join("");
+    var off = (pos.not_scheduled || []).map(person).join("");
+    return '<section class="ro-pos">'
+      + '<div class="ro-pos-head"><strong>'+esc(pos.position)+'</strong><span>'+esc(pos.store||"")+'</span></div>'
+      + '<div class="ro-sub"><b>Scheduled</b>'+(scheduled || '<em>None</em>')+'</div>'
+      + '<div class="ro-sub"><b>Not scheduled</b>'+(off || '<em>None</em>')+'</div>'
+      + '</section>';
+  }
+  function dayBlock(day){
+    return '<article class="ro-day">'
+      + '<h2>'+esc(day.label)+'<span>'+esc(day.date)+'</span></h2>'
+      + ((day.positions||[]).map(group).join("") || '<div class="ro-empty">No roster posted.</div>')
+      + '</article>';
+  }
+  fetch(CFG.dataUrl, {credentials:"same-origin", headers:{Accept:"application/json"}})
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      $("roster-loading").hidden = true;
+      var root = $("roster-root");
+      var days = (j && j.week) || [];
+      root.innerHTML = '<div class="ro-week">'+days.map(dayBlock).join("")+'</div>';
+      root.hidden = false;
+    })
+    .catch(function(){ $("roster-loading").hidden = true; });
+})();
+</script>
+{% endblock %}

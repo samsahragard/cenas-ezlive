@@ -52,7 +52,7 @@ from flask import (Blueprint, abort, jsonify, redirect, render_template,
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import SessionLocal
-from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition, Shift, Schedule, Position
+from app.models import Employee, EmployeeSmsCode, EmployeeStoreAssignment, EmployeePosition, Shift, Schedule, Position, User
 from app.services.toast_identity import links_for_employee
 from app.services.ezcater_known_drivers_seed import normalize_phone
 
@@ -247,8 +247,12 @@ def _employee_live_service_for_links(links, *, is_tipped: bool) -> dict | None:
         if not is_tipped:
             live.pop("cc_tips", None)
             live.pop("tip_pct", None)
+            live.pop("cc_gross", None)
             live["activities"] = [
-                {k: v for k, v in dict(row).items() if k != "cc_tips"}
+                {
+                    k: v for k, v in dict(row).items()
+                    if k not in {"cc_tips", "cc_gross", "tip_pct", "tip_kind"}
+                }
                 for row in (live.get("activities") or [])
                 if isinstance(row, dict)
             ]
@@ -576,12 +580,12 @@ def dashboard_page():
         # Header role = the chosen position (falls back to first/only position).
         role_label = (chosen or {}).get("name") or None
 
-        # Land on WEEK by default (Sam 2026-06-10): the Today tab opens all-zero
-        # for anyone who hasn't clocked in yet today, which reads as broken.
-        # Week shows their current hours immediately; Today stays one tap away.
-        range_key = (request.args.get("range") or "week").lower()
+        # Staff/hourly land on Today. Containing ranges include live Today
+        # overlays below, so Week/Month/Last 30 no longer read as zero while an
+        # employee is actively working.
+        range_key = (request.args.get("range") or "today").lower()
         if range_key not in ("today", "week", "month", "last30"):
-            range_key = "week"
+            range_key = "today"
         today_label = _date.today().strftime("%a, %b ") + str(_date.today().day)
 
         initials = "".join(w[0] for w in (full_name or "").split()[:2]).upper() or "--"
@@ -942,6 +946,8 @@ def performance_center():
                 dt = dt.replace(tzinfo=None)
             return dt
 
+        live_tips_cache = {"loaded": False, "value": None}
+
         def _live_today_tips():
             """LIVE credit-card tips for THIS employee TODAY, scoped strictly to
             their OWN confirmed Toast server guid(s) -- the
@@ -951,6 +957,9 @@ def performance_center():
             Returns {cc_tips, tip_pct, ...} or None on no mapping / any error, so
             the caller falls back to the finalized completed-shift cache. Central
             business_date (UTC-5) matches the Toast cache key + the manager page."""
+            if live_tips_cache["loaded"]:
+                return live_tips_cache["value"]
+            live_tips_cache["loaded"] = True
             try:
                 guids = {l.toast_id for l in links if getattr(l, "toast_id", None)}
                 if not guids:
@@ -961,10 +970,12 @@ def performance_center():
                 bd = (datetime.utcnow() - timedelta(hours=5)).strftime("%Y%m%d")
                 from app.services import toast_reports
                 res = toast_reports.server_tips_for_guids(guids, loc_filter, bd)
-                return res if isinstance(res, dict) else None
+                live_tips_cache["value"] = res if isinstance(res, dict) else None
+                return live_tips_cache["value"]
             except Exception:
                 logging.getLogger(__name__).warning(
                     "employee perf: live today tips failed", exc_info=True)
+                live_tips_cache["value"] = None
                 return None
 
         def _attendance_for(r):
@@ -1128,6 +1139,11 @@ def performance_center():
         periods = {}
         for period in ("today", "week", "month", "last30"):
             r = pc_by_period.get(period)
+            if r is None and period != "today":
+                # If the wider cache row is missing/stale but Today exists, do
+                # not show a false zero. Surface today's scoped numbers in that
+                # wider tab until the next perf push fills the full range row.
+                r = pc_by_period.get("today")
             if r is None:
                 periods[period] = {"money": {}, "rankings": {},
                                    "attendance": {"late": 0, "missed": 0, "rows": []},
@@ -1135,29 +1151,34 @@ def performance_center():
                                    "daily": []}
                 continue
             hours = round(float(r.total_hours or 0), 2)
-            # TODAY only: if an open (in-progress) shift row is present, add its
-            # elapsed clock_in -> now so the page reflects the live shift instead of
-            # 0.00h. live_bd / live_since drive the per-day row + 'on shift now' badge.
-            live_extra, live_bd, live_since = (
-                _live_open_hours(r) if period == "today" else (0.0, None, None))
+            # If an open (in-progress) shift row is present in this range, add its
+            # elapsed clock_in -> now so Week/Month/Last 30 include Today while
+            # avoiding double-counting completed rows.
+            live_extra, live_bd, live_since = _live_open_hours(r)
             if live_extra > 0:
                 hours = round(hours + live_extra, 2)
             base = round(float(r.base_pay or 0), 2)
             tips = round(float(r.tips or 0), 2) if is_tipped else 0.0
-            # TODAY only, tipped + currently ON SHIFT (same open-shift signal as
-            # live hours): replace the finalized-cache tips with the employee's
-            # LIVE credit-card tips so far today, pulled scoped to their own Toast
-            # server guid(s). Mirrors the manager Server-Performance page. Falls
-            # back to the cache value if unmapped / Toast unreachable. Cash tips are
-            # never in Toast, and pooled/shared tips settle at shift end, so this is
-            # an estimate -> the UI labels it 'live, finalizes at clock-out'.
+            # Tipped + currently ON SHIFT (same open-shift signal as live hours):
+            # replace this range's cached Today tips with the employee's LIVE
+            # credit-card tips so far today. Cash is excluded by Toast math.
             live_tip_pct = None
+            live_cc_gross = None
             tips_live = False
-            if period == "today" and is_tipped and live_extra > 0:
+            if is_tipped and live_extra > 0:
                 _lt = _live_today_tips()
                 if _lt is not None:
-                    tips = round(float(_lt.get("cc_tips") or 0.0), 2)
+                    live_tips = round(float(_lt.get("cc_tips") or 0.0), 2)
+                    cached_today_tips = 0.0
+                    if live_bd is not None:
+                        cached_today_tips = round(sum(
+                            float(x.tips or 0)
+                            for x in _shifts_in(r)
+                            if getattr(x, "business_date", None) == live_bd
+                        ), 2)
+                    tips = round(max(0.0, tips - cached_today_tips) + live_tips, 2)
                     live_tip_pct = _lt.get("tip_pct")
+                    live_cc_gross = _lt.get("cc_subtotal")
                     tips_live = True
             total = round(base + tips, 2)
             money = {"hours": hours, "base_pay": base, "total_pay": total,
@@ -1175,6 +1196,8 @@ def performance_center():
                 if tips_live:
                     money["tip_pct"] = (round(float(live_tip_pct), 1)
                                         if live_tip_pct is not None else None)
+                    money["cc_gross"] = (round(float(live_cc_gross), 2)
+                                         if live_cc_gross is not None else None)
                     money["tips_live"] = True
                 else:
                     tp = ((rj_ranks.get(period) or {}).get("tip_percent") or {}).get("value")
@@ -1241,7 +1264,12 @@ def performance_center():
                 if is_tipped:
                     drow["tips"] = dtips
                     drow["tips_per_hour"] = (round(dtips / dh, 4) if dh > 0 else None)
-                    drow["tip_pct"] = None  # per-day tip% needs eligible_sales (internal) -> omit
+                    drow["tip_pct"] = None  # filled only when live credit-card gross is available
+                    if tips_live and live_bd is not None and bd == live_bd:
+                        drow["tip_pct"] = (round(float(live_tip_pct), 1)
+                                           if live_tip_pct is not None else None)
+                        drow["cc_gross"] = (round(float(live_cc_gross), 2)
+                                            if live_cc_gross is not None else None)
                 daily.append(drow)
 
             periods[period] = {"money": money, "rankings": rankings,
@@ -1286,68 +1314,198 @@ def performance_detail(metric):
     return render_template("employee_performance_detail.html", metric_key=metric)
 
 
+_MANAGEMENT_POSITION_NAMES = {
+    "partner", "corporate", "corporate chef", "gm", "km",
+    "assistant km", "foh manager", "manager",
+}
+
+
+def _sunday_week_start(day):
+    return day - timedelta(days=(day.weekday() + 1) % 7)
+
+
+def _display_time(dt):
+    return dt.strftime("%I:%M %p").lstrip("0") if dt else ""
+
+
 @employee_auth.route("/employee/roster", methods=["GET"])
-def employee_roster():
-    """Read-only 'who's on' roster for the dashboard Roster tab (Sam #3245 item 3 /
-    #3251 scope). Returns coworker NAME + position + store + their NEXT published
-    shift (today/upcoming), scoped strictly to THIS employee's store(s). SANITIZED:
-    no pay / tips / sales / performance metrics, and NO employee_id / GUID / hidden
-    identifier in the payload; accepts no request id (session-scoped only -> no IDOR)."""
+def employee_roster_page():
+    """Employee-facing weekly roster page."""
+    emp_id = session.get("employee_id")
+    if not emp_id:
+        return redirect("/employee/login")
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter(Employee.id == emp_id).first()
+        if emp is None:
+            return redirect("/employee/login")
+        full_name = (emp.full_name or "").strip()
+        view = SimpleNamespace(full_name=full_name or None)
+    finally:
+        db.close()
+    return render_template(
+        "employee_roster.html",
+        employee=view,
+        config={"dataUrl": "/employee/roster/data"},
+        dashboard_url="/employee/dashboard",
+        login_url="/employee/login",
+    )
+
+
+@employee_auth.route("/employee/roster/data", methods=["GET"])
+def employee_roster_data():
+    """Sunday-Saturday published roster, scoped to the logged-in employee's store.
+
+    Employee rows include ids only for active hourly teammates because the
+    existing messaging directory already exposes those ids for message sends.
+    Management rows are shown for working/not-working visibility but marked
+    non-messageable.
+    """
     emp_id = session.get("employee_id")
     if not emp_id:
         return jsonify({"ok": False, "error": "not signed in"}), 401
     stores = _employee_store_keys(emp_id)
     if not stores:
-        return jsonify({"ok": True, "coworkers": []}), 200
+        return jsonify({"ok": True, "week": []}), 200
+    active_store = (session.get("active_store") or "").strip().lower()
+    if active_store and active_store != "__both__" and active_store in stores:
+        stores = [active_store]
     today = datetime.utcnow().date()
-    start = datetime.combine(today, datetime.min.time())
-    horizon = start + timedelta(days=8)  # today + the next 7 days
-
-    def _when(dt):
-        d = dt.date()
-        if d == today:
-            return "Today"
-        if d == today + timedelta(days=1):
-            return "Tomorrow"
-        return dt.strftime("%a, %b ") + str(d.day)
-
-    def _tm(dt):
-        return dt.strftime("%I:%M %p").lstrip("0")
+    week_start = _sunday_week_start(today)
+    week_end = week_start + timedelta(days=7)
+    start_dt = datetime.combine(week_start, datetime.min.time())
+    end_dt = datetime.combine(week_end, datetime.min.time())
 
     db = SessionLocal()
     try:
-        rows = (db.query(Shift, Employee.full_name, Position.name, Schedule.store_key)
-                  .join(Schedule, Shift.schedule_id == Schedule.id)
-                  .join(Employee, Shift.employee_id == Employee.id)
-                  .outerjoin(Position, Shift.position_id == Position.id)
-                  .filter(Schedule.store_key.in_(stores),
-                          Schedule.status == "published",
-                          Shift.status == "assigned",
-                          Shift.employee_id.isnot(None),
-                          Shift.start_at >= start,
-                          Shift.start_at < horizon)
-                  .order_by(Shift.start_at.asc())
-                  .all())
+        people_rows = (
+            db.query(Employee.id, Employee.full_name, EmployeePosition.store_key,
+                     Position.id, Position.name)
+              .join(EmployeePosition, EmployeePosition.employee_id == Employee.id)
+              .join(Position, Position.id == EmployeePosition.position_id)
+              .filter(Employee.active.is_(True),
+                      EmployeePosition.store_key.in_(stores))
+              .order_by(Position.name.asc(), Employee.full_name.asc())
+              .all()
+        )
+        shifts = (
+            db.query(Shift, Employee.full_name, Position.name, Schedule.store_key)
+              .join(Schedule, Shift.schedule_id == Schedule.id)
+              .outerjoin(Employee, Shift.employee_id == Employee.id)
+              .outerjoin(Position, Shift.position_id == Position.id)
+              .filter(Schedule.store_key.in_(stores),
+                      Schedule.status == "published",
+                      Shift.published_at.isnot(None),
+                      Shift.status == "assigned",
+                      Shift.employee_id.isnot(None),
+                      Shift.start_at >= start_dt,
+                      Shift.start_at < end_dt)
+              .order_by(Shift.start_at.asc())
+              .all()
+        )
+        manager_users = (
+            db.query(User.full_name, User.permission_level, User.store_scope)
+              .filter(User.active.is_(True),
+                      User.permission_level.in_(["partner", "corporate", "gm", "manager"]))
+              .all()
+        )
     finally:
         db.close()
 
-    seen = set()
-    coworkers = []
-    for sh, full_name, pos_name, store_key in rows:
-        if sh.employee_id in seen:    # one row per coworker -> their NEXT upcoming shift
+    people_by_position: dict[tuple[str, int | None, str], list[dict]] = {}
+    seen_person_position = set()
+    for eid, name, store_key, pos_id, pos_name in people_rows:
+        clean_name = (name or "").strip()
+        clean_pos = (pos_name or "Team").strip() or "Team"
+        if not clean_name:
             continue
-        seen.add(sh.employee_id)
-        name = (full_name or "").strip()
-        if not name:
+        key_seen = (eid, store_key, pos_id)
+        if key_seen in seen_person_position:
             continue
-        coworkers.append({
-            "name": name,
-            "position": (pos_name or "").strip(),
+        seen_person_position.add(key_seen)
+        is_manager = clean_pos.casefold() in _MANAGEMENT_POSITION_NAMES
+        group_key = (store_key or "", pos_id, clean_pos)
+        people_by_position.setdefault(group_key, []).append({
+            "employee_id": eid,
+            "name": clean_name,
+            "position": clean_pos,
             "store": _STORE_LABELS.get(store_key, (store_key or "").title()),
-            "shift_when": _when(sh.start_at),
-            "shift_label": _tm(sh.start_at) + " - " + _tm(sh.end_at),
+            "management": is_manager,
+            "messageable": (not is_manager and eid != emp_id),
         })
-    return jsonify({"ok": True, "coworkers": coworkers}), 200
+
+    manager_names = {
+        p["name"].casefold()
+        for rows in people_by_position.values()
+        for p in rows
+        if p.get("management")
+    }
+    for name, level, scope in manager_users:
+        clean_name = (name or "").strip()
+        if not clean_name or clean_name.casefold() in manager_names:
+            continue
+        scope_key = (scope or "").strip().lower()
+        if scope_key not in ("", "both") and scope_key not in stores:
+            continue
+        store_key = stores[0]
+        people_by_position.setdefault((store_key, None, "Managers"), []).append({
+            "employee_id": None,
+            "name": clean_name,
+            "position": (level or "Manager").replace("_", " ").title(),
+            "store": _STORE_LABELS.get(store_key, store_key.title()),
+            "management": True,
+            "messageable": False,
+        })
+
+    shifts_by_day_pos: dict[tuple[str, int | None, str], list[dict]] = {}
+    for sh, full_name, pos_name, store_key in shifts:
+        day_key = sh.start_at.date().isoformat()
+        group_key = (store_key or "", sh.position_id, (pos_name or "Team").strip() or "Team")
+        shifts_by_day_pos.setdefault((day_key, *group_key), []).append({
+            "employee_id": sh.employee_id,
+            "time": (_display_time(sh.start_at) + " - " + _display_time(sh.end_at)).strip(" -"),
+        })
+
+    days = []
+    for i in range(7):
+        day = week_start + timedelta(days=i)
+        day_key = day.isoformat()
+        positions = []
+        for group_key, people in sorted(people_by_position.items(), key=lambda kv: (kv[0][0], kv[0][2].lower())):
+            store_key, pos_id, pos_name = group_key
+            scheduled_rows = shifts_by_day_pos.get((day_key, store_key, pos_id, pos_name), [])
+            scheduled_ids = {row["employee_id"] for row in scheduled_rows}
+            time_by_emp = {row["employee_id"]: row["time"] for row in scheduled_rows}
+            scheduled = []
+            not_scheduled = []
+            for person in people:
+                row = dict(person)
+                if row["employee_id"] in scheduled_ids:
+                    row["time"] = time_by_emp.get(row["employee_id"]) or ""
+                    scheduled.append(row)
+                else:
+                    not_scheduled.append(row)
+            if scheduled or not_scheduled:
+                positions.append({
+                    "position": pos_name,
+                    "store": _STORE_LABELS.get(store_key, (store_key or "").title()),
+                    "scheduled": scheduled,
+                    "not_scheduled": not_scheduled,
+                })
+        days.append({
+            "date": day_key,
+            "label": day.strftime("%A"),
+            "short_label": day.strftime("%a ") + str(day.day),
+            "positions": positions,
+        })
+
+    return jsonify({
+        "ok": True,
+        "week_start": week_start.isoformat(),
+        "week_end": (week_end - timedelta(days=1)).isoformat(),
+        "stores": [_STORE_LABELS.get(s, s.title()) for s in stores],
+        "week": days,
+    }), 200
 
 
 @employee_auth.route("/partner/schedules-v2/migration/run", methods=["POST"])

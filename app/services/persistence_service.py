@@ -150,14 +150,17 @@ def _persist_order(db, bundle: dict[str, Any]) -> int:
     breakdowns = kitchen_result.get("breakdowns", [])
 
     for idx, item in enumerate(normalized.get("normalized_items", [])):
+        choices = dict(item.get("choices") or {})
+        if item.get("container"):
+            choices["container"] = item.get("container")
         order_item = OrderItem(
             order_id=order.id,
             raw_alias=item.get("source", {}).get("raw_alias", ""),
             item_key=item.get("item_key"),
             qty=item.get("qty"),
             package_type=item.get("package_type"),
-            packaging=item.get("choices", {}).get("packaging"),
-            choices=item.get("choices"),
+            packaging=choices.get("packaging"),
+            choices=choices,
             extras=item.get("extras"),
             flags=item.get("flags"),
             source=item.get("source"),

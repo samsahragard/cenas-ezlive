@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.domain.party_pack_rules import party_sides
+from app.domain.party_pack_rules import party_sides, round_tortilla_packets
 from app.domain.rules_fajitas import rule_fajitas
 from app.domain.rules_salads import rule_cobb_salad, rule_fajitas_and_salad
 from app.domain.rules_premium import rule_premium
 from app.domain.kitchen_engine import build_kitchen_result
+from app.domain.master_sheet_map import build_all_outputs
+from app.domain.menu_catalog import MenuCatalog, MENU_CATALOG
+from app.domain.ticket_context import build_ticket_context
 from app.services.orders_query import reconstruct_bundle
 
 
@@ -20,11 +23,27 @@ def _order(items: list[dict], headcount: int = 10) -> dict:
         "date": "2026-06-16",
         "deliver_at": "11:00 AM",
         "reported_store": "Tomball",
+        "reported_store_id": "store_2",
         "origin_store_id": "store_2",
         "headcount": headcount,
+        "client": "",
+        "upon_delivery_ask_for": "",
+        "customer_phone": "",
+        "delivery_address": "",
+        "delivery_window": {"start": "", "end": ""},
+        "delivery_instructions": None,
+        "setup_required": None,
+        "notes": None,
         "normalized_items": items,
         "flags": [],
     }
+
+
+def _master(items: list[dict], headcount: int = 10) -> dict:
+    order = _order(items, headcount=headcount)
+    result = build_kitchen_result(order)
+    ctx = build_ticket_context(order, result, {})
+    return build_all_outputs(order, result, ctx, MenuCatalog(MENU_CATALOG))["master"]
 
 
 def _item(
@@ -161,6 +180,11 @@ def test_fajita_package_protein_rates_are_updated():
     assert _line_named(beef["proteins"], "Beef")["total"] == 50.0
 
 
+def test_tortilla_packets_round_to_nearest_whole_packet():
+    assert round_tortilla_packets(10.25) == 10
+    assert round_tortilla_packets(10.51) == 11
+
+
 def test_cobb_salad_lettuce_is_four_oz_per_person():
     item = {
         "item_key": "cobb_salad",
@@ -178,6 +202,23 @@ def test_cobb_salad_lettuce_is_four_oz_per_person():
     assert lettuce["unit"] == "oz"
     assert lettuce["total"] == 40.0
     assert lettuce["display_total"] == "2.5 lb / 40.0 oz"
+
+
+def test_cobb_salad_chicken_choice_adds_chicken_diced():
+    item = {
+        "item_key": "cobb_salad",
+        "package_type": "salads",
+        "qty": 9,
+        "choices": {"packaging": "tray"},
+        "extras": [{"name": "protein", "raw_text": "chicken"}],
+        "flags": [],
+    }
+
+    breakdown = rule_cobb_salad(item, {})
+    chicken = _line_named(breakdown["proteins"], "Chicken Diced")
+
+    assert chicken["per_qty"] == 2.0
+    assert chicken["total"] == 18.0
 
 
 def test_fajita_salad_lettuce_is_four_oz_per_person():
@@ -214,6 +255,24 @@ def test_bulk_salad_single_dressing_is_three_oz_per_person():
 
     assert dressing["per_qty"] == 3.0
     assert dressing["total"] == 30.0
+
+
+def test_master_bulk_salad_dressing_displays_ounces():
+    master = _master([
+        _item(
+            "cobb_salad",
+            "salads",
+            qty=9,
+            packaging="tray",
+            extras=[
+                {"name": "dressing", "raw_text": "Most Popular"},
+                {"name": "protein", "raw_text": "chicken"},
+            ],
+        )
+    ])
+
+    assert master["item.salad_dressing"] == "27 Most Popular"
+    assert master["component.Chicken Diced"] == "1.12"
 
 
 def test_bulk_salad_two_dressings_split_to_one_and_half_oz_each():
@@ -253,6 +312,44 @@ def test_individual_salad_keeps_dressing_portion_cups():
     assert "INDIVIDUAL_PACKAGING_SUMMARY_ONLY" in breakdown["flags"]
     assert _line_named(breakdown["sauces"], "Dressing - Ranch")["per_qty"] == 1.5
     assert _line_named(breakdown["sauces"], "Dressing - Honey Mustard")["per_qty"] == 1.5
+
+
+def test_master_individual_salad_dressing_displays_portion_cups():
+    master = _master([
+        _item(
+            "cobb_salad",
+            "salads",
+            qty=10,
+            packaging="individual",
+            extras=[
+                {"name": "dressing", "raw_text": "Ranch"},
+                {"name": "dressing", "raw_text": "Honey Mustard"},
+            ],
+        )
+    ])
+
+    assert master["item.salad_dressing"] == (
+        "10 1.5oz Ranch portion cups | 10 1.5oz Honey Mustard portion cups"
+    )
+
+
+def test_master_side_rows_show_container_units():
+    master = _master([
+        _item("queso_and_chips", "sides", qty=1, container="quart"),
+        _item("guac_and_chips", "sides", qty=2),
+    ])
+
+    assert master["item.queso_and_chips"] == "1 quart"
+    assert master["item.guac_and_chips"] == "2 pints"
+
+
+def test_master_individual_package_uses_specific_label_row():
+    master = _master([
+        _item("fajitas_mixed", "fajitas", qty=16, packaging="individual", beans="charro", tortillas="flour"),
+    ], headcount=16)
+
+    assert master["meta.individual.fajitas_mixed"] == "16"
+    assert master["meta.individual"] == ""
 
 
 def test_executive_package_uses_full_per_person_breakdown():
@@ -409,6 +506,46 @@ def test_saved_bulk_order_refreshes_tableware_from_food_qty_not_pdf_plates():
 
     assert tableware["utensil_sub_counts"]["silverware"] == 18
     assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 18
+
+
+def test_active_saved_salad_order_refreshes_current_food_breakdown():
+    items = [
+        _row_item(
+            1,
+            "cobb_salad",
+            "salads",
+            9,
+            "tray",
+            "Cobb Salad Party Package",
+            extras=[
+                {"name": "dressing", "raw_text": "Most Popular"},
+                {"name": "protein", "raw_text": "chicken"},
+            ],
+        ),
+    ]
+    stale_salad = {
+        "item_key": "cobb_salad",
+        "package_type": "salads",
+        "qty": 9,
+        "choices": {"packaging": "tray"},
+        "proteins": [],
+        "sides": [],
+        "sauces": [{"name": "Dressing", "measure_type": "weight", "per_qty": 1.0, "unit": "oz", "total": 9.0}],
+        "extras": [{"name": "dressing", "raw_text": "Most Popular"}],
+        "counts": [],
+        "summary_line": "9ppl - Cobb Salad | Dressing: Most Popular",
+        "flags": [],
+    }
+    bundle = reconstruct_bundle(
+        _row_order(headcount=0),
+        items,
+        {1: [SimpleNamespace(breakdown=stale_salad)]},
+    )
+    salad = next(b for b in bundle["kitchen_result"]["breakdowns"] if b["item_key"] == "cobb_salad")
+
+    assert _line_named(salad["proteins"], "Chicken Diced")["total"] == 18.0
+    assert _line_named(salad["sauces"], "Dressing - Most Popular")["total"] == 27.0
+    assert bundle["views"]["master"]["item.salad_dressing"] == "27 Most Popular"
 
 
 def test_individual_fajitas_get_silverware_without_plates_or_serving_tools():

@@ -19,6 +19,7 @@ from app.domain.kitchen_engine import build_kitchen_result
 
 
 _catalog = MenuCatalog(MENU_CATALOG)
+_SIDE_CONTAINER_KEYWORDS = ["half gallon", "quart", "half pint", "pint"]
 
 
 def _clock_minutes(raw: object) -> tuple[int, int, str]:
@@ -41,20 +42,43 @@ def _clock_minutes(raw: object) -> tuple[int, int, str]:
         return (1, 0, value)
 
 
+def _side_container_from_source(item: OrderItem) -> str | None:
+    choices = item.choices or {}
+    if choices.get("container"):
+        return choices.get("container")
+    source = item.source or {}
+    text = " ".join(source.get("raw_line_items") or []).lower()
+    for keyword in _SIDE_CONTAINER_KEYWORDS:
+        if keyword in text:
+            return keyword
+    return None
+
+
+def _should_refresh_current_breakdowns(order: Order) -> bool:
+    if getattr(order, "status", None) == "cancelled":
+        return False
+    try:
+        today_iso = datetime.now().strftime("%Y-%m-%d")
+        return bool(order.delivery_date and order.delivery_date >= today_iso)
+    except Exception:
+        return False
+
+
 def _normalized_item_from_row(item: OrderItem) -> dict[str, Any]:
     """Reverse the OrderItem -> NormalizedItem persistence mapping."""
+    choices = item.choices or {
+        "packaging": item.packaging or "none",
+        "beans": "none",
+        "tortillas": "none",
+        "with_ice": None,
+    }
     return {
         "item_key": item.item_key,
         "package_type": item.package_type,
         "qty": item.qty or 0,
-        "choices": item.choices or {
-            "packaging": item.packaging or "none",
-            "beans": "none",
-            "tortillas": "none",
-            "with_ice": None,
-        },
+        "choices": choices,
         "extras": item.extras or [],
-        "container": (item.choices or {}).get("container") if item.choices else None,
+        "container": _side_container_from_source(item) if item.package_type == "sides" else choices.get("container"),
         "source": item.source or {"raw_alias": item.raw_alias, "raw_qty": item.qty or 0, "raw_line_items": []},
         "flags": item.flags or [],
     }
@@ -103,16 +127,19 @@ def _kitchen_result_from_rows(order: Order, items: list[OrderItem],
             current_breakdowns = build_kitchen_result(normalized).get("breakdowns", [])
         except Exception:
             current_breakdowns = []
+    refresh_current = _should_refresh_current_breakdowns(order)
 
     for idx, item in enumerate(items):
         recs = breakdowns_by_item_id.get(item.id, [])
         stored = recs[0].breakdown if recs else None
         current = current_breakdowns[idx] if idx < len(current_breakdowns) else None
 
-        # Existing orders keep persisted prep breakdown rows, but tableware
-        # rules are policy-like and should reflect the current app logic in
-        # saved order views without needing a full order re-ingest.
-        if _is_tableware_breakdown(current):
+        # Active/upcoming catering views should reflect current portion rules
+        # without forcing a PDF re-ingest. Historical rows keep their saved food
+        # breakdowns, while tableware always refreshes as policy-like logic.
+        if refresh_current and current:
+            breakdowns.append(current)
+        elif _is_tableware_breakdown(current):
             breakdowns.append(current)
         elif stored:
             breakdowns.append(stored)

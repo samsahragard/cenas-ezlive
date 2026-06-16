@@ -1,6 +1,7 @@
 # build table-like for frontend
 from __future__ import annotations
 
+import re
 from typing import TypedDict, List, Dict
 
 from app.domain.master_sheet_map import VIEW_ROWS, RowSpec, FlatMap
@@ -41,7 +42,18 @@ def _compute_row_totals(rows: list[RowSpec], columns: list[GridColumn]) -> FlatM
                 total += float(raw)
                 found = True
             except ValueError:
-                pass
+                if row.get("section") != "Sides":
+                    continue
+                side_total = 0.0
+                side_found = False
+                for part in raw.split("+"):
+                    match = re.match(r"\s*(\d+(?:\.\d+)?)\b", part)
+                    if match:
+                        side_total += float(match.group(1))
+                        side_found = True
+                if side_found:
+                    total += side_total
+                    found = True
         if found:
             if total == int(total):
                 totals[key] = str(int(total))

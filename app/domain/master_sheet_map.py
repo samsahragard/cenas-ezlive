@@ -58,7 +58,7 @@ def _sum_packet_items_to_master_component(
     line_items: list[PacketLineItem],
 ) -> None:
     for li in line_items:
-        totals[li["name"]] += li["raw_packets"]
+        totals[li["name"]] += li["packets"]
 
 
 def _package_style(item_key: str) -> str:
@@ -69,6 +69,56 @@ def _package_style(item_key: str) -> str:
         "veggie_fajitas": "Veggie",
         "brochette_shrimp": "Shrimp",
     }.get(item_key, "")
+
+
+_INDIVIDUAL_PACKAGE_ROWS = {
+    "fajitas_mixed": ("meta.individual.fajitas_mixed", "Beef & Chicken"),
+    "fajitas_chicken": ("meta.individual.fajitas_chicken", "Chicken"),
+    "fajitas_beef": ("meta.individual.fajitas_beef", "Beef"),
+    "veggie_fajitas": ("meta.individual.veggie_fajitas", "Veggie"),
+    "brochette_shrimp": ("meta.individual.brochette_shrimp", "Brochette"),
+    "cobb_salad": ("meta.individual.cobb_salad", "Cobb Salad"),
+    "fajitas_and_salad": ("meta.individual.fajitas_and_salad", "Fajita Salad"),
+}
+
+
+_SIDE_CONTAINER_DEFAULTS = {
+    "queso_and_chips": "quart",
+    "guac_and_chips": "pint",
+    "rice": "quart",
+    "refried_beans": "quart",
+    "black_beans": "quart",
+    "charro_beans": "quart",
+    "grated_cheese": "pint",
+    "pickled_jalapenos": "pint",
+    "fresh_jalapenos": "pint",
+    "sour_cream": "pint",
+    "pico_de_gallo": "pint",
+    "red_sauce": "pint",
+    "green_sauce": "pint",
+    "fresh_avocado": "pint",
+}
+
+
+def _plural_unit(unit: str, qty: float) -> str:
+    if qty == 1:
+        return unit
+    if unit.endswith("s"):
+        return unit
+    return f"{unit}s"
+
+
+def _format_container_count(qty: float, container: str) -> str:
+    return f"{_fmt_num(qty)} {_plural_unit(container, qty)}"
+
+
+def _dressing_name(raw_name: str) -> str:
+    name = raw_name
+    if name.startswith("Dressing - "):
+        name = name[len("Dressing - "):]
+    if name == "Dressing":
+        return "Dressing"
+    return name
 
 
 def build_master_output(
@@ -108,6 +158,7 @@ def build_master_output(
     # -------------------------
     package_styles: list[str] = []
     individual_lines: list[str] = []
+    individual_totals: dict[str, float] = defaultdict(float)
 
     for b in result["breakdowns"]:
         style = _package_style(b["item_key"])
@@ -115,13 +166,19 @@ def build_master_output(
             package_styles.append(style)
 
         if "INDIVIDUAL_PACKAGING_SUMMARY_ONLY" in b["flags"] and b["summary_line"]:
-            summary = b["summary_line"]
-            summary = summary.replace("Individual - ", "").strip()
-            individual_lines.append(summary)
+            row = _INDIVIDUAL_PACKAGE_ROWS.get(b["item_key"])
+            if row:
+                individual_totals[row[0]] += float(b.get("qty") or 0)
+            else:
+                summary = b["summary_line"]
+                summary = summary.replace("Individual - ", "").strip()
+                individual_lines.append(summary)
 
 
     master["meta.package_style"] = "; ".join(package_styles)
     master["meta.individual"] = "; ".join(individual_lines)
+    for key, total in individual_totals.items():
+        master[key] = _fmt_num(total)
 
     # -------------------------
     # COMPONENT TOTALS
@@ -141,11 +198,19 @@ def build_master_output(
 
     salad_dressing_parts = []
     for b in result["breakdowns"]:
-        if b["choices"].get("packaging") != "individual":
-            dressings = [e["raw_text"] for e in b["extras"] if e["name"] == "dressing"]
-            if dressings:
-                dressing_oz = sum(li["total"] for li in b["sauces"] if li["name"].startswith("Dressing"))
-                salad_dressing_parts.append(f"{', '.join(dressings)} | {_fmt_num(oz_to_lb(dressing_oz))}")
+        if b.get("package_type") != "salads":
+            continue
+        for li in b["sauces"]:
+            if not li["name"].startswith("Dressing"):
+                continue
+            name = _dressing_name(li["name"])
+            if b["choices"].get("packaging") == "individual":
+                cup_size = li.get("per_qty") or 0
+                salad_dressing_parts.append(
+                    f'{_fmt_num(b.get("qty") or 0)} {_fmt_num(cup_size)}oz {name} portion cups'
+                )
+            else:
+                salad_dressing_parts.append(f'{_fmt_num(li["total"])} {name}')
     if salad_dressing_parts:
         master["item.salad_dressing"] = " | ".join(salad_dressing_parts)
 
@@ -153,7 +218,7 @@ def build_master_output(
     # DIRECT ORDERED ITEMS
     # -------------------------
     direct_item_totals: dict[str, float] = defaultdict(float)
-    direct_item_containers: dict[str, str] = {}
+    direct_item_container_counts: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     direct_item_notes: dict[str, str] =  {}
 
     for item in order["normalized_items"]:
@@ -166,8 +231,11 @@ def build_master_output(
             if section == "SALADS" and item["choices"].get("packaging") == "individual":
                 continue
             direct_item_totals[item_key] += float(item["qty"])
-            if item.get("container"):
-                direct_item_containers[item_key] = item["container"]
+            container = item.get("container")
+            if section == "SIDES":
+                container = container or _SIDE_CONTAINER_DEFAULTS.get(item_key)
+            if container:
+                direct_item_container_counts[item_key][container] += float(item["qty"])
             if section == "ENCHILADAS":
                 note_parts = []
                 sauces = [e["raw_text"] for e in item["extras"] if e["name"] == "sauce"]
@@ -180,9 +248,12 @@ def build_master_output(
 
     for item_key, total in direct_item_totals.items():
         value = _fmt_num(total)
-        container = direct_item_containers.get(item_key)
-        if container:
-            value = f"{value} | {container}"
+        container_counts = direct_item_container_counts.get(item_key) or {}
+        if container_counts:
+            value = " + ".join(
+                _format_container_count(qty, container)
+                for container, qty in container_counts.items()
+            )
         note = direct_item_notes.get(item_key)
         if note:
             value = f"{value} | {note}"
@@ -232,12 +303,20 @@ def build_kitchen_output(master: FlatMap) -> FlatMap:
         "component.Guacamole",
         "component.Queso Blanco",
         "component.Sour Cream",
+        "item.salad_dressing",
         "component.Red Sauce",
         "component.Green Sauce",
         "component.Chips",
         "component.Churros",
 
         "meta.individual",
+        "meta.individual.fajitas_mixed",
+        "meta.individual.fajitas_chicken",
+        "meta.individual.fajitas_beef",
+        "meta.individual.veggie_fajitas",
+        "meta.individual.brochette_shrimp",
+        "meta.individual.cobb_salad",
+        "meta.individual.fajitas_and_salad",
 
         "item.cenas_exec_spread",
         "item.queso_and_chips",
@@ -327,12 +406,20 @@ def build_prep_expo_output(master: FlatMap) -> FlatMap:
         "component.Guacamole",
         "component.Queso Blanco",
         "component.Sour Cream",
+        "item.salad_dressing",
         "component.Red Sauce",
         "component.Green Sauce",
         "component.Chips",
         "component.Churros",
 
         "meta.individual",
+        "meta.individual.fajitas_mixed",
+        "meta.individual.fajitas_chicken",
+        "meta.individual.fajitas_beef",
+        "meta.individual.veggie_fajitas",
+        "meta.individual.brochette_shrimp",
+        "meta.individual.cobb_salad",
+        "meta.individual.fajitas_and_salad",
 
         "item.cenas_exec_spread",
         "item.queso_and_chips",
@@ -412,7 +499,14 @@ MASTER_ROWS: list[RowSpec] = [
     {"key": "meta.delivery_instructions", "label": "Instructions", "section": "Header", "sort": 145},
     {"key": "meta.notes", "label": "Notes", "section": "Header", "sort": 147},
 
-    {"key": "meta.individual", "label": "Party Package", "section": "Individual Packages", "sort": 150},
+    {"key": "meta.individual", "label": "Other Individual", "section": "Individual Packages", "sort": 150},
+    {"key": "meta.individual.fajitas_mixed", "label": "Beef & Chicken", "section": "Individual Packages", "sort": 151},
+    {"key": "meta.individual.fajitas_chicken", "label": "Chicken", "section": "Individual Packages", "sort": 152},
+    {"key": "meta.individual.fajitas_beef", "label": "Beef", "section": "Individual Packages", "sort": 153},
+    {"key": "meta.individual.veggie_fajitas", "label": "Veggie", "section": "Individual Packages", "sort": 154},
+    {"key": "meta.individual.brochette_shrimp", "label": "Brochette", "section": "Individual Packages", "sort": 155},
+    {"key": "meta.individual.cobb_salad", "label": "Cobb Salad", "section": "Individual Packages", "sort": 156},
+    {"key": "meta.individual.fajitas_and_salad", "label": "Fajita Salad", "section": "Individual Packages", "sort": 157},
     {"key": "item.cenas_exec_spread", "label": "Executive Package", "section": "Individual Packages", "sort": 160},
     # hot food
     {"key": "component.Chicken", "label": "Chicken (Lb)", "section": "Hot Food", "sort": 200},
@@ -441,7 +535,7 @@ MASTER_ROWS: list[RowSpec] = [
     {"key": "component.Black Olives", "label": "Black Olives (Lb)", "section": "Cold Food", "sort": 338},
     {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Cold Food", "sort": 339},
     {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Cold Food", "sort": 340},
-    {"key": "item.salad_dressing", "label": "Salad Dressing (Lb)", "section": "Cold Food", "sort": 341},
+    {"key": "item.salad_dressing", "label": "Salad Dressing (oz)", "section": "Cold Food", "sort": 341},
     {"key": "component.Red Sauce", "label": "Red Sauce (Lb)", "section": "Cold Food", "sort": 342},
     {"key": "component.Green Sauce", "label": "Green Sauce (Lb)", "section": "Cold Food", "sort": 350},
     {"key": "component.Chips", "label": "Chips (Lb)", "section": "Cold Food", "sort": 360},
@@ -515,8 +609,15 @@ KITCHEN_ROWS: list[RowSpec] = [
     {"key": "meta.date", "label": "Date", "section": "Header", "sort": 30},
     {"key": "meta.store_origin", "label": "Location Origin", "section": "Header", "sort": 40},
 
-    {"key": "meta.individual", "label": "Party Package", "section": "Individual Packages", "sort": 45},
-    {"key": "item.cenas_exec_spread", "label": "Executive Package", "section": "Individual Packages", "sort": 50},
+    {"key": "meta.individual", "label": "Other Individual", "section": "Individual Packages", "sort": 45},
+    {"key": "meta.individual.fajitas_mixed", "label": "Beef & Chicken", "section": "Individual Packages", "sort": 46},
+    {"key": "meta.individual.fajitas_chicken", "label": "Chicken", "section": "Individual Packages", "sort": 47},
+    {"key": "meta.individual.fajitas_beef", "label": "Beef", "section": "Individual Packages", "sort": 48},
+    {"key": "meta.individual.veggie_fajitas", "label": "Veggie", "section": "Individual Packages", "sort": 49},
+    {"key": "meta.individual.brochette_shrimp", "label": "Brochette", "section": "Individual Packages", "sort": 50},
+    {"key": "meta.individual.cobb_salad", "label": "Cobb Salad", "section": "Individual Packages", "sort": 51},
+    {"key": "meta.individual.fajitas_and_salad", "label": "Fajita Salad", "section": "Individual Packages", "sort": 52},
+    {"key": "item.cenas_exec_spread", "label": "Executive Package", "section": "Individual Packages", "sort": 55},
     # hot food breakdown
     {"key": "component.Chicken", "label": "Chicken (Lb)", "section": "Hot Food", "sort": 100},
     {"key": "component.Beef", "label": "Beef (Lb)", "section": "Hot Food", "sort": 110},
@@ -540,7 +641,8 @@ KITCHEN_ROWS: list[RowSpec] = [
     {"key": "component.Black Olives", "label": "Black Olives (Lb)", "section": "Cold Food", "sort": 338},
     {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Cold Food", "sort": 339},
     {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Cold Food", "sort": 340},
-    {"key": "component.Churros", "label": "Churros (Pieces)", "section": "Drinks & Desserts", "sort": 341},
+    {"key": "item.salad_dressing", "label": "Salad Dressing (oz)", "section": "Cold Food", "sort": 341},
+    {"key": "component.Churros", "label": "Churros (Pieces)", "section": "Drinks & Desserts", "sort": 342},
     # other menu items
     {"key": "item.jumbo_brochette_shrimp", "label": "Brochette Shrimp (4-Pack)", "section": "A La Carte", "sort": 400},
     {"key": "item.andouille_grilled_sausage", "label": "Grilled Sausage (4-Pack)", "section": "A La Carte", "sort": 410},
@@ -624,7 +726,14 @@ PREP_EXPO_ROWS: list[RowSpec] = [
     {"key": "meta.delivery_instructions", "label": "Instructions", "section": "Header", "sort": 95},
     {"key": "meta.notes", "label": "Notes", "section": "Header", "sort": 97},
     {"key": "meta.setup_required", "label": "Setup", "section": "Header", "sort": 100},
-    {"key": "meta.individual", "label": "Party Package", "section": "Individual Packages", "sort": 110},
+    {"key": "meta.individual", "label": "Other Individual", "section": "Individual Packages", "sort": 110},
+    {"key": "meta.individual.fajitas_mixed", "label": "Beef & Chicken", "section": "Individual Packages", "sort": 111},
+    {"key": "meta.individual.fajitas_chicken", "label": "Chicken", "section": "Individual Packages", "sort": 112},
+    {"key": "meta.individual.fajitas_beef", "label": "Beef", "section": "Individual Packages", "sort": 113},
+    {"key": "meta.individual.veggie_fajitas", "label": "Veggie", "section": "Individual Packages", "sort": 114},
+    {"key": "meta.individual.brochette_shrimp", "label": "Brochette", "section": "Individual Packages", "sort": 115},
+    {"key": "meta.individual.cobb_salad", "label": "Cobb Salad", "section": "Individual Packages", "sort": 116},
+    {"key": "meta.individual.fajitas_and_salad", "label": "Fajita Salad", "section": "Individual Packages", "sort": 117},
     {"key": "item.cenas_exec_spread", "label": "Executive Package", "section": "Individual Packages", "sort": 120},
     # hot food
     {"key": "component.Chicken", "label": "Chicken (lb)", "section": "Hot Food", "sort": 200},
@@ -652,7 +761,8 @@ PREP_EXPO_ROWS: list[RowSpec] = [
     {"key": "component.Black Olives", "label": "Black Olives (Lb)", "section": "Cold Food", "sort": 338},
     {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Cold Food", "sort": 339},
     {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Cold Food", "sort": 340},
-    {"key": "component.Red Sauce", "label": "Red Sauce (lb)", "section": "Cold Food", "sort": 341},
+    {"key": "item.salad_dressing", "label": "Salad Dressing (oz)", "section": "Cold Food", "sort": 341},
+    {"key": "component.Red Sauce", "label": "Red Sauce (lb)", "section": "Cold Food", "sort": 342},
     {"key": "component.Green Sauce", "label": "Green Sauce (lb)", "section": "Cold Food", "sort": 350},
     {"key": "component.Chips", "label": "Chips (lb)", "section": "Cold Food", "sort": 360},
     {"key": "component.Churros", "label": "Churros (Pieces)", "section": "Drinks & Desserts", "sort": 361},

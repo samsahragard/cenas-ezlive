@@ -43,6 +43,7 @@ def rule_beverages(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
     return b
 
 _TRAY_TYPES = {"fajitas", "veggie_fajitas", "brochette_shrimp", "premium", "enchiladas", "salads"}
+_PER_PERSON_BULK_TYPES = {"fajitas", "veggie_fajitas", "brochette_shrimp", "premium", "salads"}
 _PLATES_BUFFER = 3
 
 _SIDES_SMALL_SPOON_KEYS = {
@@ -94,24 +95,21 @@ def _individual_meal_qty(order: NormalizedOrder) -> int:
         if _is_individual_meal(i)
     )
 
-def _has_bulk_meals(order: NormalizedOrder) -> bool:
-    return any(
-        i.get("package_type") in _TRAY_TYPES and not _is_individual_meal(i)
+def _bulk_meal_qty(order: NormalizedOrder) -> int:
+    return sum(
+        int(i.get("qty") or 0)
         for i in order["normalized_items"]
+        if i.get("package_type") in _PER_PERSON_BULK_TYPES and not _is_individual_meal(i)
     )
 
 def _default_tableware_counts(order: NormalizedOrder) -> tuple[int, int]:
     headcount = int(order.get("headcount") or 0)
+    bulk_qty = _bulk_meal_qty(order)
     individual_qty = _individual_meal_qty(order)
-    has_bulk = _has_bulk_meals(order)
 
-    if individual_qty and not has_bulk:
-        return individual_qty + _PLATES_BUFFER, 0
-
-    if individual_qty:
-        silverware = max(headcount, individual_qty) + _PLATES_BUFFER
-        bulk_guests = max(headcount - individual_qty, 0)
-        plates = bulk_guests + _PLATES_BUFFER if bulk_guests else 0
+    if bulk_qty or individual_qty:
+        silverware = bulk_qty + individual_qty + _PLATES_BUFFER
+        plates = bulk_qty + _PLATES_BUFFER if bulk_qty else 0
         return silverware, plates
 
     return headcount + _PLATES_BUFFER, headcount + _PLATES_BUFFER
@@ -147,14 +145,14 @@ def rule_tableware(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
             if i["package_type"] == "sides" and i["item_key"] in _SAUCE_KEYS:
                 sides_spoon_keys.add(i["item_key"])
         default_silverware, default_plates = _default_tableware_counts(order)
-        individual_qty = _individual_meal_qty(order)
-        if individual_qty:
-            # Individually packaged meals need one silverware pack per meal plus buffer,
-            # and no loose plates/bowls unless there is a bulk tray portion too.
-            silverware = max(pdf.get("silverware") or 0, default_silverware)
+        has_meal_qty = bool(_bulk_meal_qty(order) or _individual_meal_qty(order))
+        if has_meal_qty:
+            # Catering tableware follows ordered food quantity, not the PDF
+            # headcount or PDF-provided tableware counts.
+            silverware = default_silverware
             plates = default_plates
         else:
-            # Bulk catering: 1 set per guest plus buffer, unless PDF supplied a count.
+            # Non-package fallback: use PDF-provided counts when present.
             silverware = pdf.get("silverware") or default_silverware
             plates = pdf.get("plates_and_bowls") or default_plates
 
@@ -181,7 +179,11 @@ def rule_tableware(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
         _silverware, plates = _default_tableware_counts(order)
         b["utensil_sub_counts"] = {"plates_and_bowls": plates}
         if plates:
-            b["summary_line"] = f'{plates}x Plates/Bowls ({order["headcount"]} guests + {_PLATES_BUFFER} buffer)'
+            bulk_qty = _bulk_meal_qty(order)
+            if bulk_qty:
+                b["summary_line"] = f'{plates}x Plates/Bowls ({bulk_qty} bulk meals + {_PLATES_BUFFER} buffer)'
+            else:
+                b["summary_line"] = f'{plates}x Plates/Bowls ({order["headcount"]} guests + {_PLATES_BUFFER} buffer)'
         else:
             b["summary_line"] = "0x Plates/Bowls (individual packaging)"
 

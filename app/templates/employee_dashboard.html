@@ -14,12 +14,21 @@
 
 {% block employee_hero %}
 <div class="cfp-segment" role="tablist" aria-label="Performance range">
-  {% for key, label in [('today','Today'),('week','Week'),('month','Month'),('last30','Last 30')] %}
+  {% for key, label in [
+    ('today', ('Today',)),
+    ('current_week', ('Current', 'Week')),
+    ('last_week', ('Last', 'Week')),
+    ('current_month', ('Current', 'Month')),
+    ('last_month', ('Last', 'Month')),
+  ] %}
     <button type="button" class="cfp-seg-btn{% if range_key == key %} is-on{% endif %}"
             role="tab" aria-selected="{{ 'true' if range_key == key else 'false' }}"
-            data-range="{{ key }}">{{ label }}</button>
+            data-range="{{ key }}">
+      <span class="cfp-seg-stack">
+        {% for word in label %}<span>{{ word }}</span>{% endfor %}
+      </span>
+    </button>
   {% endfor %}
-  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/roster">Roster</a>
 </div>
 {% endblock %}
 
@@ -113,7 +122,11 @@
         today: emptyPeriod(),
         week: emptyPeriod(),
         month: emptyPeriod(),
-        last30: emptyPeriod()
+        last30: emptyPeriod(),
+        current_week: emptyPeriod(),
+        last_week: emptyPeriod(),
+        current_month: emptyPeriod(),
+        last_month: emptyPeriod()
       }
     };
   }
@@ -126,7 +139,35 @@
 
   // ---- render ---------------------------------------------------------------
   function rangeLabel(r){
-    return {today:"Today", week:"This week", month:"This month", last30:"Last 30 days"}[r] || r;
+    return {
+      today:"Today",
+      week:"Current week",
+      current_week:"Current week",
+      last_week:"Last week",
+      month:"Current month",
+      current_month:"Current month",
+      last_month:"Last month",
+      last30:"Last 30 days"
+    }[r] || r;
+  }
+  function rangeBadge(r){
+    return {
+      today: CFG.todayLabel || "today",
+      week: "Sun-Sat",
+      current_week: "Sun-Sat",
+      last_week: "Sun-Sat",
+      month: "calendar month",
+      current_month: "calendar month",
+      last_month: "calendar month",
+      last30: "rolling 30"
+    }[r] || "range";
+  }
+  function serviceForRange(r){
+    if(!SERVICE) return {};
+    return SERVICE[r]
+      || (r === "current_week" ? SERVICE.week : null)
+      || (r === "current_month" ? SERVICE.month : null)
+      || {};
   }
 
   function renderRange(){
@@ -138,8 +179,7 @@
     var isToday = range === "today";
 
     $("cfp-hero-label").textContent = rangeLabel(range) + " take-home";
-    $("cfp-hero-range").textContent = isToday ? (CFG.todayLabel||"today")
-      : (range==="week"?"current week":range==="month"?"current month":"rolling 30");
+    $("cfp-hero-range").textContent = rangeBadge(range);
     $("cfp-hero-money").textContent = money(m.total_pay || 0);
 
     // hero sub
@@ -169,7 +209,7 @@
       $("cfp-hg-l3").textContent = "Shifts";
       $("cfp-hg-tip-pct").textContent = String(m.shifts||0);
     }
-    var svc = (SERVICE && SERVICE[range]) || {};
+    var svc = serviceForRange(range);
 
     // earnings
     $("cfp-earn-scope").textContent = isToday ? "daily" : "range";

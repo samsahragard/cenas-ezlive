@@ -85,7 +85,7 @@ def test_today_tab_real_wiring_and_no_demo(app_emp):
     assert "/employee/my-performance" in html
     # The V2 hero + the four ranges are present; numbers hydrate client-side.
     assert "cfp-hero-money" in html
-    for rng in ('today', 'week', 'month', 'last30'):
+    for rng in ('today', 'current_week', 'last_week', 'current_month', 'last_month'):
         assert f'data-range="{rng}"' in html
     # Clickable hero cards target the on-page sections.
     assert 'href="#cfp-earnings"' in html
@@ -103,10 +103,19 @@ def test_today_range_param_selects_tab(app_emp):
     app, eid = app_emp
     c = app.test_client()
     _login(c, eid)
-    html = c.get("/employee/dashboard?range=week").get_data(as_text=True)
-    # The week tab is pre-selected server-side (client hydrates the same payload).
-    assert 'data-range="week"' in html
+    html = c.get("/employee/dashboard?range=current_week").get_data(as_text=True)
+    # The current-week tab is pre-selected server-side (client hydrates the same payload).
+    assert 'data-range="current_week"' in html
     assert 'aria-selected="true"' in html
+
+
+def test_today_legacy_week_range_aliases_to_current_week(app_emp):
+    app, eid = app_emp
+    c = app.test_client()
+    _login(c, eid)
+    html = c.get("/employee/dashboard?range=week").get_data(as_text=True)
+    assert 'data-range="current_week"' in html
+    assert 'class="cfp-seg-btn is-on"' in html
 
 
 def test_tables_tab_real_wiring_and_no_demo(app_emp):
@@ -136,6 +145,8 @@ def test_shifts_tab_renders_and_no_demo(app_emp):
     _assert_shell(html)
     _assert_no_demo(html)
     assert 'id="cf-timeoff"' in html
+    assert 'href="/employee/roster"' in html
+    assert "Roster" in html
 
 
 def test_inbox_tab_renders_and_no_demo(app_emp):

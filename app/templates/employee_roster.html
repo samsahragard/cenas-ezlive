@@ -1,14 +1,14 @@
 {% extends "employee_console_base.html" %}
-{% set active_tab = 'today' %}
+{% set active_tab = 'shifts' %}
 {% block title %}Roster &middot; Cenas Floor{% endblock %}
 
 {% block employee_hero %}
-<div class="cfp-segment" role="tablist" aria-label="Performance range">
-  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard">Today</a>
-  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=week">Week</a>
-  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=month">Month</a>
-  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=last30">Last 30</a>
-  <a class="cfp-seg-link is-on" role="tab" aria-selected="true" href="/employee/roster">Roster</a>
+<div class="cf-eyebrow">Your schedule</div>
+<div class="cf-seg cf-schedule-seg" role="tablist" aria-label="Schedule section">
+  <a class="cf-seg-btn is-on" role="tab" aria-selected="true" href="/employee/roster">Roster</a>
+  <a class="cf-seg-btn" role="tab" aria-selected="false" href="/employee/my-schedule?view=shifts">Shifts</a>
+  <a class="cf-seg-btn" role="tab" aria-selected="false" href="/employee/my-schedule?view=timeoff">Time off</a>
+  <a class="cf-seg-btn" role="tab" aria-selected="false" href="/employee/my-schedule?view=market">Market</a>
 </div>
 {% endblock %}
 

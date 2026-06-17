@@ -13,7 +13,17 @@
 
 {% block employee_hero %}
 <div class="cf-eyebrow">Your schedule</div>
-{{ segmented('schedule-section', [('shifts', 'My shifts'), ('timeoff', 'Time off'), ('market', 'Market')], active_section, 'Schedule section') }}
+<div class="cf-seg cf-schedule-seg" role="tablist" aria-label="Schedule section">
+  <a class="cf-seg-btn" role="tab" aria-selected="false" href="/employee/roster">Roster</a>
+  {% for value, label in [('shifts', 'Shifts'), ('timeoff', 'Time off'), ('market', 'Market')] %}
+    <button class="cf-seg-btn{% if active_section == value %} is-on{% endif %}"
+            role="tab"
+            type="button"
+            aria-selected="{{ 'true' if active_section == value else 'false' }}"
+            data-seg="schedule-section"
+            data-value="{{ value }}">{{ label }}</button>
+  {% endfor %}
+</div>
 {% endblock %}
 
 {% block employee_content %}

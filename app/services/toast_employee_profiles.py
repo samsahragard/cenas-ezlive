@@ -248,6 +248,7 @@ def reconcile_toast_employee_profiles(only_store: str | None = None, *, client=N
     callers can log or surface the returned ``errors`` list.
     """
     from app.models import CenaToastLink, Employee
+    from app.services.toast_identity import set_employee_toast_identity
 
     store_filter = _store_key(only_store)
     owns_db = db is None
@@ -301,6 +302,7 @@ def reconcile_toast_employee_profiles(only_store: str | None = None, *, client=N
                     continue
                 result["seen"] += 1
                 summary["seen"] += 1
+                toast_name = _toast_name(row)
                 if toast_id in ignored_toast:
                     result["skipped"] += 1
                     summary["skipped"] += 1
@@ -310,11 +312,17 @@ def reconcile_toast_employee_profiles(only_store: str | None = None, *, client=N
                                      CenaToastLink.toast_id == toast_id)
                              .first())
                 if already is not None:
+                    emp = db.get(Employee, already.cena_employee_id)
+                    if emp is not None and not (emp.toast_employee_guid or "").strip():
+                        set_employee_toast_identity(emp, toast_id, toast_name)
+                        try:
+                            db.commit()
+                        except Exception:
+                            db.rollback()
                     result["skipped"] += 1
                     summary["skipped"] += 1
                     continue
 
-                toast_name = _toast_name(row)
                 phone = _toast_phone(row)
                 email = _toast_email(row)
                 try:
@@ -342,6 +350,7 @@ def reconcile_toast_employee_profiles(only_store: str | None = None, *, client=N
                         created = True
 
                     assigned = _ensure_store_assignment(db, int(employee.id), store)
+                    set_employee_toast_identity(employee, toast_id, toast_name)
                     db.add(CenaToastLink(
                         cena_employee_id=int(employee.id),
                         store_key=store,

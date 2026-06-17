@@ -1168,74 +1168,74 @@ class ToastWebhookStore:
             return 0
         src = sqlite3.connect(app_db_path)
         src.row_factory = sqlite3.Row
-        
-        emp_stores = {}
+        items: list[tuple[sqlite3.Row, str]] = []
         try:
-            link_rows = src.execute("SELECT cena_employee_id, store_key FROM cena_toast_link").fetchall()
-            for row in link_rows:
-                c_id = row["cena_employee_id"]
-                s_key = row["store_key"]
-                if c_id not in emp_stores:
-                    emp_stores[c_id] = []
-                emp_stores[c_id].append(s_key)
-        except sqlite3.Error:
-            pass
-
-        try:
-            rows = src.execute(
-                """
-                SELECT id, toast_employee_guid
-                FROM employees
-                WHERE toast_employee_guid IS NOT NULL AND TRIM(toast_employee_guid) <> ''
-                """
-            ).fetchall()
-        except sqlite3.Error:
-            rows = []
-            
-        count = 0
-        if not rows:
             try:
-                rows_fallback = src.execute(
+                rows = src.execute(
                     """
-                    SELECT cena_employee_id as id, toast_id as toast_employee_guid
-                    FROM cena_toast_link
-                    WHERE toast_id IS NOT NULL AND TRIM(toast_id) <> ''
+                    SELECT e.id AS cena_employee_id,
+                           esa.store_key AS store_key,
+                           e.toast_employee_guid AS toast_id
+                    FROM employees e
+                    JOIN employee_store_assignments esa
+                      ON esa.employee_id = e.id
+                    WHERE e.toast_employee_guid IS NOT NULL
+                      AND TRIM(e.toast_employee_guid) <> ''
+                      AND esa.store_key IS NOT NULL
+                      AND TRIM(esa.store_key) <> ''
                     """
                 ).fetchall()
-                for row in rows_fallback:
-                    cena_id = row["id"]
-                    t_id = row["toast_employee_guid"]
-                    stores = emp_stores.get(cena_id, ["tomball", "copperfield"])
-                    for s_key in stores:
-                        if self._upsert_identity(
-                            conn,
-                            store_key=s_key,
-                            toast_employee_guid=t_id,
-                            cena_employee_id=cena_id,
-                            source="cena_toast_link",
-                            verified=True,
-                            confidence=1.0,
-                        ):
-                            count += 1
+                items.extend((row, "app_employee") for row in rows)
             except sqlite3.Error:
                 pass
-        else:
-            for row in rows:
-                cena_id = row["id"]
-                t_id = row["toast_employee_guid"]
-                stores = emp_stores.get(cena_id, ["tomball", "copperfield"])
-                for s_key in stores:
-                    if self._upsert_identity(
-                        conn,
-                        store_key=s_key,
-                        toast_employee_guid=t_id,
-                        cena_employee_id=cena_id,
-                        source="employees_table",
-                        verified=True,
-                        confidence=1.0,
-                    ):
-                        count += 1
-        src.close()
+
+            try:
+                # Legacy fallback for profiles that have not been audited into
+                # employees.toast_employee_guid yet. If the new columns do not
+                # exist (older DB), this query falls through to the simpler
+                # legacy-only query below.
+                legacy = src.execute(
+                    """
+                    SELECT ctl.cena_employee_id AS cena_employee_id,
+                           ctl.store_key AS store_key,
+                           ctl.toast_id AS toast_id
+                    FROM cena_toast_link ctl
+                    LEFT JOIN employees e ON e.id = ctl.cena_employee_id
+                    WHERE ctl.toast_id IS NOT NULL AND TRIM(ctl.toast_id) <> ''
+                      AND (
+                        e.id IS NULL
+                        OR e.toast_employee_guid IS NULL
+                        OR TRIM(e.toast_employee_guid) = ''
+                      )
+                    """
+                ).fetchall()
+            except sqlite3.Error:
+                try:
+                    legacy = src.execute(
+                        """
+                        SELECT cena_employee_id, store_key, toast_id
+                        FROM cena_toast_link
+                        WHERE toast_id IS NOT NULL AND TRIM(toast_id) <> ''
+                        """
+                    ).fetchall()
+                except sqlite3.Error:
+                    legacy = []
+            items.extend((row, "cena_toast_link") for row in legacy)
+        finally:
+            src.close()
+
+        count = 0
+        for row, source in items:
+            if self._upsert_identity(
+                conn,
+                store_key=row["store_key"],
+                toast_employee_guid=row["toast_id"],
+                cena_employee_id=row["cena_employee_id"],
+                source=source,
+                verified=True,
+                confidence=1.0,
+            ):
+                count += 1
         return count
 
 

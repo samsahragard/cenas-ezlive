@@ -32,7 +32,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.db import SessionLocal
 from app.models import Employee, EmployeeSetupToken
 from app.web.employee_auth import (_establish_employee_session,
-                                   _find_employee_by_phone, _post_login_response,
+                                   _find_employee_by_phone,
+                                   _management_employee_json_response,
+                                   _post_login_response,
                                    employee_auth)
 
 log = logging.getLogger(__name__)
@@ -231,6 +233,9 @@ def login_passcode():
             emp.failed_attempts = 0
             emp.lockout_until = None
             db.commit()
+            manager_resp = _management_employee_json_response(db, emp)
+            if manager_resp is not None:
+                return manager_resp
             stores = _establish_employee_session(emp)
             return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
         # 2) RESET-CODE login: a valid manager-issued code (identifier-scoped +
@@ -244,6 +249,9 @@ def login_passcode():
             emp_c.session_version = (emp_c.session_version or 0) + 1
             row.used = True   # consume the shared single-use token -> emailed link now dead
             db.commit()
+            manager_resp = _management_employee_json_response(db, emp_c)
+            if manager_resp is not None:
+                return manager_resp
             stores = _establish_employee_session(emp_c)
             return _post_login_response(stores)
         # 3) Neither a matching passcode nor a valid code -> count the failure.
@@ -325,6 +333,9 @@ def _apply_passcode(db, emp, row, *, passcode, phone, full_name):
         db.rollback()
         return jsonify({"ok": False,
                         "error": "Could not save - that phone may already be on file."}), 409
+    manager_resp = _management_employee_json_response(db, emp)
+    if manager_resp is not None:
+        return manager_resp
     stores = _establish_employee_session(emp)
     return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
 

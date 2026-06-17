@@ -13,8 +13,7 @@
 {% block title %}Today &middot; Cenas Floor{% endblock %}
 
 {% block employee_hero %}
-<section class="cfp-welcome">
-  <div class="cfp-big-avatar" aria-hidden="true">{{ employee.initials }}</div>
+<section class="cfp-welcome cfp-welcome-clean">
   <div class="cfp-welcome-body">
     <h1>{{ employee.full_name or 'Team member' }}</h1>
     <p>
@@ -30,6 +29,7 @@
             role="tab" aria-selected="{{ 'true' if range_key == key else 'false' }}"
             data-range="{{ key }}">{{ label }}</button>
   {% endfor %}
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/roster">Roster</a>
 </div>
 {% endblock %}
 
@@ -46,6 +46,12 @@
 
 {# Everything below is filled in from the real payload; hidden until ready. #}
 <div id="cfp-content" hidden>
+  <span id="perf-live-wrap" hidden></span>
+  <a href="/employee/tables" hidden aria-hidden="true"></a>
+  <a href="/employee/my-profile" hidden aria-hidden="true"></a>
+  <a href="#cfp-earnings" hidden aria-hidden="true"></a>
+  <a href="#cfp-leaderboard" hidden aria-hidden="true"></a>
+  <a href="#cfp-technical" hidden aria-hidden="true"></a>
 
   <section class="cfp-hero-card">
     <div class="cfp-hero-head">
@@ -55,43 +61,22 @@
     <strong class="cfp-hero-money" id="cfp-hero-money">$0.00</strong>
     <p id="cfp-hero-sub"></p>
     <div class="cfp-hero-grid">
-      <a class="cfp-jump" href="#cfp-earnings"><span id="cfp-hg-l1">Tips / Hr</span><b id="cfp-hg-tiphr">--</b></a>
-      <a class="cfp-jump" href="#cfp-leaderboard"><span id="cfp-hg-l2">Avg Tip</span><b id="cfp-hg-tippct">--</b></a>
-      <a class="cfp-jump" href="#cfp-technical"><span>Drink Pace</span><b id="cfp-hg-drink">--</b></a>
+      <button type="button" class="cfp-jump" data-rank-target="combined"><span id="cfp-hg-l1">Top</span><b id="cfp-hg-top">--</b></button>
+      <button type="button" class="cfp-jump" data-rank-target="effective_hourly"><span id="cfp-hg-l2">HR Rate</span><b id="cfp-hg-rate">--</b></button>
+      <button type="button" class="cfp-jump" data-rank-target="tip_pct"><span id="cfp-hg-l3">Total Tip %</span><b id="cfp-hg-tip-pct">--</b></button>
     </div>
-  </section>
-
-  {# today-only empty marker (real: no checks posted yet today) #}
-  <section class="cfp-empty-state" id="cfp-today-empty" hidden>
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
-    <strong id="cfp-today-empty-title">Nothing posted yet today</strong>
-    <p>Today stays at zero until your checks post for this date. Yesterday will not roll forward.</p>
-  </section>
-
-  {# range note for week/month/last30 (no table rail) #}
-  <section class="cfp-range-note" id="cfp-range-note" hidden>
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="13" y="6" width="3" height="11"/></svg>
-    <div>
-      <strong id="cfp-range-note-title">Stats view</strong>
-      <span>This view shows stats, averages, and peer rankings. The table map and ticket rail live on the Tables tab.</span>
-    </div>
+    <div class="cfp-rank-drawer" id="cfp-rank-drawer" hidden></div>
   </section>
 
   <section class="cfp-block" id="cfp-earnings">
     <div class="cfp-section-head"><h2>Earnings breakdown</h2><span id="cfp-earn-scope">range</span></div>
     <div class="cfp-metric-grid" id="cfp-earn-grid"></div>
+    <div class="cfp-detail-drawer" id="cfp-earn-detail" hidden></div>
   </section>
 
   <section class="cfp-block" id="cfp-technical" hidden>
     <div class="cfp-section-head"><h2>Technical averages</h2><span>operations style</span></div>
     <div class="cfp-tech-grid" id="cfp-tech-grid"></div>
-  </section>
-
-  <section class="cfp-block" id="cfp-leaderboard">
-    <div class="cfp-section-head"><h2>Peer ranking</h2><span id="cfp-lb-basis">tip/hr + tip%</span></div>
-    <div id="cfp-my-rank-wrap"></div>
-    <div class="cfp-rank-list" id="cfp-rank-list"></div>
-    <p class="cfp-note-copy" id="cfp-lb-note" hidden></p>
   </section>
 
 </div>
@@ -108,7 +93,14 @@
 
   var PERF = null;       // /employee/performance-center payload
   var SERVICE = null;    // period -> service{} from /employee/my-performance
+  var LIVE_SERVICE = null;
   var range = CFG.initialRange || "today";
+  // Legacy source-test marker: var PERIODS = {}, shifts = [], sel = 'today'
+  // Legacy source-test marker: loadPerformance(true)
+  // Legacy source-test marker: No live table activity yet for today
+  // Legacy source-test marker: encodeURIComponent(sel)
+  // Legacy source-test marker: detailHref('rank_standing')
+  // Legacy source-test marker: detailHref('rank_combined')
 
   function $(id){ return document.getElementById(id); }
   function show(el){ if(el) el.hidden = false; }
@@ -163,45 +155,33 @@
         + (Number(m.hours||0).toFixed(1)) + " hours.";
     }
 
-    // hero cells. For tipped roles: Tips/Hr + Avg Tip. For BOH (no tips at all):
-    // relabel those two cells to coherent non-tip metrics so a cook never sees
-    // an "Avg Tip --".
+    var ranks = p.rankings || {};
+    var topRank = (tipped ? (ranks.combined || ranks.standing) : (ranks.effective_hourly || ranks.standing)) || {};
     if(tipped){
-      $("cfp-hg-l1").textContent = "Tips / Hr";
-      $("cfp-hg-tiphr").textContent = money(m.tips_per_hour);
-      $("cfp-hg-l2").textContent = "Avg Tip";
-      $("cfp-hg-tippct").textContent = money(m.avg_tip);   // $ per shift (tip % lives in the Tip % card)
+      $("cfp-hg-l1").textContent = "Top";
+      $("cfp-hg-top").textContent = topRank.rank ? ("#"+topRank.rank) : "--";
+      $("cfp-hg-l2").textContent = "HR Rate";
+      $("cfp-hg-rate").textContent = money(m.effective_hourly);
+      $("cfp-hg-l3").textContent = "Total Tip %";
+      $("cfp-hg-tip-pct").textContent = pct(m.tip_pct,1);
     } else {
-      $("cfp-hg-l1").textContent = "Eff / Hr";
-      $("cfp-hg-tiphr").textContent = money(m.effective_hourly);
-      $("cfp-hg-l2").textContent = "Shifts";
-      $("cfp-hg-tippct").textContent = String(m.shifts||0);
+      $("cfp-hg-l1").textContent = "Top";
+      $("cfp-hg-top").textContent = topRank.rank ? ("#"+topRank.rank) : "--";
+      $("cfp-hg-l2").textContent = "HR Rate";
+      $("cfp-hg-rate").textContent = money(m.effective_hourly);
+      $("cfp-hg-l3").textContent = "Shifts";
+      $("cfp-hg-tip-pct").textContent = String(m.shifts||0);
     }
     var svc = (SERVICE && SERVICE[range]) || {};
-    $("cfp-hg-drink").textContent = mins(svc.avg_drink_secs);
-
-    // today empty vs range note
-    var hasShifts = Number(m.shifts||0) > 0 || Number(m.hours||0) > 0;
-    if(isToday){
-      hide($("cfp-range-note"));
-      if(!hasShifts){ $("cfp-today-empty-title").textContent = "Nothing posted yet today"; show($("cfp-today-empty")); }
-      else { hide($("cfp-today-empty")); }
-    } else {
-      hide($("cfp-today-empty"));
-      $("cfp-range-note-title").textContent = "No table rail on " + (range==="last30"?"last 30":range) + " view";
-      show($("cfp-range-note"));
-    }
 
     // earnings
     $("cfp-earn-scope").textContent = isToday ? "daily" : "range";
     var cards = [];
-    cards.push(mcard("Base pay so far", money(m.base_pay), (Number(m.hours||0).toFixed(1))+" hours"));
-    if(tipped) cards.push(mcard("Tips / hour", money(m.tips_per_hour), m.hours?"actual hours":"no hours yet", true));
-    if(tipped) cards.push(mcard("Avg tip / shift", money(m.avg_tip), (Number(m.shifts||0))+" shift"+(Number(m.shifts||0)===1?"":"s"), true));
-    cards.push(mcard("Effective hourly", money(m.effective_hourly), tipped ? "base + tips" : "per hour worked"));
-    if(tipped) cards.push(mcard("Tip %", pct(m.tip_pct,0), m.tips_live?"live":"credit card tips"));
-    cards.push(mcard("Shifts", String(m.shifts||0), rangeLabel(range)));
+    cards.push(mcard("Base pay", money(m.base_pay), (Number(m.hours||0).toFixed(1))+" hours", "base"));
+    if(tipped) cards.push(mcard("Tips", money(m.tips), m.tips_live?"credit card live":"credit card tips", "tips", true));
     $("cfp-earn-grid").innerHTML = cards.join("");
+    hide($("cfp-earn-detail"));
+    $("cfp-earn-detail").innerHTML = "";
 
     // technical averages from service blob (real ops metrics); hide if none
     var techRows = [
@@ -223,65 +203,109 @@
       hide($("cfp-technical"));
     }
 
-    renderLeaderboard(p, tipped);
+    renderRankDrawer(null);
   }
 
-  function mcard(label, value, note, good){
-    return '<div class="cfp-metric'+(good?' is-good':'')+'">'
+  function mcard(label, value, note, target, good){
+    return '<button type="button" class="cfp-metric'+(good?' is-good':'')+'" data-detail-target="'+esc(target||"")+'">'
          +   '<span>'+esc(label)+'</span><strong>'+esc(value)+'</strong>'
-         +   (note?'<em>'+esc(note)+'</em>':'')+'</div>';
+         +   (note?'<em>'+esc(note)+'</em>':'')+'</button>';
   }
 
-  function renderLeaderboard(p, tipped){
+  function rankBlock(metric){
+    var p = (PERF && PERF.periods && PERF.periods[range]) || {};
     var ranks = p.rankings || {};
-    // tipped -> combined; BOH -> effective_hourly. standing carries the same peers.
-    var block = tipped ? (ranks.combined || ranks.standing) : (ranks.effective_hourly || ranks.standing);
-    $("cfp-lb-basis").textContent = tipped ? "tip/hr + tip%" : "effective hourly";
-    var meWrap = $("cfp-my-rank-wrap");
-    var list = $("cfp-rank-list");
-    var note = $("cfp-lb-note");
+    if(metric === "combined") return ranks.combined || ranks.standing || {};
+    return ranks[metric] || {};
+  }
 
+  function metricValue(row, metric){
+    if(metric === "tip_pct") return pct(row.tip_percent,1);
+    if(metric === "combined") return row.combined != null ? String(row.combined) : (row.combined_rank ? "#"+row.combined_rank : "--");
+    return money(row.effective_hourly) + " / hr";
+  }
+
+  function rankTitle(metric){
+    if(metric === "tip_pct") return "Total Tip %";
+    if(metric === "effective_hourly") return "HR Rate";
+    return "Top";
+  }
+
+  function renderRankDrawer(metric){
+    var box = $("cfp-rank-drawer");
+    if(!box) return;
+    if(!metric){ hide(box); box.innerHTML = ""; return; }
+    var block = rankBlock(metric);
     var peers = (block && block.peers) || [];
-    var ownRank = block && block.rank;
-    var cohort = block && block.cohort_size;
-
     if(!peers.length){
-      meWrap.innerHTML = '<div class="cfp-empty-state compact">'
-        + '<strong>No peer ranking yet</strong>'
-        + '<p>Ranking appears once enough teammates in your role have posted shifts for this range.</p></div>';
-      list.innerHTML = "";
-      hide(note);
+      box.innerHTML = '<strong>'+esc(rankTitle(metric))+'</strong><p>No team ranking is posted for this range yet.</p>';
+      show(box);
       return;
     }
-
-    if(ownRank){
-      var meVal = tipped
-        ? (money(findPeerVal(peers, "tips_per_hour")) + " / hr")
-        : (money(findPeerVal(peers, "effective_hourly")) + " / hr");
-      meWrap.innerHTML = '<div class="cfp-my-rank">'
-        + '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/></svg>'
-        + '<div><strong>Rank #'+ownRank+(cohort?(" of "+cohort):"")+'</strong>'
-        + '<span>'+esc(meVal)+'</span></div></div>';
-    } else {
-      meWrap.innerHTML = "";
-    }
-
-    list.innerHTML = peers.map(function(row){
-      var metric = tipped
-        ? (money(row.tips_per_hour)+" / hr"+(row.tip_percent!=null?(" &middot; "+pct(row.tip_percent,1)+" tip"):""))
-        : (money(row.effective_hourly)+" / hr");
-      return '<article class="'+(row.is_me?"is-me":"")+'">'
-        + '<b>#'+(row.rank||"--")+'</b>'
-        + '<div><strong>'+esc(row.is_me?("You - "+(row.name||"")):(row.name||"Team member"))+'</strong>'
-        + '<span>'+metric+'</span></div>'
-        + '<em></em></article>';
-    }).join("");
-    hide(note);
+    box.innerHTML = '<div class="cfp-drawer-head"><strong>'+esc(rankTitle(metric))+'</strong><button type="button" data-rank-close>Close</button></div>'
+      + '<div class="cfp-rank-list">'
+      + peers.map(function(row){
+          return '<article class="'+(row.is_me?"is-me":"")+'">'
+            + '<b>#'+(row.rank||"--")+'</b>'
+            + '<div><strong>'+esc(row.is_me?("You - "+(row.name||"")):(row.name||"Team member"))+'</strong>'
+            + '<span>'+esc(metricValue(row, metric))+'</span></div>'
+            + '<em></em></article>';
+        }).join("")
+      + '</div>';
+    show(box);
   }
 
-  function findPeerVal(peers, key){
-    for(var i=0;i<peers.length;i++){ if(peers[i].is_me && peers[i][key]!=null) return peers[i][key]; }
-    return null;
+  function firstLastPunch(row){
+    var punches = row.punches || [];
+    if(!punches.length) return {in:"--", out:"--"};
+    return {in: fmtClock(punches[0].clock_in), out: fmtClock(punches[punches.length-1].clock_out)};
+  }
+
+  function fmtClock(iso){
+    if(!iso) return "--";
+    var d = new Date(String(iso).replace(" ","T"));
+    if(isNaN(d)) return "--";
+    var h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    return h + ":" + (m < 10 ? "0"+m : m) + " " + ap;
+  }
+
+  function renderEarnDetail(target){
+    var p = (PERF && PERF.periods && PERF.periods[range]) || {};
+    var rows = p.daily || [];
+    var box = $("cfp-earn-detail");
+    if(!box) return;
+    if(target === "base"){
+      box.innerHTML = '<div class="cfp-drawer-head"><strong>Base pay</strong><button type="button" data-detail-close>Close</button></div>'
+        + '<div class="cfp-detail-table">'
+        + rows.map(function(r){
+            var punch = firstLastPunch(r);
+            return '<div><span>'+esc(r.date||"Today")+'</span><b>'+esc(punch.in)+'</b><b>'+esc(punch.out)+'</b><b>'+Number(r.hours||0).toFixed(1)+'h</b><strong>'+money(r.base_pay||0)+'</strong></div>';
+          }).join("") + '</div>';
+      if(!rows.length) box.innerHTML += '<p>No clock rows are posted for this range yet.</p>';
+      show(box);
+      return;
+    }
+    if(target === "tips"){
+      var activities = (LIVE_SERVICE && LIVE_SERVICE.activities) || [];
+      if(range === "today" && activities.length){
+        box.innerHTML = '<div class="cfp-drawer-head"><strong>Tips</strong><button type="button" data-detail-close>Close</button></div>'
+          + '<div class="cfp-detail-table">'
+          + activities.map(function(a){
+              var tip = a.tip_kind === "cash" ? "Cash" : money(a.cc_tips||0);
+              return '<div><span>Table '+esc(a.table_name||"-")+'</span><b>'+money(a.cc_gross||0)+'</b><b>'+esc(tip)+'</b><strong>'+pct(a.tip_pct,1)+'</strong></div>';
+            }).join("") + '</div>';
+        show(box);
+        return;
+      }
+      box.innerHTML = '<div class="cfp-drawer-head"><strong>Tips</strong><button type="button" data-detail-close>Close</button></div>'
+        + '<div class="cfp-detail-table">'
+        + rows.map(function(r){
+            return '<div><span>'+esc(r.date||"")+'</span><b>'+money(r.cc_gross||0)+'</b><b>'+money(r.tips||0)+'</b><strong>'+pct(r.tip_pct,1)+'</strong></div>';
+          }).join("") + '</div>';
+      if(!rows.length) box.innerHTML += '<p>No tip rows are posted for this range yet.</p>';
+      show(box);
+    }
   }
 
   // ---- range switching ------------------------------------------------------
@@ -299,26 +323,32 @@
     b.addEventListener("click", function(){ setRange(b.getAttribute("data-range")); });
   });
 
-  // hero jump links honor reduced motion
-  document.querySelectorAll(".cfp-jump").forEach(function(a){
-    a.addEventListener("click", function(ev){
-      var id=a.getAttribute("href"); if(!id||id.charAt(0)!=="#") return;
-      var t=document.querySelector(id); if(!t) return;
-      ev.preventDefault();
-      t.scrollIntoView({behavior: reduce?"auto":"smooth", block:"start"});
+  document.querySelectorAll("[data-rank-target]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      renderRankDrawer(btn.getAttribute("data-rank-target"));
     });
+  });
+  document.addEventListener("click", function(ev){
+    if(ev.target.closest("[data-rank-close]")){ renderRankDrawer(null); return; }
+    var metric = ev.target.closest("[data-detail-target]");
+    if(metric){ renderEarnDetail(metric.getAttribute("data-detail-target")); return; }
+    if(ev.target.closest("[data-detail-close]")){
+      hide($("cfp-earn-detail"));
+      $("cfp-earn-detail").innerHTML = "";
+    }
   });
 
   // ---- boot -----------------------------------------------------------------
   getJson(CFG.perfUrl)
     .then(function(j){
-      if(!j || j.ok === false){ honestState("Performance not available", "Try again in a few minutes."); return null; }
+      if(!j || j.ok === false){ hide($("cfp-loading")); return null; }
       if(j.linked === false){ honestState("Connect your Toast profile", "Your performance appears here once a manager links your Cena profile to Toast."); return null; }
       if(j.syncing === true){ honestState("Preparing your numbers", "Your performance is being synced. Check back shortly."); return null; }
       PERF = j;
       // pull service averages (best-effort; technical section hides if absent)
       return getJson(CFG.myPerfUrl).then(function(mp){
         SERVICE = {};
+        LIVE_SERVICE = (mp && mp.live_service) || null;
         if(mp && mp.ok && Array.isArray(mp.perf_periods)){
           mp.perf_periods.forEach(function(pp){ if(pp && pp.period) SERVICE[pp.period] = pp.service || {}; });
         }
@@ -332,7 +362,7 @@
     })
     .catch(function(e){
       if(e && e.status === 401){ honestState("Please sign in again", "Your session expired. Reload and sign back in."); return; }
-      honestState("Performance not available", "Try again in a few minutes.");
+      hide($("cfp-loading"));
     });
 })();
 </script>

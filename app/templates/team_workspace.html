@@ -242,6 +242,8 @@
   .tws-conf.high { background: rgba(96,176,96,.18); color: #8fd28f; }
   .tws-conf.low { background: rgba(217,164,54,.18); color: var(--tws-gold); }
   .tws-conf.toastonly { background: rgba(255,255,255,.07); color: var(--tws-cream-meta); }
+  .tws-conf.warn { background: rgba(255,122,122,.12); color: #ffb2a9; }
+  .tws-link-warn { display: block; margin-top: 5px; color: #ffb2a9; font-size: 11px; line-height: 1.3; }
   .tws-link-btn { font-family: inherit; font-size: 11px; font-weight: 600; color: var(--tws-cream); background: var(--tws-card-hi); border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 3px 10px; margin-left: 8px; cursor: pointer; vertical-align: middle; }
   .tws-link-btn:hover { border-color: var(--tws-gold); }
   .tws-link-btn:disabled { opacity: .55; cursor: default; }
@@ -951,6 +953,9 @@
     });
   }
   var _LINK_HEAD = '<div class="tws-link-head"><span>Cena</span><span>Toast</span><span>Verify</span></div>';
+  function _nameWarn(w) {
+    return w ? '<span class="tws-conf warn">name</span><span class="tws-link-warn">' + esc(w) + '</span>' : '';
+  }
   // Build ONE store's panel: 3-col table (Cena | Toast | Action) split into "batches" --
   // Matched (verify/linked), No-Toast-match (pick a Toast), Toast-only (pick a person).
   function _linkStorePanel(s, res) {
@@ -976,7 +981,7 @@
           '<div class="tws-link-cena"><div class="nm">' + esc(m.cena_name || "") + '</div><div class="ph">' + esc(m.cena_phone || "No phone") + '</div></div>' +
           '<div class="tws-link-toast">' + (IS_PARTNER
             ? '<select class="tws-link-select">' + _toastOpts(ut, m.toast_id || "", current) + '</select>'
-            : '<span class="nm">' + esc(m.toast_name || "") + '</span>') + '</div>' +
+            : '<span class="nm">' + esc(m.toast_name || "") + '</span>') + _nameWarn(m.name_warning) + '</div>' +
           '<div class="tws-link-act">' + (IS_PARTNER
             ? '<button class="tws-link-btn" data-link-act="change-link" type="button">Save</button><button class="tws-link-btn danger" data-link-act="unlink" type="button">Unlink</button>'
             : '<span class="tws-link-tag">Linked &#10003;</span>') + '<span class="tws-link-caret">&#9662;</span></div>' +

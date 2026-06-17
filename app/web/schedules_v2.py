@@ -29,7 +29,6 @@ from flask import abort, g, jsonify, request
 from app.db import SessionLocal
 from app.models import (
     CANONICAL_POSITIONS,
-    CenaToastLink,
     Employee,
     EmployeePosition,
     EmployeeStoreAssignment,
@@ -41,6 +40,7 @@ from app.models import (
     User,
 )
 from app.services import scheduling_alarms, scheduling_availability, scheduling_timeoff
+from app.services.toast_identity import linked_employee_store_keys
 from app.web.permissions import current_user_id, require_level
 from app.web.store_routes import store_bp
 
@@ -795,9 +795,10 @@ def sv2_board():
         # per-store position here.
         emp_ids = [a.employee_id for a in
                    db.query(EmployeeStoreAssignment).filter_by(store_key=store).all()]
-        linked_emp_ids = {r.cena_employee_id for r in
-                          db.query(CenaToastLink.cena_employee_id)
-                            .filter_by(store_key=store).all()}
+        linked_emp_ids = {
+            emp_id for (emp_id, linked_store) in linked_employee_store_keys(db)
+            if linked_store == store
+        }
         roster = []
         eligible_emp_ids: set[int] = set()
         if emp_ids:

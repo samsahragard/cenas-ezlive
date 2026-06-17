@@ -666,6 +666,43 @@ def plan_dry_run(manifest, history, roots, runlog):
 
 
 # ---------------------------------------------------------------------------
+# KB tree push (kb.json) - dedicated channel
+# ---------------------------------------------------------------------------
+# kb.json lives BESIDE this worker (SCRIPT_DIR), NOT under an allow root, so the
+# file-manifest sync never touches it. This pushes it to the cloud node's
+# /sync/kb so the cloud vault map stays in step with local. Skips when the
+# tree is unchanged since the last successful push (sha recorded locally).
+
+def push_kb(base_url, token, runlog):
+    kb_path = SCRIPT_DIR / "kb.json"
+    if not kb_path.is_file():
+        return
+    try:
+        data = kb_path.read_bytes()
+    except OSError as exc:
+        runlog.log("error", "kb.json", "read failed: %s" % exc)
+        return
+    sha = hashlib.sha256(data).hexdigest()
+    state = SCRIPT_DIR / ".kb_cloud_sha"
+    try:
+        last = state.read_text(encoding="ascii").strip() if state.exists() else ""
+    except OSError:
+        last = ""
+    if last == sha:
+        return  # cloud already holds this exact kb.json
+    status, body = http_call(base_url, token, "POST", "/sync/kb",
+                             body=data, headers={"X-Sha256": sha})
+    if status == 200:
+        try:
+            state.write_text(sha, encoding="ascii")
+        except OSError:
+            pass
+        runlog.log("kb-push", "kb.json", "ok (%d bytes)" % len(data))
+    else:
+        runlog.log("error", "kb.json", "cloud kb push failed: HTTP %s" % status)
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -732,6 +769,7 @@ def main(argv):
                skip_normed, runlog, db_updates)
     push_tombstones(base_url, token, manifest, history, roots, runlog,
                     db_updates)
+    push_kb(base_url, token, runlog)
     write_end_state(con, manifest, db_updates)
 
     aprint("pushed %d, pulled %d, tombstoned %d, skipped %d junctions / "

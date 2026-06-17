@@ -1,0 +1,102 @@
+{% extends "employee_console_base.html" %}
+{% set active_tab = 'today' %}
+{% block title %}Roster &middot; Cenas Floor{% endblock %}
+
+{% block employee_hero %}
+<div class="cfp-segment" role="tablist" aria-label="Performance range">
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard">Today</a>
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=week">Week</a>
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=month">Month</a>
+  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/dashboard?range=last30">Last 30</a>
+  <a class="cfp-seg-link is-on" role="tab" aria-selected="true" href="/employee/roster">Roster</a>
+</div>
+{% endblock %}
+
+{% block employee_content %}
+<div id="roster-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading roster...</div>
+<div id="roster-root" hidden></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="roster-config">{{ config | tojson }}</script>
+<script>
+(function(){
+  "use strict";
+  var CFG = JSON.parse(document.getElementById("roster-config").textContent);
+  var days = [];
+  var selectedDay = 0;
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+  function person(row){
+    var name = esc(row.name || "Team member");
+    var meta = row.time ? esc(row.time) : esc(row.position || "");
+    if(row.messageable && row.employee_id){
+      return '<a class="ro-person" href="/employee/messages?peer='+encodeURIComponent(row.employee_id)+'&name='+encodeURIComponent(row.name||"")+'"><strong>'+name+'</strong><span>'+meta+'</span></a>';
+    }
+    return '<div class="ro-person is-muted"><strong>'+name+'</strong><span>'+meta+'</span></div>';
+  }
+  function dayTab(day, idx){
+    var label = esc(day.label || day.short_label || "");
+    return '<button type="button" class="ro-day-tab'+(idx===selectedDay?' is-on':'')+'" role="tab" aria-selected="'+(idx===selectedDay?'true':'false')+'" data-ro-day="'+idx+'">'
+      + '<strong>'+label+'</strong>'
+      + '<span>'+esc(day.short_label || day.date || "")+'</span>'
+      + '</button>';
+  }
+  function group(pos, idx){
+    var scheduled = (pos.scheduled || []).map(person).join("");
+    var off = (pos.not_scheduled || []).map(person).join("");
+    var workingCount = (pos.scheduled || []).length;
+    var offCount = (pos.not_scheduled || []).length;
+    return '<section class="ro-pos" data-ro-pos="'+idx+'">'
+      + '<button type="button" class="ro-pos-head" aria-expanded="false" data-ro-toggle>'
+      + '<span class="ro-pos-main"><strong>'+esc(pos.position)+'</strong><em>'+esc(pos.store||"")+'</em></span>'
+      + '<span class="ro-counts"><b>'+workingCount+' working</b><b>'+offCount+' off</b><i class="ro-chevron" aria-hidden="true">v</i></span>'
+      + '</button>'
+      + '<div class="ro-pos-body" hidden>'
+      + '<div class="ro-sub"><b>Working</b>'+(scheduled || '<em>None</em>')+'</div>'
+      + '<div class="ro-sub"><b>Not scheduled</b>'+(off || '<em>None</em>')+'</div>'
+      + '</div>'
+      + '</section>';
+  }
+  function dayBlock(day){
+    return '<article class="ro-day">'
+      + '<h2>'+esc(day.label)+'<span>'+esc(day.date)+'</span></h2>'
+      + ((day.positions||[]).map(group).join("") || '<div class="ro-empty">No roster posted.</div>')
+      + '</article>';
+  }
+  function render(){
+    var root = $("roster-root");
+    var panel = days.length ? dayBlock(days[selectedDay] || days[0]) : '<div class="ro-empty">No roster posted.</div>';
+    root.innerHTML = '<div class="ro-day-tabs" role="tablist" aria-label="Roster days">'+days.map(dayTab).join("")+'</div>'
+      + '<div class="ro-week">'+panel+'</div>';
+    root.hidden = false;
+  }
+  fetch(CFG.dataUrl, {credentials:"same-origin", headers:{Accept:"application/json"}})
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      $("roster-loading").hidden = true;
+      days = (j && j.week) || [];
+      selectedDay = 0;
+      render();
+    })
+    .catch(function(){ $("roster-loading").hidden = true; });
+  $("roster-root").addEventListener("click", function(ev){
+    var dayBtn = ev.target.closest("[data-ro-day]");
+    if(dayBtn){
+      selectedDay = Number(dayBtn.getAttribute("data-ro-day")) || 0;
+      render();
+      return;
+    }
+    var toggle = ev.target.closest("[data-ro-toggle]");
+    if(toggle){
+      var pos = toggle.closest(".ro-pos");
+      var body = pos ? pos.querySelector(".ro-pos-body") : null;
+      var open = !(pos && pos.classList.contains("is-open"));
+      if(pos) pos.classList.toggle("is-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if(body) body.hidden = !open;
+    }
+  });
+})();
+</script>
+{% endblock %}

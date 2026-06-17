@@ -31,6 +31,7 @@ from app.web.ezcater_live_routes import ezc_live as ezc_live_bp
 from app.web.ezcater_tracking_watch_routes import ezcater_tracking_watch_bp
 from app.web.assistant_routes import assistant_bp
 from app.web.team_routes import team_bp
+from app.web.partner_settings import partner_settings_bp
 from app.web.legal_routes import legal as legal_bp
 from app.web.access_request_routes import access_req as access_req_bp
 from app.web.driver_system import driver_system_bp
@@ -170,6 +171,7 @@ def create_app():
     app.register_blueprint(ezcater_tracking_watch_bp)
     app.register_blueprint(assistant_bp)
     app.register_blueprint(team_bp)
+    app.register_blueprint(partner_settings_bp)
     app.register_blueprint(profile_lab_bp)
     app.register_blueprint(employee_messages_bp)
     app.register_blueprint(legal_bp)
@@ -413,6 +415,8 @@ def create_app():
                     # Unify LINK (Sam #2261, 2026-05-31): nullable FK -> users.id.
                     ("user_id",         "INTEGER"),
                     ("address",         "VARCHAR(255)"),
+                    # Durable Toast identity (Sam 2026-06-16): verified once by
+                    # a manager, then used for stable sales/labor/tip joins.
                     ("toast_employee_guid", "VARCHAR(64)"),
                     ("toast_employee_name", "VARCHAR(150)"),
                 ]
@@ -422,21 +426,33 @@ def create_app():
                         if col_name not in existing:
                             conn.execute(_sa_text_emp(f"ALTER TABLE employees ADD COLUMN {col_name} {col_def}"))
                             added.append(col_name)
+                    conn.execute(_sa_text_emp(
+                        "CREATE INDEX IF NOT EXISTS ix_employees_toast_employee_guid "
+                        "ON employees (toast_employee_guid)"
+                    ))
                 if added:
                     logging.getLogger(__name__).info(
                         "employees table: backfilled missing columns %s", added)
-                
-                # Backfill newly added employee toast columns
-                try:
-                    from app.db import SessionLocal
-                    from app.services.team_roster import backfill_employee_toast_columns as _bf_toast
-                    db_backfill = SessionLocal()
+                tables = set(insp.get_table_names())
+                cols_after = existing | set(added)
+                if (
+                    "cena_toast_link" in tables
+                    and "toast_employee_guid" in cols_after
+                    and "toast_employee_name" in cols_after
+                ):
                     try:
-                        _bf_toast(db_backfill)
-                    finally:
-                        db_backfill.close()
-                except Exception:
-                    logging.getLogger(__name__).exception("employee toast columns backfill failed (non-fatal)")
+                        from app.services.toast_identity import (
+                            backfill_employee_toast_identity_from_links as _backfill_toast_ids,
+                        )
+                        updated = _backfill_toast_ids(_eng_emp)
+                        if updated:
+                            logging.getLogger(__name__).info(
+                                "employees table: backfilled %d Toast identity row(s)",
+                                updated,
+                            )
+                    except Exception:
+                        logging.getLogger(__name__).exception(
+                            "employees Toast identity backfill failed (non-fatal)")
     except Exception:
         logging.getLogger(__name__).exception("employees column backfill failed (non-fatal)")
 

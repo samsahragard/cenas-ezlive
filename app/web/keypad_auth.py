@@ -120,7 +120,8 @@ def _user_profile_label(u) -> str:
         "gm": "GM",
         "manager": "Manager",
         "foh_manager": "FOH Manager",
-        "km": "KM",
+        "km": "Kitchen Manager",
+        "assistant_km": "Assistant Kitchen Manager",
         "expo": "Expo",
     }
     return labels.get(role, role.replace("_", " ").replace("-", " ").title() or "Manager")
@@ -520,7 +521,8 @@ def _handle_view_login(code: str, nxt: str):
         return jsonify({"ok": True, "next": dest})
 
     from app.models import Employee
-    from app.web.employee_auth import _establish_employee_session
+    from app.web.employee_auth import (_establish_employee_session,
+                                       _management_employee_json_response)
     db = SessionLocal()
     try:
         emp = (db.query(Employee)
@@ -528,17 +530,18 @@ def _handle_view_login(code: str, nxt: str):
                  .first())
         if emp is None:
             return jsonify({"ok": False, "error": "Phone or passcode doesn't match."}), 401
+        manager_resp = _management_employee_json_response(db, emp, nxt=nxt)
+        if manager_resp is not None:
+            log.info("view-login: owner opened employee_id=%s manager profile", emp.id)
+            return manager_resp
         stores = _establish_employee_session(emp)
         log.info("view-login: owner opened employee_id=%s portal", emp.id)
     finally:
         db.close()
 
-    # View-login is a PURE employee view: drop the UNIFY manager-fold that
-    # _establish_employee_session sets for a LINKED employee (Employee.user_id).
-    # Without this, a linked employee (a manager) carries user_id into the
-    # session, so "/" routes to /partner/ and the employee->/partner firewall
-    # 403s it (employee_id present without partner_auth_ok) -- the "Forbidden"
-    # the owner hit. The owner wants the employee's portal, not the manager's.
+    # View-login is a pure employee view only for hourly employees. Managers/KMs
+    # are handled above and opened as manager profiles, so they never render the
+    # employee app under a stale Employee session.
     session.pop("user_id", None)
     session.pop("user_session_version", None)
 
@@ -668,9 +671,7 @@ def login_submit():
             matches a pure Team Roster employee identity.
 
             Employees holding management positions are first repaired/linked to
-            a User profile and opened as that manager. Sam's owner view-login
-            above remains the special door for opening a pure employee view on
-            purpose.
+            a User profile and opened as that manager.
             """
             if not digits:
                 return None
@@ -709,7 +710,7 @@ def login_submit():
                 )
                 if manager_user is None:
                     return None
-                if driver_ok:
+                if driver_profile_available:
                     if requested_profile == "driver":
                         return _finalize_driver_login(db, driver_match, nxt, now)
                     if requested_profile == "user":
@@ -767,11 +768,19 @@ def login_submit():
             and bool(driver_match.passcode_hash)
             and _check(driver_match.passcode_hash, passcode)
         )
+        # A verified manager/KM with a same-phone driver profile should get the
+        # profile picker even if the driver PIN is stale/different. The manager
+        # credential proves the human identity for this phone; picking Driver
+        # then opens that linked driver profile.
+        driver_profile_available = (
+            driver_match is not None
+            and driver_lockout_mins is None
+        )
 
         # When one person has both a manager User and a Driver row, do not
         # guess. Return choices first; the client repeats the same login with
         # profile=user or profile=driver.
-        if user_ok and driver_ok:
+        if user_ok and driver_profile_available:
             if requested_profile == "user":
                 return _finalize_user_login(db, phone_matched_user, nxt, now)
             if requested_profile == "driver":

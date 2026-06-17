@@ -12,7 +12,6 @@ from datetime import datetime
 
 from app.db import SessionLocal
 from app.models import (
-    CenaToastLink,
     Employee,
     EmployeePosition,
     EmployeeStoreAssignment,
@@ -22,6 +21,7 @@ from app.models import (
     ShiftOffer,
     ShiftSwap,
 )
+from app.services.toast_identity import linked_employee_store_keys
 
 log = logging.getLogger(__name__)
 
@@ -69,10 +69,7 @@ def is_active_linked_employee(db, employee_id, store_key) -> bool:
              .first())
     if emp is None:
         return False
-    return (db.query(CenaToastLink.id)
-              .filter(CenaToastLink.cena_employee_id == employee_id,
-                      CenaToastLink.store_key == store)
-              .first()) is not None
+    return (int(employee_id), store) in linked_employee_store_keys(db)
 
 
 def is_eligible_for_shift(db, employee_id, shift) -> bool:

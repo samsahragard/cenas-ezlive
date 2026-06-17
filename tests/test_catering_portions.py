@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from app.domain.party_pack_rules import party_sides
 from app.domain.rules_fajitas import rule_fajitas
 from app.domain.rules_salads import rule_cobb_salad, rule_fajitas_and_salad
 from app.domain.rules_premium import rule_premium
 from app.domain.kitchen_engine import build_kitchen_result
+from app.services.orders_query import reconstruct_bundle
 
 
 def _line_named(lines: list[dict], name: str) -> dict:
@@ -46,6 +49,53 @@ def _item(
     }
 
 
+def _row_order(headcount: int = 0) -> SimpleNamespace:
+    return SimpleNamespace(
+        external_order_id="CWM-PRP",
+        client="",
+        upon_delivery_ask_for="",
+        reported_store="Tomball",
+        reported_store_id="store_2",
+        origin_store_id="store_2",
+        headcount=headcount,
+        customer_phone="",
+        delivery_date="2026-06-16",
+        deliver_at="11:00 AM",
+        delivery_window={"start": "", "end": ""},
+        delivery_address="",
+        delivery_instructions=None,
+        setup_required=None,
+        route_group_id=None,
+        route_stop_index=None,
+        assigned_driver=None,
+        driver_departure_time=None,
+        kitchen_ready_time=None,
+        flags=[],
+    )
+
+
+def _row_item(
+    row_id: int,
+    item_key: str,
+    package_type: str,
+    qty: int,
+    packaging: str = "none",
+    raw_alias: str | None = None,
+    extras: list[dict] | None = None,
+) -> SimpleNamespace:
+    choices = {"packaging": packaging, "beans": "none", "tortillas": "none", "with_ice": None}
+    return SimpleNamespace(
+        id=row_id,
+        item_key=item_key,
+        package_type=package_type,
+        qty=qty,
+        packaging=packaging,
+        choices=choices,
+        extras=extras or [],
+        source={"raw_alias": raw_alias or item_key, "raw_qty": qty, "raw_line_items": []},
+        raw_alias=raw_alias or item_key,
+        flags=[],
+    )
 def test_party_package_chips_are_three_oz_per_person():
     sides = party_sides(10, "refried")
     chips = _line_named(sides, "Chips")
@@ -238,6 +288,108 @@ def test_tableware_defaults_to_guest_count_plus_buffer():
     assert tableware["utensil_sub_counts"]["silverware"] == 13
 
 
+def test_individual_enchiladas_get_silverware_without_plates():
+    items = [
+        _item("cheese_enchiladas_individual", "enchiladas", qty=30, packaging="individual"),
+        _item("tableware", "non_food_items"),
+    ]
+
+    result = build_kitchen_result(_order(items, headcount=30))
+    tableware = next(b for b in result["breakdowns"] if b["item_key"] == "tableware")
+
+    assert tableware["utensil_sub_counts"]["silverware"] == 33
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 0
+    assert tableware["utensil_sub_counts"]["catering_large_spoons"] == 0
+
+
+def test_saved_individual_enchilada_order_refreshes_stale_tableware_breakdown():
+    items = [
+        _row_item(1, "cheese_enchiladas_individual", "enchiladas", 9, "individual", "Cheese"),
+        _row_item(2, "veggie_enchiladas_individual", "enchiladas", 2, "individual", "Veggie"),
+        _row_item(3, "beef_enchiladas_individual", "enchiladas", 9, "individual", "Beef Fajita"),
+        _row_item(4, "chicken_fajita_enchiladas_individual", "enchiladas", 10, "individual", "Chicken Fajita"),
+        _row_item(
+            5,
+            "tableware",
+            "non_food_items",
+            1,
+            extras=[{"name": "plates_and_bowls", "raw_text": "4"}],
+        ),
+    ]
+    stale_tableware = {
+        "item_key": "tableware",
+        "package_type": "non_food_items",
+        "qty": 1,
+        "choices": {"packaging": "none"},
+        "proteins": [],
+        "sides": [],
+        "sauces": [],
+        "extras": [],
+        "counts": [],
+        "summary_line": "4x Plates | 0x Silverware",
+        "flags": [],
+        "utensil_sub_counts": {
+            "plates_and_bowls": 4,
+            "silverware": 0,
+            "catering_large_spoons": 0,
+            "catering_small_spoons": 0,
+            "black_tongs": 0,
+        },
+    }
+    bundle = reconstruct_bundle(
+        _row_order(headcount=0),
+        items,
+        {5: [SimpleNamespace(breakdown=stale_tableware)]},
+    )
+    tableware = next(b for b in bundle["kitchen_result"]["breakdowns"] if b["item_key"] == "tableware")
+
+    assert tableware["utensil_sub_counts"]["silverware"] == 33
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 0
+
+
+def test_individual_fajitas_get_silverware_without_plates_or_serving_tools():
+    items = [
+        _item("fajitas_mixed", "fajitas", qty=50, packaging="individual", beans="charro", tortillas="flour"),
+        _item("tableware", "non_food_items"),
+    ]
+
+    result = build_kitchen_result(_order(items, headcount=50))
+    tableware = next(b for b in result["breakdowns"] if b["item_key"] == "tableware")
+
+    assert tableware["utensil_sub_counts"]["silverware"] == 53
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 0
+    assert tableware["utensil_sub_counts"]["black_tongs"] == 0
+    assert tableware["utensil_sub_counts"]["catering_large_spoons"] == 0
+    assert tableware["utensil_sub_counts"]["catering_small_spoons"] == 0
+
+
+def test_individual_executive_package_gets_silverware_without_plates():
+    items = [
+        _item("cenas_exec_spread", "premium", qty=60, packaging="individual"),
+        _item("tableware", "non_food_items"),
+    ]
+    items[0]["source"]["raw_alias"] = "Cenas Executive Fajita Spread"
+
+    result = build_kitchen_result(_order(items, headcount=60))
+    tableware = next(b for b in result["breakdowns"] if b["item_key"] == "tableware")
+
+    assert tableware["utensil_sub_counts"]["silverware"] == 63
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 0
+    assert tableware["utensil_sub_counts"]["black_tongs"] == 0
+    assert tableware["utensil_sub_counts"]["catering_large_spoons"] == 0
+    assert tableware["utensil_sub_counts"]["catering_small_spoons"] == 0
+
+
+def test_standalone_plates_item_is_zero_for_individual_packaging():
+    items = [
+        _item("fajitas_mixed", "fajitas", qty=50, packaging="individual"),
+        _item("plates_and_bowls", "non_food_items"),
+    ]
+
+    result = build_kitchen_result(_order(items, headcount=50))
+    plates = next(b for b in result["breakdowns"] if b["item_key"] == "plates_and_bowls")
+
+    assert plates["utensil_sub_counts"]["plates_and_bowls"] == 0
 def test_side_spoons_are_one_per_different_side_type():
     items = [
         _item("queso_and_chips", "sides", qty=1, container="quart"),

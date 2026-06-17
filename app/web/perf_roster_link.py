@@ -13,6 +13,7 @@ from flask import Blueprint, jsonify, request
 
 from app.models import CenaToastLink, Employee
 from app.db import SessionLocal
+from app.services.toast_identity import set_employee_toast_identity
 
 
 perf_roster_link_bp = Blueprint("perf_roster_link", __name__)
@@ -60,17 +61,16 @@ def perf_roster_link():
     dry_run = bool(body.get("dry_run"))
     db = SessionLocal()
     try:
-        employees = {
-            employee.id: employee.full_name
-            for employee in (
-                db.query(Employee)
-                .filter(
-                    Employee.active.is_(True),
-                    Employee.id.in_([row["cena_employee_id"] for row in LINK18]),
-                )
-                .all()
+        employee_rows = (
+            db.query(Employee)
+            .filter(
+                Employee.active.is_(True),
+                Employee.id.in_([row["cena_employee_id"] for row in LINK18]),
             )
-        }
+            .all()
+        )
+        employee_by_id = {employee.id: employee for employee in employee_rows}
+        employees = {employee.id: employee.full_name for employee in employee_rows}
         missing = [
             {"cena_employee_id": row["cena_employee_id"], "store_key": row["store_key"]}
             for row in LINK18
@@ -136,6 +136,9 @@ def perf_roster_link():
                     emp.toast_employee_name = row["toast_name"]
 
                 if existing is not None:
+                    emp = employee_by_id.get(row["cena_employee_id"])
+                    if emp is not None:
+                        set_employee_toast_identity(emp, row["toast_id"], row["toast_name"])
                     continue
                 db.add(CenaToastLink(
                     cena_employee_id=row["cena_employee_id"],
@@ -145,6 +148,9 @@ def perf_roster_link():
                     confirmed_by=None,
                     confirmed_at=now,
                 ))
+                emp = employee_by_id.get(row["cena_employee_id"])
+                if emp is not None:
+                    set_employee_toast_identity(emp, row["toast_id"], row["toast_name"])
             db.commit()
         else:
             db.rollback()

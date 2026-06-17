@@ -558,6 +558,13 @@
 
   /* ---------- boot ---------- */
   gotoList();
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var peerId = parseInt(params.get("peer") || params.get("to") || "", 10);
+    if(peerId && peerId !== CFG.meId){
+      gotoThread({id: peerId, name: params.get("name") || "Conversation"});
+    }
+  } catch(_e) {}
   // If we landed with ?view=alerts, the cf-seg is already on the alerts pane;
   // trigger its load.
   if(document.querySelector('button[data-seg="inbox-section"][data-value="alerts"].is-on')){

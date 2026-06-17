@@ -15,6 +15,7 @@ from app.domain.menu_catalog import MenuCatalog, MENU_CATALOG
 from app.domain.ticket_context import build_ticket_context
 from app.domain.master_sheet_map import build_all_outputs
 from app.domain.grid_builder import build_all_view_grids
+from app.domain.kitchen_engine import build_kitchen_result
 
 
 _catalog = MenuCatalog(MENU_CATALOG)
@@ -84,13 +85,37 @@ def _normalized_order_from_row(order: Order, items: list[OrderItem]) -> dict[str
     }
 
 
+def _is_tableware_breakdown(breakdown: dict[str, Any] | None) -> bool:
+    return bool(
+        breakdown
+        and breakdown.get("package_type") == "non_food_items"
+        and breakdown.get("item_key") in {"tableware", "plates_and_bowls"}
+    )
+
+
 def _kitchen_result_from_rows(order: Order, items: list[OrderItem],
-                              breakdowns_by_item_id: dict[int, list[PrepBreakdownRecord]]) -> dict[str, Any]:
+                              breakdowns_by_item_id: dict[int, list[PrepBreakdownRecord]],
+                              normalized: dict[str, Any] | None = None) -> dict[str, Any]:
     breakdowns: list[dict[str, Any]] = []
-    for item in items:
+    current_breakdowns: list[dict[str, Any]] = []
+    if normalized is not None:
+        try:
+            current_breakdowns = build_kitchen_result(normalized).get("breakdowns", [])
+        except Exception:
+            current_breakdowns = []
+
+    for idx, item in enumerate(items):
         recs = breakdowns_by_item_id.get(item.id, [])
-        if recs:
-            breakdowns.append(recs[0].breakdown)
+        stored = recs[0].breakdown if recs else None
+        current = current_breakdowns[idx] if idx < len(current_breakdowns) else None
+
+        # Existing orders keep persisted prep breakdown rows, but tableware
+        # rules are policy-like and should reflect the current app logic in
+        # saved order views without needing a full order re-ingest.
+        if _is_tableware_breakdown(current):
+            breakdowns.append(current)
+        elif stored:
+            breakdowns.append(stored)
     return {
         "kitchen_ready_time": order.kitchen_ready_time,
         "order_id": order.external_order_id,
@@ -129,7 +154,7 @@ def reconstruct_bundle(order: Order, items: list[OrderItem],
     correctly across the day instead of every order saying "Driver A."
     """
     normalized = _normalized_order_from_row(order, items)
-    kitchen_result = _kitchen_result_from_rows(order, items, breakdowns_by_item_id)
+    kitchen_result = _kitchen_result_from_rows(order, items, breakdowns_by_item_id, normalized)
     dispatch = dispatch_override if dispatch_override is not None else _dispatch_from_order(order)
     ctx = build_ticket_context(normalized, kitchen_result, dispatch)
     views = build_all_outputs(normalized, kitchen_result, ctx, _catalog)

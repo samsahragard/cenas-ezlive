@@ -133,23 +133,21 @@ def app_linked_emp():
         pass
 
 
-def test_linked_employee_opens_pure_employee_session(app_linked_emp):
-    # A linked employee (Employee.user_id -> a manager User) must open as a PURE
-    # employee session: the UNIFY manager-fold (user_id) is dropped so the owner
-    # lands in the employee portal and never routes into /partner/* (the 403 the
-    # owner hit). Lands on the dashboard, NOT the POST-only /employee/select-store.
+def test_linked_employee_opens_manager_profile_not_employee_session(app_linked_emp):
+    # Managers/KMs do not get an employee-profile surface. Even the owner
+    # view-login code opens the linked manager User profile and clears employee
+    # session keys.
     app, eid = app_linked_emp
     c = app.test_client()
     r = c.post("/keypad-login", json={"phone": "5550000000", "pin": "77777"})
     assert r.status_code == 200
     assert r.get_json()["ok"] is True
-    assert r.get_json()["next"] == "/employee/dashboard"
+    assert r.get_json()["next"] == "/partner/today"
     with c.session_transaction() as s:
-        assert s.get("employee_id") == eid
-        assert s.get("employee_name") == "Linked Emp"
-        assert s.get("user_id") is None
-        assert s.get("user_session_version") is None
-        assert s.get("partner_auth_ok") is None
+        assert s.get("user_id") is not None
+        assert s.get("employee_id") is None
+        assert s.get("employee_name") is None
+        assert s.get("partner_auth_ok") is True
 
 
 @pytest.fixture()
@@ -317,7 +315,7 @@ def test_manager_driver_phone_login_returns_profile_choices(app_profile_choice):
         status="active",
         session_version=7,
         first_login_done=True,
-        passcode_hash=generate_password_hash("13579"),
+        passcode_hash=generate_password_hash("99999"),
     )
     db.add_all([user, driver])
     db.commit()
@@ -361,7 +359,7 @@ def test_manager_driver_profile_choice_finalizes_selected_session(app_profile_ch
         status="active",
         session_version=8,
         first_login_done=True,
-        passcode_hash=generate_password_hash("86420"),
+        passcode_hash=generate_password_hash("99999"),
     )
     db.add_all([user, driver])
     db.commit()
@@ -451,6 +449,54 @@ def test_unlinked_km_employee_logs_in_as_manager_profile(app_profile_choice):
         db.close()
 
 
+def test_existing_km_employee_session_redirects_to_manager_profile(app_profile_choice):
+    app, SessionLocal = app_profile_choice
+    from app.models import Employee, EmployeePosition, EmployeeStoreAssignment, User
+    from werkzeug.security import generate_password_hash
+
+    db = SessionLocal()
+    emp = Employee(
+        full_name="Janet KM",
+        phone="5557770000",
+        email="janet-session@test.local",
+        active=True,
+        session_version=6,
+        passcode_hash=generate_password_hash("11223"),
+    )
+    db.add(emp)
+    db.flush()
+    km_id = _position_id(db, "KM")
+    db.add(EmployeeStoreAssignment(employee_id=emp.id, store_key="tomball"))
+    db.add(EmployeePosition(employee_id=emp.id, position_id=km_id, store_key="tomball"))
+    db.commit()
+    emp_id = emp.id
+    db.close()
+
+    c = app.test_client()
+    with c.session_transaction() as s:
+        s["employee_id"] = emp_id
+        s["employee_name"] = "Janet KM"
+        s["employee_session_version"] = 6
+        s["auth_ok"] = True
+    r = c.get("/employee/dashboard")
+    assert r.status_code == 302
+    assert r.headers["Location"].endswith("/dos/today")
+    with c.session_transaction() as s:
+        assert s.get("user_id") is not None
+        assert s.get("employee_id") is None
+        assert s.get("employee_name") is None
+
+    db = SessionLocal()
+    try:
+        emp = db.get(Employee, emp_id)
+        user = db.get(User, emp.user_id)
+        assert user is not None
+        assert user.permission_level == "km"
+        assert user.store_scope == "tomball"
+    finally:
+        db.close()
+
+
 def test_unlinked_km_employee_with_driver_gets_profile_choice(app_profile_choice):
     app, SessionLocal = app_profile_choice
     from app.models import Driver, Employee, EmployeePosition, EmployeeStoreAssignment, User
@@ -478,7 +524,7 @@ def test_unlinked_km_employee_with_driver_gets_profile_choice(app_profile_choice
         status="active",
         session_version=9,
         first_login_done=True,
-        passcode_hash=generate_password_hash("33445"),
+        passcode_hash=generate_password_hash("99999"),
     )
     db.add(driver)
     db.commit()
@@ -493,6 +539,7 @@ def test_unlinked_km_employee_with_driver_gets_profile_choice(app_profile_choice
     assert body["ok"] is True
     assert body["choose_profile"] is True
     assert [choice["profile"] for choice in body["choices"]] == ["user", "driver"]
+    assert [choice["label"] for choice in body["choices"]] == ["Kitchen Manager", "Driver"]
     with c.session_transaction() as s:
         assert s.get("user_id") is None
         assert s.get("driver_id") is None

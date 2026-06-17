@@ -80,10 +80,46 @@ def _utensil_summary(sub: dict) -> str:
         f'{sub.get("black_tongs", 0)}x Tongs'
     )
 
+def _is_individual_packaging(item: dict) -> bool:
+    choices = item.get("choices") or {}
+    return choices.get("packaging") == "individual" or str(item.get("item_key") or "").endswith("_individual")
+
+def _is_individual_meal(item: dict) -> bool:
+    return item.get("package_type") in _TRAY_TYPES and _is_individual_packaging(item)
+
+def _individual_meal_qty(order: NormalizedOrder) -> int:
+    return sum(
+        int(i.get("qty") or 0)
+        for i in order["normalized_items"]
+        if _is_individual_meal(i)
+    )
+
+def _has_bulk_meals(order: NormalizedOrder) -> bool:
+    return any(
+        i.get("package_type") in _TRAY_TYPES and not _is_individual_meal(i)
+        for i in order["normalized_items"]
+    )
+
+def _default_tableware_counts(order: NormalizedOrder) -> tuple[int, int]:
+    headcount = int(order.get("headcount") or 0)
+    individual_qty = _individual_meal_qty(order)
+    has_bulk = _has_bulk_meals(order)
+
+    if individual_qty and not has_bulk:
+        return individual_qty + _PLATES_BUFFER, 0
+
+    if individual_qty:
+        silverware = max(headcount, individual_qty) + _PLATES_BUFFER
+        bulk_guests = max(headcount - individual_qty, 0)
+        plates = bulk_guests + _PLATES_BUFFER if bulk_guests else 0
+        return silverware, plates
+
+    return headcount + _PLATES_BUFFER, headcount + _PLATES_BUFFER
+
 def _tray_items(order: NormalizedOrder) -> list:
     return [
         i for i in order["normalized_items"]
-        if i["package_type"] in _TRAY_TYPES and i["choices"]["packaging"] != "individual"
+        if i["package_type"] in _TRAY_TYPES and not _is_individual_meal(i)
     ]
 
 
@@ -110,8 +146,17 @@ def rule_tableware(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
         for i in order["normalized_items"]:
             if i["package_type"] == "sides" and i["item_key"] in _SAUCE_KEYS:
                 sides_spoon_keys.add(i["item_key"])
-        # Silverware: 1 set per guest plus buffer
-        silverware = pdf.get("silverware") or (order["headcount"] + _PLATES_BUFFER)
+        default_silverware, default_plates = _default_tableware_counts(order)
+        individual_qty = _individual_meal_qty(order)
+        if individual_qty:
+            # Individually packaged meals need one silverware pack per meal plus buffer,
+            # and no loose plates/bowls unless there is a bulk tray portion too.
+            silverware = max(pdf.get("silverware") or 0, default_silverware)
+            plates = default_plates
+        else:
+            # Bulk catering: 1 set per guest plus buffer, unless PDF supplied a count.
+            silverware = pdf.get("silverware") or default_silverware
+            plates = pdf.get("plates_and_bowls") or default_plates
 
         # Catering large spoons are added from cooked tray components after all breakdowns are built.
         catering_large_spoons = pdf.get("catering_large_spoons") or 0
@@ -122,8 +167,6 @@ def rule_tableware(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
         # Black tongs: one per different tong side/a-la-carte type.
         black_tongs = pdf.get("black_tongs") or len(sides_tong_keys)
 
-        # Plates/bowls: 1 per guest plus buffer
-        plates = pdf.get("plates_and_bowls") or (order["headcount"] + _PLATES_BUFFER)
 
         sub_counts = {
             "silverware": silverware,
@@ -136,9 +179,12 @@ def rule_tableware(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdow
         b["summary_line"] = _utensil_summary(sub_counts)
 
     elif item["item_key"] == "plates_and_bowls":
-        plates = order["headcount"] + _PLATES_BUFFER
+        _silverware, plates = _default_tableware_counts(order)
         b["utensil_sub_counts"] = {"plates_and_bowls": plates}
-        b["summary_line"] = f'{plates}x Plates/Bowls ({order["headcount"]} guests + {_PLATES_BUFFER} buffer)'
+        if plates:
+            b["summary_line"] = f'{plates}x Plates/Bowls ({order["headcount"]} guests + {_PLATES_BUFFER} buffer)'
+        else:
+            b["summary_line"] = "0x Plates/Bowls (individual packaging)"
 
     else:
         b["summary_line"] = f'{item["qty"]}x {item["source"]["raw_alias"]}'
@@ -165,6 +211,8 @@ def _apply_prep_utensils(breakdowns: List[PrepBreakdown]) -> None:
             seen_tongs.add(b["item_key"])
         if b["package_type"] == "enchiladas" and b["choices"].get("packaging") != "individual":
             prep_large_spoons += int(b.get("qty") or 0)
+        if _is_individual_meal(b):
+            continue
         if b["package_type"] not in _TRAY_TYPES:
             continue
         for li in b.get("proteins", []) + b.get("sides", []) + b.get("sauces", []):

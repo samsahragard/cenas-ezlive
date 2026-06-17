@@ -105,6 +105,9 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "Drive <em>smart</em>, get paid <em>right</em>." in html
+    assert "On-Time Performance Bonus" in html
+    assert "Used for delivery photo uploads" in html
+    assert "Tracking bonus" not in html
     assert "Deliveries Live Right Now" in html
     assert "10:45 AM" in html
     assert "$51" in html
@@ -123,7 +126,21 @@ def test_driverapp_application_submit_creates_application(driverapp_bound):
     assert row.full_name == "Maria Gonzalez"
     assert row.preferred_location == "copperfield"
     assert row.available_days == ["Mon", "Wed", "Fri"]
+    assert row.whatsapp == "7135550101"
     assert row.consent is True
+
+
+def test_driverapp_application_requires_whatsapp(driverapp_bound):
+    flask_app, db = driverapp_bound
+    payload = _application_payload("copperfield")
+    payload["whatsapp"] = ""
+
+    resp = flask_app.test_client().post("/driverapp", data=payload)
+
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "WhatsApp number is required." in html
+    assert db.query(DriverApplication).count() == 0
 
 
 def test_driver_admin_applications_tab_scopes_both_to_each_store(driverapp_bound):

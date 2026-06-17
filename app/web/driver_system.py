@@ -778,6 +778,7 @@ def driverapp():
             last_name = values.get("last_name", "")
             full_name = " ".join(part for part in [first_name, last_name] if part).strip()
             phone = values.get("phone", "")
+            whatsapp = values.get("whatsapp", "")
             email = values.get("email", "").lower()
             preferred_location = _driver_application_location(values.get("preferred_location"))
             available_days = [
@@ -791,6 +792,8 @@ def driverapp():
                 form_errors.append("Last name is required.")
             if not phone:
                 form_errors.append("Phone number is required.")
+            if not whatsapp:
+                form_errors.append("WhatsApp number is required.")
             if not email or "@" not in email:
                 form_errors.append("A valid email is required.")
             if not preferred_location:
@@ -814,7 +817,7 @@ def driverapp():
                     last_name=last_name,
                     full_name=full_name,
                     phone=phone,
-                    whatsapp=values.get("whatsapp") or None,
+                    whatsapp=whatsapp,
                     email=email,
                     zip_code=values.get("zip_code") or None,
                     preferred_location=preferred_location,

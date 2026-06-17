@@ -106,6 +106,13 @@
     var n=Number(v);
     return Number.isFinite(n) ? n.toFixed(d==null?0:d)+"%" : "--";
   }
+  function tipPct(m){
+    var tips = Number((m || {}).tips);
+    var raw = (m || {}).tip_pct;
+    var n = Number(raw);
+    if(Number.isFinite(tips) && tips > 0 && (!Number.isFinite(n) || n <= 0)) return "--";
+    return pct(raw, 1);
+  }
   function mins(secs){ var n=Number(secs); return Number.isFinite(n) && n>0 ? Math.round(n/60)+"m" : "--"; }
 
   // ---- fetch helpers --------------------------------------------------------
@@ -272,7 +279,7 @@
       $("cfp-hg-l2").textContent = "HR Rate";
       $("cfp-hg-rate").textContent = money(m.effective_hourly);
       $("cfp-hg-l3").textContent = "Total Tip %";
-      $("cfp-hg-tip-pct").textContent = pct(m.tip_pct,1);
+      $("cfp-hg-tip-pct").textContent = tipPct(m);
     } else {
       $("cfp-hg-l1").textContent = "Top";
       $("cfp-hg-top").textContent = topRank.rank ? ("#"+topRank.rank) : "--";

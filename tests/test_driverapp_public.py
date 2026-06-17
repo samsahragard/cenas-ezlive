@@ -103,11 +103,14 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "Drive <em>smart</em>, get paid <em>right</em>." in html
-    assert "On-Time Performance Bonus" in html
+    assert "How You Get Paid" in html
+    assert "Tracking Bonus" in html
+    assert "Pay Calculator" in html
+    assert "$25 + $10 + ($2 x 8) + $5 = $56" in html
+    assert "Driver App" in html
     assert "Used for delivery photo uploads" in html
     assert "valid driver's license" not in html
     assert "valid auto insurance" not in html
-    assert "Tracking bonus" not in html
     assert "Deliveries Live Right Now" in html
     assert "10:45 AM" in html
     assert "$51" in html

@@ -97,6 +97,7 @@ def test_today_tab_real_wiring_and_no_demo(app_emp):
     assert 'id="cfp-tech-detail"' in html
     assert "data-tech-target" in html
     assert 'key:"hours"' in html
+    assert 'if(v === null || v === undefined || v === "") return "--";' in html
     assert "Technical averages" in html
     assert "Avg drink" in html
     assert "Performance not available" not in html

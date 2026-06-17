@@ -101,7 +101,11 @@
   function hide(el){ if(el) el.hidden = true; }
   function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
   function money(v){ var n=Number(v); return Number.isFinite(n) ? "$"+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}) : "--"; }
-  function pct(v,d){ var n=Number(v); return Number.isFinite(n) ? n.toFixed(d==null?0:d)+"%" : "--"; }
+  function pct(v,d){
+    if(v === null || v === undefined || v === "") return "--";
+    var n=Number(v);
+    return Number.isFinite(n) ? n.toFixed(d==null?0:d)+"%" : "--";
+  }
   function mins(secs){ var n=Number(secs); return Number.isFinite(n) && n>0 ? Math.round(n/60)+"m" : "--"; }
 
   // ---- fetch helpers --------------------------------------------------------

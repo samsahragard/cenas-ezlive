@@ -91,6 +91,12 @@ def test_today_tab_real_wiring_and_no_demo(app_emp):
     assert 'href="#cfp-earnings"' in html
     assert 'href="#cfp-leaderboard"' in html
     assert 'href="#cfp-technical"' in html
+    # Technical averages live on Today now and follow the selected range.
+    assert 'id="cfp-technical"' in html
+    assert 'id="cfp-tech-scope"' in html
+    assert "Technical averages" in html
+    assert "Avg drink" in html
+    assert "Performance not available" not in html
 
 
 def test_today_range_param_selects_tab(app_emp):
@@ -157,10 +163,8 @@ def test_you_tab_has_logout_button_and_no_demo(app_emp):
     # Both the You-page logout button and its handler are present.
     assert 'id="cf-logout"' in html
     assert "Log out" in html
-    # Profile maps technical averages from the same self-scoped payload as Today.
-    assert 'id="cfp-technical"' in html
-    assert "/employee/my-performance" in html
-    assert "Avg drink" in html
+    assert 'id="cfp-technical"' not in html
+    assert "/employee/my-performance" not in html
 
 
 def test_logout_clears_session(app_emp):

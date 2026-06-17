@@ -2339,16 +2339,26 @@ body::after {
   }
 }
 
-/* Logout: topbar icon (every tab) + a full button on the You page. */
+/* Logout: compact topbar action (every tab) + a full button on the You page. */
 .cc-topbar-right { display: inline-flex; align-items: center; gap: 8px; }
 .cc-logout {
-  display: inline-grid; place-items: center;
-  width: 38px; height: 38px;
-  border: 1px solid var(--cc-border); border-radius: 12px;
-  background: rgba(255, 255, 255, .04); color: var(--cc-txt2);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-width: 88px; height: 38px; padding: 0 12px;
+  border: 1px solid rgba(255, 118, 118, .34); border-radius: 12px;
+  background: linear-gradient(180deg, rgba(179, 14, 20, .96), rgba(112, 6, 10, .98));
+  color: #fff;
+  font: 900 11px var(--cc-mono);
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  box-shadow: 0 10px 28px rgba(116, 10, 14, .30), inset 0 1px 0 rgba(255, 255, 255, .12);
   cursor: pointer;
 }
-.cc-logout:hover { color: var(--cc-txt); border-color: var(--cc-border-strong); background: rgba(255, 255, 255, .07); }
+.cc-logout svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.cc-logout:hover {
+  color: #fff;
+  border-color: rgba(255, 158, 158, .58);
+  background: linear-gradient(180deg, rgba(204, 21, 29, .98), rgba(133, 8, 13, .98));
+}
 .cc-logout:disabled { opacity: .55; cursor: default; }
 .cc-logout:focus-visible { outline: 2px solid rgba(248, 196, 107, .85); outline-offset: 2px; }
 

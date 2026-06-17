@@ -215,7 +215,6 @@ def employee_my_profile_page():
 
     config = {
         "performanceUrl": "/employee/performance-center",
-        "myPerfUrl": "/employee/my-performance",
         "dashboardUrl": "/employee/dashboard",
         "loginUrl": "/employee/login",
     }

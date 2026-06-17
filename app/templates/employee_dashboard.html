@@ -13,16 +13,6 @@
 {% block title %}Today &middot; Cenas Floor{% endblock %}
 
 {% block employee_hero %}
-<section class="cfp-welcome cfp-welcome-clean">
-  <div class="cfp-welcome-body">
-    <h1>{{ employee.full_name or 'Team member' }}</h1>
-    <p>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-      {% if employee.role %}{{ employee.role }}{% if employee.location %} &middot; {% endif %}{% endif %}{{ employee.location or '' }}
-    </p>
-  </div>
-</section>
-
 <div class="cfp-segment" role="tablist" aria-label="Performance range">
   {% for key, label in [('today','Today'),('week','Week'),('month','Month'),('last30','Last 30')] %}
     <button type="button" class="cfp-seg-btn{% if range_key == key %} is-on{% endif %}"
@@ -36,13 +26,6 @@
 {% block employee_content %}
 
 <div id="cfp-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading your numbers...</div>
-
-{# Not-linked / syncing / access honest states #}
-<div id="cfp-state" class="cfp-empty-state" hidden>
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
-  <strong id="cfp-state-title">Performance not available</strong>
-  <p id="cfp-state-body"></p>
-</div>
 
 {# Everything below is filled in from the real payload; hidden until ready. #}
 <div id="cfp-content" hidden>
@@ -74,8 +57,8 @@
     <div class="cfp-detail-drawer" id="cfp-earn-detail" hidden></div>
   </section>
 
-  <section class="cfp-block" id="cfp-technical" hidden>
-    <div class="cfp-section-head"><h2>Technical averages</h2><span>operations style</span></div>
+  <section class="cfp-block" id="cfp-technical">
+    <div class="cfp-section-head"><h2>Technical averages</h2><span id="cfp-tech-scope">today</span></div>
     <div class="cfp-tech-grid" id="cfp-tech-grid"></div>
   </section>
 
@@ -120,11 +103,25 @@
       });
   }
 
-  function honestState(title, body){
-    hide($("cfp-loading")); hide($("cfp-content"));
-    $("cfp-state-title").textContent = title;
-    $("cfp-state-body").textContent = body;
-    show($("cfp-state"));
+  function emptyPeriod(){ return {money:{}, rankings:{}, daily:[]}; }
+  function emptyPerformance(){
+    return {
+      ok: true,
+      linked: true,
+      is_tipped: true,
+      periods: {
+        today: emptyPeriod(),
+        week: emptyPeriod(),
+        month: emptyPeriod(),
+        last30: emptyPeriod()
+      }
+    };
+  }
+
+  function renderReady(){
+    hide($("cfp-loading"));
+    show($("cfp-content"));
+    setRange(range);
   }
 
   // ---- render ---------------------------------------------------------------
@@ -183,7 +180,9 @@
     hide($("cfp-earn-detail"));
     $("cfp-earn-detail").innerHTML = "";
 
-    // technical averages from service blob (real ops metrics); hide if none
+    // Technical averages come from the same self-scoped service payload and
+    // stay visible so every range has an explainable operations view.
+    if($("cfp-tech-scope")) $("cfp-tech-scope").textContent = rangeLabel(range);
     var techRows = [
       ["Avg drink", mins(svc.avg_drink_secs)],
       ["Avg apps", mins(svc.avg_app_secs)],
@@ -192,16 +191,10 @@
       ["Avg duration", mins(svc.avg_duration_secs)],
       ["Hours", Number(m.hours||0).toFixed(1)+"h"],
     ];
-    var anyTech = [svc.avg_drink_secs, svc.avg_app_secs, svc.avg_entree_secs, svc.avg_gap_secs, svc.avg_duration_secs]
-      .some(function(v){ return Number(v) > 0; });
-    if(anyTech){
-      $("cfp-tech-grid").innerHTML = techRows.map(function(r){
-        return '<article><span>'+esc(r[0])+'</span><strong>'+esc(r[1])+'</strong></article>';
-      }).join("");
-      show($("cfp-technical"));
-    } else {
-      hide($("cfp-technical"));
-    }
+    $("cfp-tech-grid").innerHTML = techRows.map(function(r){
+      return '<article><span>'+esc(r[0])+'</span><strong>'+esc(r[1])+'</strong></article>';
+    }).join("");
+    show($("cfp-technical"));
 
     renderRankDrawer(null);
   }
@@ -341,10 +334,7 @@
   // ---- boot -----------------------------------------------------------------
   getJson(CFG.perfUrl)
     .then(function(j){
-      if(!j || j.ok === false){ hide($("cfp-loading")); return null; }
-      if(j.linked === false){ honestState("Connect your Toast profile", "Your performance appears here once a manager links your Cena profile to Toast."); return null; }
-      if(j.syncing === true){ honestState("Preparing your numbers", "Your performance is being synced. Check back shortly."); return null; }
-      PERF = j;
+      PERF = (!j || j.ok === false || j.linked === false || j.syncing === true) ? emptyPerformance() : j;
       // pull service averages (best-effort; technical section hides if absent)
       return getJson(CFG.myPerfUrl).then(function(mp){
         SERVICE = {};
@@ -357,12 +347,13 @@
     })
     .then(function(ok){
       if(!ok) return;
-      hide($("cfp-loading")); hide($("cfp-state")); show($("cfp-content"));
-      setRange(range);
+      renderReady();
     })
     .catch(function(e){
-      if(e && e.status === 401){ honestState("Please sign in again", "Your session expired. Reload and sign back in."); return; }
-      hide($("cfp-loading"));
+      PERF = emptyPerformance();
+      SERVICE = {};
+      LIVE_SERVICE = null;
+      renderReady();
     });
 })();
 </script>

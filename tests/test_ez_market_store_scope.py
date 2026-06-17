@@ -102,6 +102,30 @@ def test_copperfield_driver_market_hides_tomball_orders(app_bound):
     assert "HIDDEN_TOMBALL_DROP" not in html
 
 
+def test_public_market2_shows_both_stores_without_functional_actions(app_bound):
+    flask_app, db = app_bound
+    _order(db, store_id="store_2", ext="TOM-PUBLIC", address="VISIBLE_TOMBALL_PUBLIC")
+    _order(db, store_id="store_1", ext="COP-PUBLIC", address="VISIBLE_COPPERFIELD_PUBLIC", status="approved")
+
+    client = flask_app.test_client()
+    resp = client.get("/ez-market2")
+
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "VISIBLE_TOMBALL_PUBLIC" in html
+    assert "VISIBLE_COPPERFIELD_PUBLIC" in html
+    assert "My queue" not in html
+    assert "History" not in html
+    assert 'action="/ez-market/request/' not in html
+    assert 'action="/ez-market/cancel-request/' not in html
+    assert "Request delivery" in html
+    assert "Not open for bidding (status: approved)" in html
+    for label in ("Profile", "Orders", "Ez Market", "Pay"):
+        assert label in html
+    assert 'href="#"' in html
+    assert 'aria-disabled="true"' in html
+
+
 def test_cross_store_request_is_blocked_server_side(app_bound):
     flask_app, db = app_bound
     driver = _driver(db, location="tomball")

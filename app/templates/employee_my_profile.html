@@ -29,6 +29,7 @@
 {% block employee_content %}
 
 <a href="/employee/tables" hidden aria-hidden="true"></a>
+<script type="application/json" id="cf-profile-config">{{ config_json | safe }}</script>
 <script type="application/json" id="profile-data">{}</script>
 <script>
   var SAFE_DATA = {};
@@ -36,7 +37,7 @@
   SAFE_DATA.roster = null;
 </script>
 
-<div class="cf-block">
+<div class="cf-block cf-profile-actions">
   <a href="/employee/messages?view=alerts" class="cf-row" style="text-decoration:none;">
     <span class="cf-row-icon" aria-hidden="true">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
@@ -52,6 +53,11 @@
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
   </a>
 </div>
+
+<section class="cfp-block" id="cfp-technical" hidden>
+  <div class="cfp-section-head"><h2>Technical averages</h2><span id="cfp-profile-tech-scope">today</span></div>
+  <div class="cfp-tech-grid" id="cfp-profile-tech-grid"></div>
+</section>
 
 <div class="cf-news">
   <span class="cf-news-icon" aria-hidden="true">&#x2728;</span>
@@ -72,6 +78,58 @@
 <script>
 (function(){
   "use strict";
+  var CFG = {};
+  try { CFG = JSON.parse(document.getElementById("cf-profile-config").textContent) || {}; } catch(_e){}
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+  function mins(secs){ var n=Number(secs); return Number.isFinite(n) && n>0 ? Math.round(n/60)+"m" : "--"; }
+  function show(el){ if(el) el.hidden = false; }
+  function hide(el){ if(el) el.hidden = true; }
+  function getJson(url){
+    return fetch(url, {credentials:"same-origin", headers:{Accept:"application/json"}})
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok){ var e=new Error("request failed"); e.status=r.status; throw e; } return j; }); });
+  }
+  function pickTechPeriod(periods){
+    var order = ["today", "week", "month", "last30"];
+    var byPeriod = {};
+    (periods || []).forEach(function(pp){ if(pp && pp.period) byPeriod[pp.period] = pp; });
+    for(var i=0;i<order.length;i++){
+      var row = byPeriod[order[i]];
+      var svc = (row && row.service) || {};
+      if([svc.avg_drink_secs, svc.avg_app_secs, svc.avg_entree_secs, svc.avg_gap_secs, svc.avg_duration_secs].some(function(v){ return Number(v) > 0; })){
+        return row;
+      }
+    }
+    return byPeriod.today || periods && periods[0] || null;
+  }
+  function renderTechnical(payload){
+    var block = $("cfp-technical");
+    var grid = $("cfp-profile-tech-grid");
+    if(!block || !grid || !payload || !payload.ok || !Array.isArray(payload.perf_periods)){ return; }
+    var period = pickTechPeriod(payload.perf_periods);
+    var svc = (period && period.service) || {};
+    var hasTech = [svc.avg_drink_secs, svc.avg_app_secs, svc.avg_entree_secs, svc.avg_gap_secs, svc.avg_duration_secs]
+      .some(function(v){ return Number(v) > 0; });
+    if(!hasTech){ hide(block); return; }
+    var hours = Number(period.total_hours || 0);
+    var rows = [
+      ["Avg drink", mins(svc.avg_drink_secs)],
+      ["Avg apps", mins(svc.avg_app_secs)],
+      ["Avg entree", mins(svc.avg_entree_secs)],
+      ["Drink-entree gap", mins(svc.avg_gap_secs)],
+      ["Avg duration", mins(svc.avg_duration_secs)],
+      ["Hours", Number.isFinite(hours) ? hours.toFixed(1)+"h" : "--"],
+    ];
+    $("cfp-profile-tech-scope").textContent = (period.period || "today");
+    grid.innerHTML = rows.map(function(r){
+      return '<article><span>'+esc(r[0])+'</span><strong>'+esc(r[1])+'</strong></article>';
+    }).join("");
+    show(block);
+  }
+  if(CFG.myPerfUrl){
+    getJson(CFG.myPerfUrl).then(renderTechnical).catch(function(){ hide($("cfp-technical")); });
+  }
+
   var btn = document.getElementById("cf-logout");
   if(!btn) return;
   var loginUrl = {{ (login_url | default('/employee/login')) | tojson }};

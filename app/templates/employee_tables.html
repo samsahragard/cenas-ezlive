@@ -32,7 +32,7 @@
     <div class="cfp-table-map" id="cfp-table-map"></div>
   </section>
   <section class="cfp-block">
-    <div class="cfp-section-head"><h2>Ticket rail</h2><span>tap table above</span></div>
+    <div class="cfp-section-head"><h2>Ticket rail</h2></div>
     <div class="cfp-ticket-list" id="cfp-ticket-list"></div>
   </section>
 </div>
@@ -131,8 +131,8 @@
       var sel=(t.selections||[]);
       return '<article class="cfp-ticket-card is-'+tileTone(t)+(CFG.selectedTable===slug?" is-selected":"")+'" id="cfp-ticket-'+esc(slug)+'" data-ticket="'+esc(slug)+'">'
         + '<div class="cfp-ticket-top">'
-        +   '<div><span>Table '+esc(t.table_name||"-")+'</span><strong>Ticket #'+esc(t.display_number||"")+'</strong></div>'
-        +   '<div><b>'+(amt!=null?money0(amt):"--")+'</b><em>'+(t.status==="closed"?"Closed":"Open")+'</em></div>'
+        +   '<div><span>Ticket #'+esc(t.display_number||"")+'</span><strong>Table '+esc(t.table_name||"-")+'</strong></div>'
+        +   '<div><b>'+(amt!=null?money0(amt):"--")+'</b><em class="cfp-ticket-status">'+(t.status==="closed"?"Closed":"Open")+'</em></div>'
         + '</div>'
         + '<div class="cfp-ticket-pills">'
         +   '<span>'+(sel.length)+' items</span>'

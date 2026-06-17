@@ -36,10 +36,29 @@
     return '<div class="ro-person is-muted"><strong>'+name+'</strong><span>'+meta+'</span></div>';
   }
   function dayTab(day, idx){
-    var label = esc(day.label || day.short_label || "");
+    var dayRaw = String(day.label || day.short_label || "").trim().split(/\s+/)[0].toLowerCase();
+    var dayNames = {
+      sunday: "SUN", sun: "SUN",
+      monday: "MON", mon: "MON",
+      tuesday: "TUES", tue: "TUES",
+      wednesday: "WED", wed: "WED",
+      thursday: "THURS", thu: "THURS",
+      friday: "FRI", fri: "FRI",
+      saturday: "SAT", sat: "SAT"
+    };
+    var label = esc(dayNames[dayRaw] || dayRaw.slice(0, 3).toUpperCase());
+    var dateNumber = day.date_number || "";
+    if(!dateNumber && day.short_label){
+      var shortMatch = String(day.short_label).match(/\d+$/);
+      dateNumber = shortMatch ? shortMatch[0] : "";
+    }
+    if(!dateNumber && day.date){
+      dateNumber = String(day.date).split("-").pop().replace(/^0/, "");
+    }
+    dateNumber = esc(dateNumber);
     return '<button type="button" class="ro-day-tab'+(idx===selectedDay?' is-on':'')+'" role="tab" aria-selected="'+(idx===selectedDay?'true':'false')+'" data-ro-day="'+idx+'">'
       + '<strong>'+label+'</strong>'
-      + '<span>'+esc(day.short_label || day.date || "")+'</span>'
+      + '<span>'+dateNumber+'</span>'
       + '</button>';
   }
   function group(pos, idx){

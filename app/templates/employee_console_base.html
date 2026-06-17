@@ -88,6 +88,134 @@
 })();
 </script>
 
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var body = document.body;
+  if(!body) return;
+  body.classList.add("cc-motion-ready");
+  if(reduce) return;
+
+  var tiltSelector = [
+    ".cfp-hero-card", ".cfp-block", ".cfp-jump", ".cfp-metric", ".cfp-tech-grid article",
+    ".cfp-table-tile", ".cfp-ticket-card", ".cfp-now-grid a", ".cfp-next-card",
+    ".cf-form", ".cf-block", ".cf-profile", ".cf-news", ".cf-empty-state",
+    ".mk-card", ".sh-card", ".ro-pos", ".ro-person", ".ic-convo", ".ic-pick",
+    ".cf-row", ".cfp-range-note", ".cfp-empty-state"
+  ].join(",");
+  var revealSelector = [
+    ".cc-main > *", ".cfp-hero-card", ".cfp-block", ".cf-form", ".cf-block",
+    ".cf-news", ".mk-card", ".sh-card", ".ro-pos", ".cfp-ticket-card", ".cfp-table-tile",
+    ".ic-convo", ".ic-pick"
+  ].join(",");
+  var actionSelector = [
+    "button", ".cc-tab", ".cf-row", ".cfp-seg-link", ".cfp-seg-btn", ".cf-seg-btn",
+    ".cf-primary", ".sh-post", ".mk-link", ".ro-day-tab", ".ro-pos-head",
+    ".cfp-table-tile", ".ic-convo", ".ic-pick", ".cc-logout", ".cf-logout"
+  ].join(",");
+
+  var revealObserver = "IntersectionObserver" in window ? new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if(entry.isIntersecting){
+        entry.target.classList.add("is-visible");
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -8% 0px", threshold: .12 }) : null;
+
+  function matches(el, selector){
+    return el && el.nodeType === 1 && el.matches && el.matches(selector);
+  }
+  function each(root, selector, fn){
+    if(matches(root, selector)) fn(root);
+    if(root && root.querySelectorAll){
+      root.querySelectorAll(selector).forEach(fn);
+    }
+  }
+  function bindTilt(el){
+    if(el.dataset.ccTiltReady === "1") return;
+    el.dataset.ccTiltReady = "1";
+    el.classList.add("cc-tilt-card");
+    el.addEventListener("pointermove", function(ev){
+      var rect = el.getBoundingClientRect();
+      if(!rect.width || !rect.height) return;
+      var px = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+      var py = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+      el.style.setProperty("--cc-card-x", (px * 100).toFixed(1) + "%");
+      el.style.setProperty("--cc-card-y", (py * 100).toFixed(1) + "%");
+      el.style.setProperty("--cc-tilt-x", ((px - .5) * 4.5).toFixed(2) + "deg");
+      el.style.setProperty("--cc-tilt-y", ((.5 - py) * 3.5).toFixed(2) + "deg");
+      el.classList.add("is-tilting");
+    }, { passive: true });
+    el.addEventListener("pointerleave", function(){
+      el.classList.remove("is-tilting");
+      el.style.setProperty("--cc-tilt-x", "0deg");
+      el.style.setProperty("--cc-tilt-y", "0deg");
+    });
+  }
+  function bindReveal(el, index){
+    if(el.dataset.ccRevealReady === "1") return;
+    el.dataset.ccRevealReady = "1";
+    el.style.setProperty("--cc-reveal-order", String(index % 7));
+    el.style.setProperty("--cc-reveal-delay", String(Math.min(index % 7, 6) * 46) + "ms");
+    el.classList.add("cc-reveal");
+    if(revealObserver) revealObserver.observe(el);
+    else el.classList.add("is-visible");
+  }
+  function bindAction(el){
+    if(el.dataset.ccActionReady === "1") return;
+    el.dataset.ccActionReady = "1";
+    el.classList.add("cc-action-motion", "cc-ripple-host");
+  }
+  function markMotion(root){
+    var revealIndex = 0;
+    each(root || document, revealSelector, function(el){ bindReveal(el, revealIndex++); });
+    each(root || document, tiltSelector, bindTilt);
+    each(root || document, actionSelector, bindAction);
+  }
+
+  var raf = 0;
+  function pointerVars(ev){
+    if(raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(function(){
+      var x = ev.clientX / Math.max(1, window.innerWidth);
+      var y = ev.clientY / Math.max(1, window.innerHeight);
+      body.style.setProperty("--cc-pointer-x", (x * 100).toFixed(2) + "%");
+      body.style.setProperty("--cc-pointer-y", (y * 100).toFixed(2) + "%");
+      body.style.setProperty("--cc-parallax-x", ((x - .5) * 14).toFixed(2) + "px");
+      body.style.setProperty("--cc-parallax-y", ((y - .5) * 12).toFixed(2) + "px");
+      raf = 0;
+    });
+  }
+  window.addEventListener("pointermove", pointerVars, { passive: true });
+  window.addEventListener("scroll", function(){
+    body.style.setProperty("--cc-scroll-drift", String(Math.round((window.scrollY || 0) * -.018)) + "px");
+  }, { passive: true });
+
+  document.addEventListener("pointerdown", function(ev){
+    var target = ev.target && ev.target.closest ? ev.target.closest(".cc-ripple-host") : null;
+    if(!target || !document.body.contains(target)) return;
+    var rect = target.getBoundingClientRect();
+    var spot = document.createElement("span");
+    spot.className = "cc-ripple-spot";
+    spot.style.setProperty("--cc-ripple-x", ((ev.clientX - rect.left) || rect.width / 2) + "px");
+    spot.style.setProperty("--cc-ripple-y", ((ev.clientY - rect.top) || rect.height / 2) + "px");
+    target.appendChild(spot);
+    window.setTimeout(function(){ if(spot.parentNode) spot.parentNode.removeChild(spot); }, 720);
+  }, { passive: true });
+
+  markMotion(document);
+  if("MutationObserver" in window){
+    new MutationObserver(function(records){
+      records.forEach(function(record){
+        record.addedNodes.forEach(function(node){ markMotion(node); });
+      });
+    }).observe(document.getElementById("main") || document.body, { childList: true, subtree: true });
+  }
+})();
+</script>
+
 {% block scripts %}{% endblock %}
 </body>
 </html>

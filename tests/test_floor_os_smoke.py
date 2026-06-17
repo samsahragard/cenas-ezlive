@@ -157,6 +157,10 @@ def test_you_tab_has_logout_button_and_no_demo(app_emp):
     # Both the You-page logout button and its handler are present.
     assert 'id="cf-logout"' in html
     assert "Log out" in html
+    # Profile maps technical averages from the same self-scoped payload as Today.
+    assert 'id="cfp-technical"' in html
+    assert "/employee/my-performance" in html
+    assert "Avg drink" in html
 
 
 def test_logout_clears_session(app_emp):

@@ -103,6 +103,11 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "Drive <em>smart</em>, get paid <em>right</em>." in html
+    assert 'id="langEnglish"' in html
+    assert 'id="langSpanish"' in html
+    assert 'data-lang-button="es"' in html
+    assert "Aplicar ahora" in html
+    assert "Como se te paga" in html
     assert "How You Get Paid" in html
     assert "Tracking Bonus" in html
     assert "Pay Calculator" in html

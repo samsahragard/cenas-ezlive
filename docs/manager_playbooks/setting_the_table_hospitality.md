@@ -1,5 +1,5 @@
 # Distilled Hospitality Rules for Store Managers (Cena's Kitchen)
-*Based on Setting the Table: The Transforming Power of Hospitality in Business by Danny Meyer (Intro & Chapter 1)*
+*Based on Setting the Table: The Transforming Power of Hospitality in Business by Danny Meyer*
 
 This playbook outlines core hospitality principles for GMs, KMs, and FOH Managers to guide stakeholder relations, guest service, shift leadership, and operational culture.
 
@@ -40,3 +40,36 @@ This playbook outlines core hospitality principles for GMs, KMs, and FOH Manager
 ### 9. Shuttle Diplomacy (Resolving Front and Back of House Friction)
 * **Logic**: Operational harmony requires managers to act as neutral diplomats when conflicts arise between different teams (e.g., FOH vs. BOH), resolving friction with balance, empathy, and active listening.
 * **Manager Action**: When cross-department friction occurs during a rush, do not take sides. Act as a mediator, listen to both perspectives, find a compromise, and keep the team focused on the unified goal of serving the guest.
+
+### 10. The Entrepreneurial-Volumetric Balance (Managing Growth vs. Chaos)
+* **Logic**: While volume and sales are essential for the business and staff earnings, chasing volume without operational checks crashes the kitchen and service quality. Growth must be planned and regulated.
+* **Manager Action**: Set realistic limits on table turns and reservations. Monitor ticket times and kitchen load during peaks, pacing seating if the kitchen is backed up to protect food quality and staff sanity.
+
+### 11. Turning Over the Rocks (Proactive Problem Discovery)
+* **Logic**: There is always a story behind a story. Active leaders proactively "turn over rocks" to discover hidden operational details, employee feelings, and customer complaints before they escalate.
+* **Manager Action**: Don't wait for complaints. Walk the floor, inspect walk-in coolers, check the trash for wasted ingredients, and have check-in conversations with team members. Seek out hidden feedback.
+
+### 12. Challenging Assumptions (Who Ever Wrote the Rule?)
+* **Logic**: Just because something has "always been done" a certain way does not mean it is correct. Questioning industry assumptions leads to fresh, innovative ways of delighting guests and supporting staff.
+* **Manager Action**: Regularly review policies that create friction for guests or employees. Ask "why do we do this?" and be open to changing minor operational rules to improve flow and hospitality.
+
+### 13. The 51 Percent Solution (Hiring for Emotional Skills)
+* **Logic**: Employee capability is split: 49% is technical skills (which can be taught), and 51% is emotional hospitality skills (which are innate). The 51% traits are: (1) Optimism/warmth, (2) Intelligence/curiosity, (3) Work ethic, (4) Empathy, (5) Self-awareness, and (6) Integrity.
+* **Manager Action**: Prioritize emotional intelligence, positivity, and empathy when hiring and promoting staff. Look for candidates who naturally care about making others feel good, even if their technical experience is limited.
+
+### 14. Broadcasting and Tuning (Feedback Systems)
+* **Logic**: Effective leadership requires "broadcasting" clear, constant expectations, while simultaneously "tuning in" to the feedback of your team, guests, and community.
+* **Manager Action**: Hold clear pre-shift briefings to align the team, but dedicate time to listen to their shift feedback. Solicit and review guest feedback (reviews, chat logs, floor comments) and adapt operations accordingly.
+
+### 15. Constant, Gentle Pressure (Kaizen & Compassionate Accountability)
+* **Logic**: Maintaining high standards requires constant, gentle pressure. Like a center-piece on a table, if it drifts, gently nudging it back to the center is much better than reacting with anger. Consistency plus compassion equals high performance.
+* **Manager Action**: Address standard violations immediately but calmly. Do not ignore minor details (e.g., untucked shirts, slow ticket times, incorrect tray placement). Gently coach employees in real-time, holding them accountable without breaking their spirit.
+
+### 16. Mistakes Well Handled (The 5 A's of Service Recovery)
+* **Logic**: The road to success is paved with mistakes well handled. When a failure occurs, follow the 5 A's: (1) Awareness, (2) Acknowledgment, (3) Apology, (4) Action, and (5) Additional Generosity.
+* **Manager Action**: When a guest experiences a service failure:
+  1. **Awareness**: Notice the issue (spilled drink, cold food, long wait) immediately.
+  2. **Acknowledgment**: Accept responsibility without defensiveness or excuses.
+  3. **Apology**: Deliver a warm, sincere, face-to-face apology.
+  4. **Action**: Fix the problem immediately (replace food, clean table).
+  5. **Additional Generosity**: Give a small surprise gift (free dessert, discount, gift card) to turn the bad experience into a memorable win.

@@ -89,6 +89,22 @@ def chat_app(db_session, monkeypatch, tmp_path):
         encoding="utf-8"
     )
     
+    stt_playbook = playbooks_dir / "setting_the_table_hospitality.md"
+    stt_playbook.write_text(
+        "# Distilled Hospitality Rules\n\n"
+        "Enlightened Hospitality: Prioritize employees, then guests, community, suppliers, and investors.\n\n"
+        "Hospitality vs Service: Service is black and white, hospitality is color.",
+        encoding="utf-8"
+    )
+    
+    uh_playbook = playbooks_dir / "unreasonable_hospitality_playbook.md"
+    uh_playbook.write_text(
+        "# Unreasonable Hospitality Playbook\n\n"
+        "Unreasonable Hospitality: Going over-the-top to make guests feel special.\n\n"
+        "Will Guidara: Service is black and white, hospitality is color.",
+        encoding="utf-8"
+    )
+    
     # Seed users
     # Sam (Partner, User ID = 1)
     db_session.add(User(
@@ -250,6 +266,18 @@ def test_direct_playbook_search_tool_function(chat_app):
     assert len(res) > 0
     assert "leadership_laws.md" in res[0]["file"]
     assert "influence" in res[0]["content"].lower()
+
+    # Test Setting the Table search
+    res_stt = assistant_mod.search_manager_playbooks_tool("enlightened")
+    assert len(res_stt) > 0
+    assert "setting_the_table_hospitality.md" in res_stt[0]["file"]
+    assert "enlightened" in res_stt[0]["content"].lower()
+
+    # Test Unreasonable Hospitality search
+    res_uh = assistant_mod.search_manager_playbooks_tool("will guidara")
+    assert len(res_uh) > 0
+    assert "unreasonable_hospitality_playbook.md" in res_uh[0]["file"]
+    assert "will guidara" in res_uh[0]["content"].lower()
 
     # Query with no matches
     res_none = assistant_mod.search_manager_playbooks_tool("invalidkeywordthatmatchesnothing")

@@ -381,6 +381,43 @@ class Driver(Base):
     battery_opt_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class DriverApplication(Base):
+    __tablename__ = "driver_application"
+    __table_args__ = (
+        Index("ix_driver_application_location_created", "preferred_location", "created_at"),
+        Index("ix_driver_application_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    first_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    phone: Mapped[str] = mapped_column(String(50), nullable=False)
+    whatsapp: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    email: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    zip_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 'copperfield' | 'tomball' | 'both'. The 'both' value appears in both
+    # store-scoped application tabs.
+    preferred_location: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    available_days: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    shift_preference: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    has_license: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    has_vehicle: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    has_insurance: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    has_smartphone: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    delivery_experience: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="new", nullable=False, index=True)
+    source: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    remote_addr: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class DriverLog(Base):
     __tablename__ = "driver_logs"
     # Driver name, date, order link, ex miles, ex miles verified, $10 bonus (on time? tracking? took photo?), 5 star, notes

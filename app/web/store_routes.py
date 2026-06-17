@@ -27,7 +27,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta, date
 
 from app.db import get_db
-from app.models import Driver, DriverShift, DriverLocation, Order
+from app.models import Driver, DriverApplication, DriverShift, DriverLocation, Order
 from app.web.driver_routes import issue_temp_password, LOCATION_LABELS
 # Phase 0 Block 4 (ck, 2026-05-13): permission gating per samai's spec.
 from app.services.permissions import requires_permission
@@ -856,17 +856,28 @@ def drivers_admin():
     from app.services.ezcater_known_drivers_seed import normalize_phone, names_match
     # Tab filter — defaults to active. Intentional default-state change; see spec §3.
     status = request.args.get("status", "active")
-    if status not in ("active", "inactive"):
+    if status not in ("active", "inactive", "applications"):
         status = "active"
     show_active = (status == "active")
 
     db = next(get_db())
     try:
         from sqlalchemy import func
-        q = db.query(Driver).filter(Driver.active == show_active)
-        if g.current_location != "both":
-            q = q.filter(Driver.location == g.current_location)
-        rows = q.order_by(Driver.location, Driver.name).all()
+        rows = []
+        applications = []
+        if status == "applications":
+            app_q = db.query(DriverApplication)
+            if g.current_location != "both":
+                app_q = app_q.filter(DriverApplication.preferred_location.in_([g.current_location, "both"]))
+            applications = (
+                app_q.order_by(DriverApplication.created_at.desc(), DriverApplication.full_name.asc())
+                .all()
+            )
+        else:
+            q = db.query(Driver).filter(Driver.active == show_active)
+            if g.current_location != "both":
+                q = q.filter(Driver.location == g.current_location)
+            rows = q.order_by(Driver.location, Driver.name).all()
 
         # Count both tabs for pill labels
         active_q = db.query(Driver).filter(Driver.active == True)
@@ -876,6 +887,12 @@ def drivers_admin():
             inactive_q = inactive_q.filter(Driver.location == g.current_location)
         active_count = active_q.count()
         inactive_count = inactive_q.count()
+        applications_q = db.query(DriverApplication)
+        if g.current_location != "both":
+            applications_q = applications_q.filter(
+                DriverApplication.preferred_location.in_([g.current_location, "both"])
+            )
+        applications_count = applications_q.count()
 
         # latest shift per driver — drives the click-Active-to-see-location link
         latest_shift_for = {}
@@ -940,6 +957,8 @@ def drivers_admin():
             current_status=status,
             active_count=active_count,
             inactive_count=inactive_count,
+            applications=applications,
+            applications_count=applications_count,
         )
     finally:
         db.close()

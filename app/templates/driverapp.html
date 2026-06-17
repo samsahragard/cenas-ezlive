@@ -194,7 +194,7 @@
 
           <div class="divider">Eligibility</div>
           <div class="grid">
-            {% for name, label in [('has_license', "Do you have a valid driver's license?"), ('has_vehicle', 'Do you have a reliable vehicle?'), ('has_insurance', 'Do you have valid auto insurance?'), ('has_smartphone', 'Do you have a smartphone with mobile data?')] %}
+            {% for name, label in [('has_vehicle', 'Do you have a reliable vehicle?'), ('has_smartphone', 'Do you have a smartphone with mobile data?')] %}
             <div class="field full">
               <label>{{ label }} <span class="req">*</span></label>
               {% if name == 'has_smartphone' %}<span class="hint">Required to run the Ez-Manage Delivery app and upload photos via WhatsApp.</span>{% endif %}

@@ -86,9 +86,7 @@ def _application_payload(location="both", first_name="Maria"):
         "preferred_location": location,
         "available_days": ["Mon", "Wed", "Fri"],
         "shift_preference": "Flexible",
-        "has_license": "Yes",
         "has_vehicle": "Yes",
-        "has_insurance": "Yes",
         "has_smartphone": "Yes",
         "delivery_experience": "No",
         "notes": "Available for catering deliveries.",
@@ -107,6 +105,8 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert "Drive <em>smart</em>, get paid <em>right</em>." in html
     assert "On-Time Performance Bonus" in html
     assert "Used for delivery photo uploads" in html
+    assert "valid driver's license" not in html
+    assert "valid auto insurance" not in html
     assert "Tracking bonus" not in html
     assert "Deliveries Live Right Now" in html
     assert "10:45 AM" in html

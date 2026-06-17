@@ -141,9 +141,7 @@
           <td>{{ (app.available_days or [])|join(', ') if app.available_days else '—' }}</td>
           <td>{{ app.shift_preference or '—' }}</td>
           <td style="min-width:160px;">
-            <div>License: {{ app.has_license or '—' }}</div>
             <div>Vehicle: {{ app.has_vehicle or '—' }}</div>
-            <div>Insurance: {{ app.has_insurance or '—' }}</div>
             <div>Smartphone: {{ app.has_smartphone or '—' }}</div>
           </td>
           <td>{{ app.delivery_experience or '—' }}</td>

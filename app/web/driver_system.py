@@ -800,12 +800,8 @@ def driverapp():
                 form_errors.append("Preferred location is required.")
             if not available_days:
                 form_errors.append("At least one available day is required.")
-            if values.get("has_license") not in ("Yes", "No"):
-                form_errors.append("Driver license answer is required.")
             if values.get("has_vehicle") not in ("Yes", "No"):
                 form_errors.append("Reliable vehicle answer is required.")
-            if values.get("has_insurance") not in ("Yes", "No"):
-                form_errors.append("Auto insurance answer is required.")
             if values.get("has_smartphone") not in ("Yes", "No"):
                 form_errors.append("Smartphone answer is required.")
             if request.form.get("consent") != "1":

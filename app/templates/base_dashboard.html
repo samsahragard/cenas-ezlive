@@ -539,7 +539,7 @@
    (3) store_slug == 'partner' → 'partner' — shows Admin + Developer;
    (4) store_slug == 'corporate' → 'corporate';
    (5) fallback → 'gm'. #}
-{% set user_role = 'driver' if session.get('driver_id') else (
+{% set user_role = 'driver' if (public_demo|default(false) or session.get('driver_id')) else (
                    'expo' if (g.current_user and g.current_user.permission_level == 'expo') else (
                    'partner' if store_slug == 'partner' else (
                    'corporate' if store_slug == 'corporate' else 'gm'))) %}

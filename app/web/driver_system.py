@@ -654,6 +654,69 @@ def ez_market():
         db.close()
 
 
+@driver_system_bp.route("/ez-market2", methods=["GET"])
+def ez_market_public_demo():
+    """Public read-only copy of Ez Market for driver recruiting.
+
+    Shows the same live upcoming cross-store market information, but does not
+    require login and does not expose any functional request/queue/pay actions.
+    """
+    today = date.today()
+    db = SessionLocal()
+    try:
+        available = (
+            db.query(Order)
+            .filter(Order.delivery_date >= today.isoformat())
+            .filter(Order.status != "cancelled")
+            .order_by(Order.delivery_date.asc(), Order.deliver_at.asc().nullslast())
+            .limit(200)
+            .all()
+        )
+
+        competing = {}
+        if available:
+            ids = [o.id for o in available]
+            from sqlalchemy import func as _f
+            rows = (
+                db.query(DeliveryRequest.delivery_id, _f.count(DeliveryRequest.id))
+                .filter(DeliveryRequest.delivery_id.in_(ids))
+                .filter(DeliveryRequest.status == "pending")
+                .group_by(DeliveryRequest.delivery_id)
+                .all()
+            )
+            competing = dict(rows)
+
+        from app.services.orders_query import group_orders_by_date
+        from app.services.ezcater_management_presenter import compact_order_card
+
+        available_groups = group_orders_by_date(available)
+        projected_payouts = {o.id: _project_payout(o) for o in available}
+
+        return render_template(
+            "ez_market.html",
+            active="ez_market",
+            driver=None,
+            viewer_is_driver=True,
+            viewer_name="there",
+            available=available,
+            available_groups=available_groups,
+            projected_payouts=projected_payouts,
+            competing=competing,
+            my_pending_reqs=[],
+            my_active=[],
+            my_history=[],
+            unread_notifications=[],
+            stat_potential_today=None,
+            stat_my_queue=None,
+            stat_potential_week=None,
+            current_tier=None,
+            compact_order_card=compact_order_card,
+            public_demo=True,
+        )
+    finally:
+        db.close()
+
+
 @driver_system_bp.route("/ez-market/request/<int:delivery_id>", methods=["POST"])
 @require_driver
 def ez_market_request(delivery_id: int):

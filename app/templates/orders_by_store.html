@@ -556,18 +556,22 @@
 
   {# ---- tab row: SamAI 2026-06-06 owner order, squared tabs. #}
   {% set _store = g.current_store or 'partner' %}
+  {% set _developer_mode = developer_mode|default(false) %}
   <div class="ezo-tabs">
-    <a class="ezo-tab active" href="/{{ _store }}/orders">Orders</a>
+    <a class="ezo-tab{% if not _developer_mode %} active{% endif %}" href="/{{ _store }}/orders">Orders</a>
     <a class="ezo-tab" href="/{{ _store }}/drivers-live">Drivers Live</a>
     <a class="ezo-tab" href="/orders">Manually Processed PDF</a>
     <a class="ezo-tab" href="/{{ _store }}/driver-tracking">Driver Payroll</a>
+    {% if _developer_mode %}
+    <a class="ezo-tab active" href="/{{ _store }}/catering/developer">Developer</a>
+    {% endif %}
   </div>
 
   {% if store_filter_options %}
     <div class="ezo-store-filters" aria-label="Store filter">
       {% for opt in store_filter_options %}
         <a class="ezo-filter-tab{% if (selected_store_filter or '') == opt.value %} active{% endif %}"
-           href="/{{ _store }}/orders{% if opt.value %}?store={{ opt.value }}{% endif %}">
+           href="/{{ _store }}{% if _developer_mode %}/catering/developer{% else %}/orders{% endif %}{% if opt.value %}?store={{ opt.value }}{% endif %}">
           {{ opt.label }}
         </a>
       {% endfor %}
@@ -643,10 +647,11 @@
           {% set _driver_state = (driver_status_by_order_id or {}).get(o.id) %}
           {% set _status_label = _driver_state.label if _driver_state else ('EZ Assigned' if _has else 'Needs driver') %}
           {% set card = compact_order_card(o, payout=o.potential_payout, status_label=_status_label, current_driver=o.ezcater_driver_name, display_driver=_dispatch) %}
+          {% set _detail_href = '/' ~ _store ~ '/catering/developer/orders/' ~ o.external_order_id if developer_mode|default(false) else '/orders/view/' ~ o.external_order_id %}
           <div class="ezo-card ezo-sheet-card {{ 'c-assigned' if _has else 'c-needs' }}"
-               data-click-url="/orders/view/{{ o.external_order_id }}">
+               data-click-url="{{ _detail_href }}">
             <div class="ez-sheet-top">
-              <a class="ez-sheet-id" href="/orders/view/{{ o.external_order_id }}" onclick="event.stopPropagation();">{{ card.external_id }}</a>
+              <a class="ez-sheet-id" href="{{ _detail_href }}" onclick="event.stopPropagation();">{{ card.external_id }}</a>
               <div class="ez-sheet-store">{{ card.store_label }}</div>
               <div class="ez-sheet-date">{{ card.date_label }}</div>
               <div class="ez-sheet-weekday">{{ card.weekday_label }}</div>

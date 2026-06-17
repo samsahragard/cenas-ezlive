@@ -5967,6 +5967,7 @@ _CATERING_DASH_TABS = [
     ("ez-drivers", "Ez Drivers"),
     ("in-house",   "In-House"),
     ("live-map",   "Live Map"),
+    ("developer",  "Developer"),
 ]
 
 
@@ -5979,6 +5980,7 @@ def _catering_dash_full_url(tab_key):
       ez-drivers -> /<store>/drivers       (store.drivers_admin)
       in-house   -> /<store>/in-house-catering (store.in_house_catering_page)
       live-map   -> /partner/developer/ezcater-live-map (read-only watcher)
+      developer  -> /<store>/catering/developer (read-only math audit)
     The flat ez-market / ez-manage paths are written as literals because
     they live outside the /<store> blueprint; url_for on a store endpoint
     would prepend the slug. Falls back to the orders page on an unknown
@@ -5995,7 +5997,103 @@ def _catering_dash_full_url(tab_key):
         return url_for("store.in_house_catering_page")
     if tab_key == "live-map":
         return url_for("ezcater_tracking_watch.page")
+    if tab_key == "developer":
+        return url_for("store.catering_developer")
     return url_for("store.orders_list")
+
+
+@store_bp.route("/catering/developer", methods=["GET"])
+def catering_developer():
+    """Read-only catering math audit list.
+
+    Mirrors the Ez Orders list, but order cards click into a developer detail
+    page that shows each populated breakdown row plus the calculation that
+    produced it.
+    """
+    require_dashboard_access("dash.catering")
+    from app.web.orders_browse import (
+        list_orders_for_location,
+        group_orders_by_date,
+        _active_drivers_by_prefix,
+        _driver_status_by_order_id,
+    )
+    from app.services.orders_query import rotated_dispatch_letters
+    from app.services.ezcater_management_presenter import compact_order_card
+
+    db = next(get_db())
+    try:
+        selected_store_filter = ""
+        if g.current_location == "both":
+            selected_store_filter = _orders_store_filter_arg(request.args.get("store"))
+            tom = (
+                list_orders_for_location(db, "tomball")
+                if selected_store_filter in ("", "tomball")
+                else []
+            )
+            cop = (
+                list_orders_for_location(db, "copperfield")
+                if selected_store_filter in ("", "copperfield")
+                else []
+            )
+            orders = tom + cop
+            location = "both"
+            location_label = "All Orders"
+            store_filter_options = [
+                {"value": "", "label": "All"},
+                {"value": "copperfield", "label": "Copperfield"},
+                {"value": "tomball", "label": "Tomball"},
+            ]
+        else:
+            location = g.current_location
+            orders = list_orders_for_location(db, location)
+            location_label = LOCATION_LABELS.get(location, g.store_label or "Orders")
+            store_filter_options = None
+
+        groups = group_orders_by_date(orders)
+        display_drivers = rotated_dispatch_letters(groups)
+        return render_template(
+            "orders_by_store.html",
+            location=location,
+            location_label=location_label,
+            groups=groups,
+            display_drivers=display_drivers,
+            active_drivers_by_prefix=_active_drivers_by_prefix(db),
+            driver_status_by_order_id=_driver_status_by_order_id(db, orders),
+            compact_order_card=compact_order_card,
+            selected_store_filter=selected_store_filter,
+            store_filter_options=store_filter_options,
+            developer_mode=True,
+        )
+    finally:
+        db.close()
+
+
+@store_bp.route("/catering/developer/orders/<external_order_id>", methods=["GET"])
+def catering_developer_order(external_order_id: str):
+    require_dashboard_access("dash.catering")
+    from app.services.catering_calculation_presenter import build_catering_calculation_detail
+    from app.services.orders_query import LOCATION_TO_ORIGIN, build_grids_for_single_order
+
+    db = next(get_db())
+    try:
+        result = build_grids_for_single_order(db, external_order_id)
+        if not result:
+            abort(404, f"Order {external_order_id} not found")
+        order = result["order"]
+        if g.current_location != "both" and order.origin_store_id != LOCATION_TO_ORIGIN.get(g.current_location):
+            abort(404)
+        detail = build_catering_calculation_detail(result["bundle"], result["grids"])
+        return render_template(
+            "catering_developer_order.html",
+            active="catering_dashboard",
+            title=f"Developer - {order.external_order_id}",
+            order=order,
+            detail=detail,
+            external_order_id=external_order_id,
+            back_url=url_for("store.catering_developer"),
+        )
+    finally:
+        db.close()
 
 
 def _orders_store_filter_arg(raw: str | None) -> str:

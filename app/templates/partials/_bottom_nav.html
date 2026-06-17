@@ -323,7 +323,10 @@
       ('/ez-market',   'ez_market',   'ti-flame',     'Ez Market'),
       ('/pay-history', 'pay_history', 'ti-receipt',   'Pay'),
     ] %}
-    <a href="{{ href }}" class="ck-bnav-tab{% if _bn_active == key %} active{% endif %}">
+    {% set _public_demo = public_demo|default(false) %}
+    <a href="{{ '#' if _public_demo else href }}"
+       {% if _public_demo %}onclick="return false;" aria-disabled="true"{% endif %}
+       class="ck-bnav-tab{% if _bn_active == key %} active{% endif %}">
       <i class="ti {{ icon }} bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">{{ label }}</span>
     </a>

@@ -25,6 +25,11 @@ def per_person_rate(
         return above_30_oz
     return base_oz
 
+
+def round_tortilla_packets(raw_packets: float) -> int:
+    return int(math.floor(raw_packets + 0.5))
+
+
 def tortilla_packets(headcount: int, tortilla: TortillaChoice) -> list[PacketLineItem]:
     if tortilla in ("none", None):
         return []
@@ -40,7 +45,7 @@ def tortilla_packets(headcount: int, tortilla: TortillaChoice) -> list[PacketLin
             "tortilla_type": "flour",
             "per_qty_packet": 2.5 / 2.0,
             "unit": "packets of 2",
-            "packets": int(math.ceil(total_packets)),
+            "packets": round_tortilla_packets(total_packets),
             "raw_packets": total_packets,
         }]
 
@@ -50,13 +55,13 @@ def tortilla_packets(headcount: int, tortilla: TortillaChoice) -> list[PacketLin
             "tortilla_type": "corn",
             "per_qty_packet": 2.5 / 2.0,
             "unit": "packets of 3",
-            "packets": int(math.ceil(total_packets)),
+            "packets": round_tortilla_packets(total_packets),
             "raw_packets": total_packets,
         }]
 
     if tortilla == "half_flour_half_corn":
-        # Ceil the total first, then split to avoid double-rounding inflation.
-        total_rounded = int(math.ceil(total_packets))
+        # Round the total first, then split to avoid double-rounding inflation.
+        total_rounded = round_tortilla_packets(total_packets)
         flour_packets = total_rounded // 2
         corn_packets = total_rounded - flour_packets
 

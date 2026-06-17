@@ -11,7 +11,7 @@ def rule_fajitas(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
 
     if packaging == "individual":
         label = {
-            "fajitas_mixed": "Mixed",
+            "fajitas_mixed": "Beef & Chicken",
             "fajitas_chicken": "Chicken",
             "fajitas_beef": "Beef",
         }.get(item["item_key"], "Fajitas")

@@ -41,9 +41,9 @@ def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdo
     protein_choice = next((e["raw_text"] for e in item["extras"] if e["name"] == "protein"), "combo")
 
     proteins = []
-    if protein_choice in ("chicken_diced", "combo"):
+    if protein_choice in ("chicken_diced", "chicken", "combo"):
         proteins.append(make_weight_line("Chicken Diced", 2.0 * headcount, 2.0, "none"))
-    if protein_choice in ("beef_diced", "combo"):
+    if protein_choice in ("beef_diced", "beef", "combo"):
         proteins.append(make_weight_line("Beef Diced", 2.0 * headcount, 2.0, "none"))
 
     sides = [

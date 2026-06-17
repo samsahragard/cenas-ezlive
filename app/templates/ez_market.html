@@ -1,5 +1,6 @@
 {% extends "base_dashboard.html" %}
 {% block title %}Ez Market - Cenas Kitchen{% endblock %}
+{% block body_class %}{% if public_demo|default(false) %}em-public-market{% endif %}{% endblock %}
 {# Page Title Library: driver market title. #}
 {% block page_module %}CATERING{% endblock %}
 {% block page_module_class %}mod-catering{% endblock %}
@@ -17,6 +18,21 @@
   }
   .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-header {
     padding-right: 0;
+  }
+  body.em-public-market .sidebar,
+  body.em-public-market .sidebar-overlay,
+  body.em-public-market .wordmark {
+    display: none !important;
+  }
+  body.em-public-market .main {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  body.em-public-market .layout {
+    grid-template-columns: 1fr !important;
+  }
+  body.em-public-market .ck-bnav a {
+    pointer-events: none;
   }
 
   .em-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px; }
@@ -84,6 +100,8 @@
     font-size: 14px; font-weight: 500; cursor: pointer;
   }
   .em-btn:hover { filter: brightness(1.08); }
+  .em-btn.public-demo { cursor: default; }
+  .em-btn.public-demo:hover { filter: none; }
   .em-btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #FAF6EC; }
   .em-empty { padding: 24px; text-align: center; color: rgba(236,227,208,0.55); }
   .em-banner { padding: 6px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
@@ -218,7 +236,7 @@
   {% endfor %}
 </div>
 {% endif %}
-{% if viewer_is_driver %}
+{% if viewer_is_driver and not public_demo|default(false) %}
 <dialog id="em-request-warning-dialog" class="em-warn-dialog">
   <div class="em-warn-body">
     <div class="em-warn-title">Same-day delivery warning</div>
@@ -301,9 +319,11 @@
 </div>
 {% else %}
 <div class="em-tabs">
-  <button class="em-tab active" onclick="showTab('available')">Available <span class="em-tab-count">({{ available|length }})</span></button>
-  <button class="em-tab" onclick="showTab('queue')">My queue <span class="em-tab-count">({% if viewer_is_driver %}{{ my_pending_reqs|length + my_active|length }}{% else %}n/a{% endif %})</span></button>
-  <button class="em-tab" onclick="showTab('history')">History</button>
+  <button class="em-tab active" type="button"{% if not public_demo|default(false) %} onclick="showTab('available')"{% endif %}>Available <span class="em-tab-count">({{ available|length }})</span></button>
+  {% if not public_demo|default(false) %}
+    <button class="em-tab" onclick="showTab('queue')">My queue <span class="em-tab-count">({% if viewer_is_driver %}{{ my_pending_reqs|length + my_active|length }}{% else %}n/a{% endif %})</span></button>
+    <button class="em-tab" onclick="showTab('history')">History</button>
+  {% endif %}
 </div>
 
 <div id="tab-available">
@@ -355,7 +375,13 @@
               <span>0 drivers competing</span>
             {% endif %}
           </div>
-          {% if viewer_is_driver and o.status in ['available', 'requested'] %}
+          {% if public_demo|default(false) %}
+            {% if o.status in ['available', 'requested'] %}
+            <button type="button" class="em-btn public-demo" aria-disabled="true">Request delivery</button>
+            {% else %}
+            <div class="em-btn em-btn-disabled public-demo" style="opacity:0.55; text-align:center; cursor:default;">Not open for bidding (status: {{ o.status }})</div>
+            {% endif %}
+          {% elif viewer_is_driver and o.status in ['available', 'requested'] %}
           <form method="POST" action="{{ url_for('driver_system.ez_market_request', delivery_id=o.id) }}"
                 class="em-request-form" data-delivery-id="{{ o.id }}">
             <button type="submit" class="em-btn">Request delivery</button>
@@ -373,6 +399,7 @@
   {% endif %}
 </div>
 
+{% if not public_demo|default(false) %}
 <div id="tab-queue" class="em-cards" style="display:none;">
   {% for req in my_pending_reqs %}
     <div class="em-card">
@@ -429,6 +456,7 @@
     <div class="em-empty">{% if viewer_is_driver %}No history yet.{% else %}n/a — driver feature.{% endif %}</div>
   {% endif %}
 </div>
+{% endif %}
 {% endif %}
 
 <script>

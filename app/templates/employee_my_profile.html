@@ -105,12 +105,10 @@
   function renderTechnical(payload){
     var block = $("cfp-technical");
     var grid = $("cfp-profile-tech-grid");
-    if(!block || !grid || !payload || !payload.ok || !Array.isArray(payload.perf_periods)){ return; }
-    var period = pickTechPeriod(payload.perf_periods);
+    if(!block || !grid || !payload || !payload.ok){ return; }
+    var periods = Array.isArray(payload.perf_periods) ? payload.perf_periods : [];
+    var period = pickTechPeriod(periods) || {period:"today", total_hours:0, service:{}};
     var svc = (period && period.service) || {};
-    var hasTech = [svc.avg_drink_secs, svc.avg_app_secs, svc.avg_entree_secs, svc.avg_gap_secs, svc.avg_duration_secs]
-      .some(function(v){ return Number(v) > 0; });
-    if(!hasTech){ hide(block); return; }
     var hours = Number(period.total_hours || 0);
     var rows = [
       ["Avg drink", mins(svc.avg_drink_secs)],

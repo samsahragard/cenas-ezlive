@@ -1888,9 +1888,45 @@ body::after {
 
 /* Technical grid + ops table */
 .cfp-tech-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
-.cfp-tech-grid article { border-radius: 15px; padding: 12px; background: linear-gradient(145deg, rgba(18, 31, 47, .98), rgba(9, 14, 24, .98)); border: 1px solid rgba(126, 166, 220, .12); }
-.cfp-tech-grid span { display: block; font-family: var(--cfp-mono); font-size: 11px; color: #f4f7fb; text-transform: uppercase; letter-spacing: .08em; }
-.cfp-tech-grid strong { display: block; margin-top: 7px; font-size: 16px; font-family: var(--cfp-mono); color: var(--cfp-text); }
+.cfp-tech-card {
+  text-align: left; border-radius: 15px; padding: 12px;
+  background: linear-gradient(145deg, rgba(18, 31, 47, .98), rgba(9, 14, 24, .98));
+  border: 1px solid rgba(126, 166, 220, .12);
+  color: var(--cfp-text);
+  cursor: pointer;
+}
+.cfp-tech-card span { display: block; font-family: var(--cfp-mono); font-size: 11px; color: #f4f7fb; text-transform: uppercase; letter-spacing: .08em; }
+.cfp-tech-card strong { display: block; margin-top: 7px; font-size: 16px; font-family: var(--cfp-mono); color: var(--cfp-text); }
+.cfp-tech-card em { display: block; margin-top: 4px; color: #aab8c8; font-size: 10px; font-style: normal; line-height: 1.25; }
+.cfp-tech-card.is-missing strong { color: #9eabb9; }
+.cfp-tech-card:focus-visible {
+  outline: 2px solid rgba(241, 190, 104, .85);
+  outline-offset: 2px;
+}
+.cfp-tech-formula {
+  color: #dce6f3;
+  line-height: 1.45;
+}
+.cfp-tech-breakdown {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+.cfp-tech-breakdown > div {
+  display: grid;
+  grid-template-columns: 1.1fr .9fr .9fr .75fr .95fr;
+  gap: 7px;
+  align-items: center;
+  padding: 9px 8px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.04);
+  color: #dce6f3;
+  font-size: 12px;
+}
+.cfp-tech-breakdown span { color: #9facbd; }
+.cfp-tech-breakdown b,
+.cfp-tech-breakdown strong { color: #fff; font-weight: 900; }
+.cfp-tech-breakdown em { color: #aab8c8; font-style: normal; }
 .cfp-ops-table-wrap { overflow: auto; margin-top: 13px; border: 1px solid rgba(255, 255, 255, .06); border-radius: 14px; }
 .cfp-ops-table { width: 760px; border-collapse: collapse; font-size: 11px; font-family: var(--cfp-mono); }
 .cfp-ops-table th, .cfp-ops-table td { padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, .05); text-align: right; white-space: nowrap; }
@@ -2074,7 +2110,8 @@ body::after {
   cursor: pointer;
 }
 .cfp-jump:focus-visible,
-.cfp-metric:focus-visible {
+.cfp-metric:focus-visible,
+.cfp-tech-card:focus-visible {
   outline: 2px solid rgba(241, 190, 104, .85);
   outline-offset: 2px;
 }

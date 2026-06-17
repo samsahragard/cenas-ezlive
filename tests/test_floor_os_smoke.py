@@ -94,6 +94,9 @@ def test_today_tab_real_wiring_and_no_demo(app_emp):
     # Technical averages live on Today now and follow the selected range.
     assert 'id="cfp-technical"' in html
     assert 'id="cfp-tech-scope"' in html
+    assert 'id="cfp-tech-detail"' in html
+    assert "data-tech-target" in html
+    assert 'key:"hours"' in html
     assert "Technical averages" in html
     assert "Avg drink" in html
     assert "Performance not available" not in html

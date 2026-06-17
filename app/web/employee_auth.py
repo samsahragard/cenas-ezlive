@@ -1099,6 +1099,149 @@ def performance_center():
             rows.sort(key=lambda x: (x.get("date") or ""), reverse=True)  # newest first
             return {"late": late, "missed": missed, "rows": rows}
 
+        def _as_float(value):
+            try:
+                if value is None or value == "":
+                    return None
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _display_minutes(seconds):
+            sec = _as_float(seconds)
+            if sec is None or sec <= 0:
+                return "--"
+            return f"{round(sec / 60)}m"
+
+        def _service_source(service):
+            if not isinstance(service, dict):
+                return {}
+            live = service.get("live_toast")
+            if isinstance(live, dict) and any(
+                live.get(k) is not None
+                for k in (
+                    "avg_drink_secs", "avg_app_secs", "avg_entree_secs",
+                    "avg_gap_secs", "avg_duration_secs",
+                )
+            ):
+                return live
+            return service
+
+        def _service_metric(service, key, label, *, count_keys=()):
+            source = _service_source(service)
+            seconds = _as_float(source.get(key))
+            count = None
+            for ckey in count_keys:
+                raw_count = _as_float(source.get(ckey))
+                if raw_count is not None:
+                    count = int(raw_count)
+                    break
+            display = _display_minutes(seconds)
+            if seconds is None or seconds <= 0:
+                return {
+                    "label": label,
+                    "value": None,
+                    "display": "--",
+                    "unit": "minutes",
+                    "source": "Toast service timing",
+                    "formula": (
+                        f"{label} needs Toast timing samples for this period. "
+                        "No timing average was pushed for this employee and range yet."
+                    ),
+                    "rows": [],
+                }
+            if count:
+                formula = (
+                    f"Toast pushed {round(seconds)} seconds across {count} sample"
+                    f"{'' if count == 1 else 's'}; {round(seconds)} seconds / 60 = {display}."
+                )
+            else:
+                formula = (
+                    f"Toast pushed this average as {round(seconds)} seconds; "
+                    f"{round(seconds)} seconds / 60 = {display}."
+                )
+            return {
+                "label": label,
+                "value": round(seconds, 2),
+                "display": display,
+                "unit": "minutes",
+                "source": "Toast service timing",
+                "formula": formula,
+                "count": count,
+                "rows": [],
+            }
+
+        def _shift_breakdown_rows(r, live_extra, live_bd, live_since):
+            rows = []
+            for s in _shifts_in(r):
+                hours_val = round(float(getattr(s, "total_hours", 0) or 0), 2)
+                source = "Clocked shift"
+                if (
+                    live_extra > 0
+                    and live_bd is not None
+                    and getattr(s, "business_date", None) == live_bd
+                    and getattr(s, "clock_in", None) == live_since
+                ):
+                    hours_val = round(hours_val + live_extra, 2)
+                    source = "Open shift so far"
+                rows.append({
+                    "date": getattr(s, "business_date", None),
+                    "clock_in": getattr(s, "clock_in", None),
+                    "clock_out": getattr(s, "clock_out", None),
+                    "hours": hours_val,
+                    "source": source,
+                })
+            return rows
+
+        def _hours_metric(r, hours, live_extra, live_bd, live_since):
+            rows = _shift_breakdown_rows(r, live_extra, live_bd, live_since)
+            parts = [f"{round(float(row.get('hours') or 0), 2):g}" for row in rows]
+            if parts:
+                shown = " + ".join(parts[:8])
+                if len(parts) > 8:
+                    shown += f" + {len(parts) - 8} more"
+                formula = (
+                    f"Hours = sum of {len(rows)} clock row"
+                    f"{'' if len(rows) == 1 else 's'}: {shown} = {hours:.2f}h."
+                )
+            else:
+                formula = "No clock rows are posted for this employee and range yet."
+            return {
+                "label": "Hours",
+                "value": round(float(hours or 0), 2),
+                "display": f"{float(hours or 0):.1f}h",
+                "unit": "hours",
+                "source": "PerfShiftCache clock rows",
+                "formula": formula,
+                "rows": rows,
+            }
+
+        def _technical_for(r, hours, live_extra, live_bd, live_since):
+            service = r.service_json or {}
+            return {
+                "avg_drink_secs": _service_metric(
+                    service, "avg_drink_secs", "Avg drink",
+                    count_keys=("drink_count", "avg_drink_count", "drink_samples"),
+                ),
+                "avg_app_secs": _service_metric(
+                    service, "avg_app_secs", "Avg apps",
+                    count_keys=("app_count", "avg_app_count", "app_samples"),
+                ),
+                "avg_entree_secs": _service_metric(
+                    service, "avg_entree_secs", "Avg entree",
+                    count_keys=("entree_count", "avg_entree_count", "entree_samples"),
+                ),
+                "avg_gap_secs": _service_metric(
+                    service, "avg_gap_secs", "Drink-entree gap",
+                    count_keys=("gap_count", "avg_gap_count", "gap_samples"),
+                ),
+                "avg_duration_secs": _service_metric(
+                    service, "avg_duration_secs", "Avg duration",
+                    count_keys=("duration_count", "avg_duration_count", "duration_samples"),
+                ),
+                "hours": _hours_metric(r, hours, live_extra, live_bd, live_since),
+            }
+
         def _rank_obj(rank_json, period, rj):
             if not isinstance(rank_json, dict):
                 return {}
@@ -1225,7 +1368,7 @@ def performance_center():
                 periods[period] = {"money": {}, "rankings": {},
                                    "attendance": {"late": 0, "missed": 0, "rows": []},
                                    "live": {"on_shift": False, "since": None},
-                                   "daily": []}
+                                   "daily": [], "technical": {}}
                 continue
             hours = round(float(r.total_hours or 0), 2)
             # If an open (in-progress) shift row is present in this range, add its
@@ -1278,7 +1421,12 @@ def performance_center():
                     money["tips_live"] = True
                 else:
                     tp = ((rj_ranks.get(rank_period) or {}).get("tip_percent") or {}).get("value")
-                    money["tip_pct"] = (round(float(tp), 1) if tp is not None else None)
+                    tp_num = _as_float(tp)
+                    money["tip_pct"] = (
+                        None
+                        if (tp_num is None or (tp_num <= 0 and tips > 0))
+                        else round(tp_num, 1)
+                    )
                 metrics += ["tip_pct", "tips_per_hour", "combined"]
 
             rankings = {}
@@ -1357,7 +1505,10 @@ def performance_center():
                                # clock_in (already employee-visible via daily punches).
                                "live": {"on_shift": bool(live_extra > 0),
                                         "since": live_since if live_extra > 0 else None},
-                               "daily": daily}
+                               "daily": daily,
+                               "technical": _technical_for(
+                                   r, hours, live_extra, live_bd, live_since
+                               )}
 
         return jsonify({"ok": True, "linked": True,
                         "employee": {"first_name": first_name, "full_name": full_name or first_name},

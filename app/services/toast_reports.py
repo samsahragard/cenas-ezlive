@@ -579,34 +579,35 @@ def server_perf_metrics_for_guid(
     }
 
     for loc, rg in locations.items():
-        all_orders = []
         for bd in dates:
             try:
-                # refresh is False by default for range cache fetches
-                all_orders.extend(client.fetch_orders_for_date(loc, rg, bd, refresh=False))
+                # Keep memory bounded: process one business-date cache at a time
+                # instead of accumulating the whole date range before filtering.
+                orders = client.fetch_orders_for_date(loc, rg, bd, refresh=False)
             except Exception as ex:
                 log.warning("toast: server_perf_metrics_for_guid skip orders %s/%s: %s", loc, bd, ex)
-
-        for o in all_orders:
-            if o.get("voided"):
                 continue
-            for c in o.get("checks") or []:
-                ac = _analyze_check(c, o, item_categories)
-                if ac and ac.get("server_guid") == server_guid:
-                    s["tickets"] += 1
-                    s["cc_subtotal"] += ac["cc_subtotal"]
-                    s["cc_tips"] += ac["cc_tips"]
-                    s["cash_amount"] += ac["cash_amount"]
-                    if ac["first_drink"]:
-                        s["drink_secs"].append((ac["first_drink"] - ac["opened"]).total_seconds())
-                    if ac["first_appetizer"]:
-                        s["app_secs"].append((ac["first_appetizer"] - ac["opened"]).total_seconds())
-                    if ac["first_entree"]:
-                        s["entree_secs"].append((ac["first_entree"] - ac["opened"]).total_seconds())
-                    if ac["first_drink"] and ac["first_entree"]:
-                        s["gap_secs"].append((ac["first_entree"] - ac["first_drink"]).total_seconds())
-                    if ac["closed"]:
-                        s["duration_secs"].append((ac["closed"] - ac["opened"]).total_seconds())
+
+            for o in orders:
+                if o.get("voided"):
+                    continue
+                for c in o.get("checks") or []:
+                    ac = _analyze_check(c, o, item_categories)
+                    if ac and ac.get("server_guid") == server_guid:
+                        s["tickets"] += 1
+                        s["cc_subtotal"] += ac["cc_subtotal"]
+                        s["cc_tips"] += ac["cc_tips"]
+                        s["cash_amount"] += ac["cash_amount"]
+                        if ac["first_drink"]:
+                            s["drink_secs"].append((ac["first_drink"] - ac["opened"]).total_seconds())
+                        if ac["first_appetizer"]:
+                            s["app_secs"].append((ac["first_appetizer"] - ac["opened"]).total_seconds())
+                        if ac["first_entree"]:
+                            s["entree_secs"].append((ac["first_entree"] - ac["opened"]).total_seconds())
+                        if ac["first_drink"] and ac["first_entree"]:
+                            s["gap_secs"].append((ac["first_entree"] - ac["first_drink"]).total_seconds())
+                        if ac["closed"]:
+                            s["duration_secs"].append((ac["closed"] - ac["opened"]).total_seconds())
 
     out = {
         "tickets": s["tickets"],

@@ -29,6 +29,7 @@ from app.models import (
     Cancellation,
     DeliveryRequest,
     Driver,
+    DriverApplication,
     DriverNotification,
     DriverScore,
     Order,
@@ -712,6 +713,137 @@ def ez_market_public_demo():
             current_tier=None,
             compact_order_card=compact_order_card,
             public_demo=True,
+        )
+    finally:
+        db.close()
+
+
+DRIVER_APPLICATION_LOCATION_LABELS = {
+    "copperfield": "Copperfield",
+    "tomball": "Tomball",
+    "both": "Both",
+}
+DRIVER_APPLICATION_DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _driver_application_location(raw: str | None) -> str:
+    text = (raw or "").strip().lower()
+    if text in ("copperfield", "uno", "store_1", "store1"):
+        return "copperfield"
+    if text in ("tomball", "dos", "store_2", "store2"):
+        return "tomball"
+    if text in ("either", "both", "all", "any"):
+        return "both"
+    return ""
+
+
+def _public_destination_area(address: str | None) -> str:
+    parts = [part.strip() for part in (address or "").split(",") if part.strip()]
+    if len(parts) >= 2:
+        return ", ".join(parts[-2:])
+    return parts[0] if parts else "Houston area"
+
+
+def _driver_application_live_cards(db, limit: int = 12) -> list[dict]:
+    today = date.today()
+    orders = (
+        db.query(Order)
+        .filter(Order.delivery_date >= today.isoformat())
+        .filter(or_(Order.status.is_(None), Order.status.notin_(["cancelled", "canceled", "delivered"])))
+        .order_by(Order.delivery_date.asc(), Order.deliver_at.asc().nullslast())
+        .limit(limit)
+        .all()
+    )
+    from app.services.ezcater_management_presenter import compact_order_card
+
+    cards = []
+    for order in orders:
+        card = compact_order_card(order, payout=projected_driver_pay(order))
+        card["public_destination"] = _public_destination_area(getattr(order, "delivery_address", None))
+        cards.append(card)
+    return cards
+
+
+@driver_system_bp.route("/driverapp", methods=["GET", "POST"])
+def driverapp():
+    """Public driver recruiting page and application intake."""
+    db = SessionLocal()
+    form_errors: list[str] = []
+    values = {}
+    try:
+        if request.method == "POST":
+            values = {key: (request.form.get(key) or "").strip() for key in request.form.keys()}
+            values["available_days"] = request.form.getlist("available_days")
+            first_name = values.get("first_name", "")
+            last_name = values.get("last_name", "")
+            full_name = " ".join(part for part in [first_name, last_name] if part).strip()
+            phone = values.get("phone", "")
+            whatsapp = values.get("whatsapp", "")
+            email = values.get("email", "").lower()
+            preferred_location = _driver_application_location(values.get("preferred_location"))
+            available_days = [
+                day for day in DRIVER_APPLICATION_DAY_ORDER
+                if day in request.form.getlist("available_days")
+            ]
+
+            if not first_name:
+                form_errors.append("First name is required.")
+            if not last_name:
+                form_errors.append("Last name is required.")
+            if not phone:
+                form_errors.append("Phone number is required.")
+            if not whatsapp:
+                form_errors.append("WhatsApp number is required.")
+            if not email or "@" not in email:
+                form_errors.append("A valid email is required.")
+            if not preferred_location:
+                form_errors.append("Preferred location is required.")
+            if not available_days:
+                form_errors.append("At least one available day is required.")
+            if values.get("has_vehicle") not in ("Yes", "No"):
+                form_errors.append("Reliable vehicle answer is required.")
+            if values.get("has_smartphone") not in ("Yes", "No"):
+                form_errors.append("Smartphone answer is required.")
+            if request.form.get("consent") != "1":
+                form_errors.append("Consent is required.")
+
+            if not form_errors:
+                row = DriverApplication(
+                    first_name=first_name,
+                    last_name=last_name,
+                    full_name=full_name,
+                    phone=phone,
+                    whatsapp=whatsapp,
+                    email=email,
+                    zip_code=values.get("zip_code") or None,
+                    preferred_location=preferred_location,
+                    available_days=available_days,
+                    shift_preference=values.get("shift_preference") or None,
+                    has_license=values.get("has_license") or None,
+                    has_vehicle=values.get("has_vehicle") or None,
+                    has_insurance=values.get("has_insurance") or None,
+                    has_smartphone=values.get("has_smartphone") or None,
+                    delivery_experience=values.get("delivery_experience") or None,
+                    notes=values.get("notes") or None,
+                    consent=True,
+                    source="driverapp",
+                    remote_addr=request.headers.get("X-Forwarded-For", request.remote_addr or "")[:80],
+                    user_agent=(request.headers.get("User-Agent") or "")[:255],
+                )
+                db.add(row)
+                db.commit()
+                return redirect(url_for("driver_system.driverapp", submitted="1"))
+
+        live_deliveries = _driver_application_live_cards(db)
+        return render_template(
+            "driverapp.html",
+            live_deliveries=live_deliveries,
+            submitted=request.args.get("submitted") == "1",
+            form_errors=form_errors,
+            values=values,
+            selected_days=values.get("available_days", []),
+            location_labels=DRIVER_APPLICATION_LOCATION_LABELS,
+            day_order=DRIVER_APPLICATION_DAY_ORDER,
         )
     finally:
         db.close()

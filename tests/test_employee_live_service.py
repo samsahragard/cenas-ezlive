@@ -7,7 +7,13 @@ from types import SimpleNamespace
 from flask import Flask
 from sqlalchemy.orm import sessionmaker
 
-from app.models import CenaToastLink, Employee, PerfPeriodCache, PerfRankCache
+from app.models import (
+    CenaToastLink,
+    Employee,
+    PerfPeriodCache,
+    PerfRankCache,
+    PerfShiftCache,
+)
 from app.services import employee_table_timelines
 from app.services import toast_reports
 from app.web import employee_auth as employee_mod
@@ -365,6 +371,106 @@ def test_my_performance_merges_live_service_into_today_cache(db_session, monkeyp
     assert today["tips_live"] is True
     assert today["service"]["live_toast"]["tickets"] == 16
     assert today["service"]["live_toast"]["tip_pct"] == 16.9
+
+
+def test_performance_center_returns_technical_breakdowns_by_range(db_session, monkeypatch):
+    test_session_factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    monkeypatch.setattr(employee_mod, "SessionLocal", test_session_factory)
+
+    emp = Employee(full_name="Maria Gonzalez", active=True, session_version=1)
+    db_session.add(emp)
+    db_session.flush()
+    db_session.add_all([
+        CenaToastLink(
+            cena_employee_id=emp.id,
+            store_key="copperfield",
+            toast_id="toast-maria",
+            toast_name="Maria Gonzalez",
+        ),
+        PerfPeriodCache(
+            cena_employee_id=emp.id,
+            period="week",
+            period_start="2026-06-14",
+            period_end="2026-06-20",
+            total_hours=5.5,
+            base_pay=44.0,
+            tips=82.5,
+            service_json={
+                "avg_drink_secs": 300,
+                "avg_app_secs": 720,
+                "app_count": 2,
+                "avg_entree_secs": 960,
+                "avg_gap_secs": 420,
+                "avg_duration_secs": 3360,
+            },
+        ),
+        PerfPeriodCache(
+            cena_employee_id=emp.id,
+            period="month",
+            period_start="2026-06-01",
+            period_end="2026-06-30",
+            total_hours=1.0,
+            base_pay=10.0,
+            tips=10.0,
+            service_json={},
+        ),
+        PerfShiftCache(
+            cena_employee_id=emp.id,
+            business_date="2026-06-17",
+            clock_in="2026-06-17T16:00:00",
+            clock_out="2026-06-17T21:30:00",
+            total_hours=5.5,
+            base_pay=44.0,
+            tips=82.5,
+        ),
+        PerfRankCache(
+            cena_employee_id=emp.id,
+            rank_json={
+                "is_tipped": True,
+                "ranks": {
+                    "week": {
+                        "effective_hourly": {"rank": 2, "value": 23.0},
+                        "tip_percent": {"rank": 3, "value": 18.2},
+                        "combined": {"rank": 2, "value": 91.0},
+                    },
+                    "month": {
+                        "effective_hourly": {"rank": 4, "value": 20.0},
+                        "tip_percent": {"rank": 4, "value": 0.0},
+                        "combined": {"rank": 4, "value": 80.0},
+                    }
+                },
+            },
+        ),
+    ])
+    db_session.commit()
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(employee_mod.employee_auth)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["employee_id"] = emp.id
+        sess["employee_session_version"] = emp.session_version
+        sess["auth_ok"] = True
+
+    res = client.get("/employee/performance-center")
+    data = res.get_json()
+
+    assert res.status_code == 200
+    current_week = data["periods"]["current_week"]
+    assert current_week["money"]["hours"] == 5.5
+    assert current_week["money"]["effective_hourly"] == 23.0
+    assert current_week["money"]["tip_pct"] == 18.2
+    assert data["periods"]["current_month"]["money"]["tip_pct"] is None
+
+    tech = current_week["technical"]
+    assert tech["avg_drink_secs"]["display"] == "5m"
+    assert "300 seconds / 60 = 5m" in tech["avg_drink_secs"]["formula"]
+    assert tech["avg_app_secs"]["display"] == "12m"
+    assert "2 samples" in tech["avg_app_secs"]["formula"]
+    assert tech["hours"]["display"] == "5.5h"
+    assert "sum of 1 clock row" in tech["hours"]["formula"]
+    assert tech["hours"]["rows"][0]["hours"] == 5.5
 
 
 def test_employee_dashboard_has_live_today_surface():

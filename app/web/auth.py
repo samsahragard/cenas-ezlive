@@ -57,6 +57,7 @@ EXEMPT_PREFIXES = (
     "/install",                  # public PWA install instructions (was dropped in cb0d482, restored)
     "/worldcup",                 # PUBLIC no-login World Cup board (page + /worldcup/data.json feed). Serves only public sports data — no store/personal data. Sam 2026-06-13.
     "/ez-market2",               # PUBLIC read-only Ez Market demo for recruiting drivers; no request/queue/pay actions execute.
+    "/driverapp",                # PUBLIC driver recruiting/application page; POST stores applications only, no account/action access.
     "/driver/app.apk",           # public APK download redirect — drivers need this BEFORE having an account
     "/privacy",                  # public privacy policy (Play Store + general audit requirement)
     "/request-access",           # public access-request form (gated approval inside)

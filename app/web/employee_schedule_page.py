@@ -93,6 +93,8 @@ def my_schedule_page():
     # active_section drives the segmented control; the time-off form posts to
     # its backend when that lands.
     section = (request.args.get("view") or "shifts").lower()
+    if section == "roster":
+        return redirect("/employee/roster")
     if section not in ("shifts", "timeoff", "market"):
         section = "shifts"
     return render_template(

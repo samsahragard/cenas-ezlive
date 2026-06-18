@@ -195,39 +195,39 @@ def write_file_tool(filePath: str, content: str) -> str:
 
 def search_manager_playbooks_tool(query: str) -> list[dict]:
     """
-    Search the manager playbooks (operational guidelines) recursively for files under docs/manager_playbooks/ 
-    and return paragraphs or sections containing the matching search query.
-    Only Partners and Managers have access to this tool.
-    
+    Search manager playbooks under docs/manager_playbooks/ and return matching
+    sections. Only partners and managers receive this tool in the assistant.
+
     Args:
-        query: The keyword or phrase to search for.
+        query: Keyword or phrase to search for.
     """
     playbooks_dir = workspace_path / "docs" / "manager_playbooks"
     results = []
     if not playbooks_dir.exists() or not playbooks_dir.is_dir():
         return [{"error": "Playbooks directory docs/manager_playbooks/ does not exist."}]
-    
-    query_words = [w.lower() for w in query.split() if w]
+
+    query_text = query.strip().lower()
+    query_words = [w for w in query_text.split() if w]
     if not query_words:
         return []
-        
+
     for path in playbooks_dir.rglob("*"):
         if path.is_file() and path.suffix.lower() in (".md", ".txt"):
             try:
                 content = path.read_text(encoding="utf-8")
                 paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
                 rel_path = path.relative_to(workspace_path).as_posix()
-                for p_idx, para in enumerate(paragraphs):
-                    para_lower = para.lower()
-                    if all(w in para_lower for w in query_words) or query.lower() in para_lower:
+                for p_idx, paragraph in enumerate(paragraphs):
+                    para_lower = paragraph.lower()
+                    if query_text in para_lower or all(word in para_lower for word in query_words):
                         results.append({
                             "file": rel_path,
                             "paragraph_index": p_idx,
-                            "content": para
+                            "content": paragraph,
                         })
             except Exception as e:
                 logger.warning(f"Failed to read playbook file {path}: {e}")
-                
+
     return results[:15]
 
 def query_sales_db_tool(sqlQuery: str) -> list[dict]:
@@ -1382,14 +1382,13 @@ Scheduling Operations (Create, Read, Update, Delete, Copy, Publish):
 
 Manager Playbooks & Decision Support:
 - Only Partners and Managers have access to the `search_manager_playbooks_tool`. Hourly staff cannot access this tool.
-- You have access to the `search_manager_playbooks_tool` which allows you to query operational guides and distilled rules stored in `docs/manager_playbooks/`.
+- For Partners and Managers, `search_manager_playbooks_tool` searches operational guides and distilled rules stored in `docs/manager_playbooks/`.
 - The available books and guides in `docs/manager_playbooks/` are:
   1. The "Leadership Book": `distilled_leadership_rules.md` (distilled from John Maxwell's "21 Irrefutable Laws of Leadership").
   2. The "Server/Hospitality Book": `setting_the_table_hospitality.md` (distilled from Danny Meyer's "Setting the Table").
   3. The "Unreasonable Hospitality Book": `unreasonable_hospitality_playbook.md` (distilled from Will Guidara's "Unreasonable Hospitality").
 - When the user asks about or mentions "the books", "leadership books", "server books", "hospitality books", "laws of leadership", "rules of leadership", "setting the table", "hospitality rules", "leadership rules", "unreasonable hospitality", "will guidara", "guidara", or "eleven madison park", you MUST immediately call `search_manager_playbooks_tool` to search for relevant entries and use them to formulate your response.
-- When managers ask for leadership advice, decision-making guidance, or how to handle specific employee situations (e.g. conflict, coaching, performance issues, policy questions), you MUST use `search_manager_playbooks_tool` to retrieve the relevant paragraphs or rules, and explicitly reference those playbooks and laws of leadership in your reasoning and recommendation.
-
+- When managers ask for leadership advice, decision-making guidance, or how to handle specific employee situations (for example conflict, coaching, performance issues, or policy questions), you MUST use `search_manager_playbooks_tool` to retrieve the relevant paragraphs or rules, and explicitly reference those playbooks and leadership/hospitality rules in your recommendation.
 """
 
         if user_tier == "partner":

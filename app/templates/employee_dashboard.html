@@ -1,8 +1,9 @@
 {# Cenas Floor Pulse - Today tab, wired to REAL Toast performance.
    The page renders the employee's own identity + a config of endpoint paths;
    all numbers hydrate client-side from /employee/performance-center (money +
-   rankings + sanitized peer leaderboard) and /employee/my-performance (service
-   averages). Those endpoints already enforce: confirmed Toast link only,
+   rankings + sanitized peer leaderboard + technical breakdowns) and
+   /employee/my-performance (live service activity for today's tips/detail).
+   Those endpoints already enforce: confirmed Toast link only,
    BOH tip-omission, min-cohort-gated peers, zero cross-employee data.
 
    Honest states: not linked -> "connect Toast" card; syncing -> "preparing";
@@ -13,36 +14,28 @@
 {% block title %}Today &middot; Cenas Floor{% endblock %}
 
 {% block employee_hero %}
-<section class="cfp-welcome cfp-welcome-clean">
-  <div class="cfp-welcome-body">
-    <h1>{{ employee.full_name or 'Team member' }}</h1>
-    <p>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-      {% if employee.role %}{{ employee.role }}{% if employee.location %} &middot; {% endif %}{% endif %}{{ employee.location or '' }}
-    </p>
-  </div>
-</section>
-
 <div class="cfp-segment" role="tablist" aria-label="Performance range">
-  {% for key, label in [('today','Today'),('week','Week'),('month','Month'),('last30','Last 30')] %}
+  {% for key, label in [
+    ('today', ('Today',)),
+    ('current_week', ('Current', 'Week')),
+    ('last_week', ('Last', 'Week')),
+    ('current_month', ('Current', 'Month')),
+    ('last_month', ('Last', 'Month')),
+  ] %}
     <button type="button" class="cfp-seg-btn{% if range_key == key %} is-on{% endif %}"
             role="tab" aria-selected="{{ 'true' if range_key == key else 'false' }}"
-            data-range="{{ key }}">{{ label }}</button>
+            data-range="{{ key }}">
+      <span class="cfp-seg-stack">
+        {% for word in label %}<span>{{ word }}</span>{% endfor %}
+      </span>
+    </button>
   {% endfor %}
-  <a class="cfp-seg-link" role="tab" aria-selected="false" href="/employee/roster">Roster</a>
 </div>
 {% endblock %}
 
 {% block employee_content %}
 
 <div id="cfp-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading your numbers...</div>
-
-{# Not-linked / syncing / access honest states #}
-<div id="cfp-state" class="cfp-empty-state" hidden>
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
-  <strong id="cfp-state-title">Performance not available</strong>
-  <p id="cfp-state-body"></p>
-</div>
 
 {# Everything below is filled in from the real payload; hidden until ready. #}
 <div id="cfp-content" hidden>
@@ -74,9 +67,10 @@
     <div class="cfp-detail-drawer" id="cfp-earn-detail" hidden></div>
   </section>
 
-  <section class="cfp-block" id="cfp-technical" hidden>
-    <div class="cfp-section-head"><h2>Technical averages</h2><span>operations style</span></div>
+  <section class="cfp-block" id="cfp-technical">
+    <div class="cfp-section-head"><h2>Technical averages</h2><span id="cfp-tech-scope">today</span></div>
     <div class="cfp-tech-grid" id="cfp-tech-grid"></div>
+    <div class="cfp-detail-drawer" id="cfp-tech-detail" hidden></div>
   </section>
 
 </div>
@@ -107,7 +101,18 @@
   function hide(el){ if(el) el.hidden = true; }
   function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
   function money(v){ var n=Number(v); return Number.isFinite(n) ? "$"+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}) : "--"; }
-  function pct(v,d){ var n=Number(v); return Number.isFinite(n) ? n.toFixed(d==null?0:d)+"%" : "--"; }
+  function pct(v,d){
+    if(v === null || v === undefined || v === "") return "--";
+    var n=Number(v);
+    return Number.isFinite(n) ? n.toFixed(d==null?0:d)+"%" : "--";
+  }
+  function tipPct(m){
+    var tips = Number((m || {}).tips);
+    var raw = (m || {}).tip_pct;
+    var n = Number(raw);
+    if(Number.isFinite(tips) && tips > 0 && (!Number.isFinite(n) || n <= 0)) return "--";
+    return pct(raw, 1);
+  }
   function mins(secs){ var n=Number(secs); return Number.isFinite(n) && n>0 ? Math.round(n/60)+"m" : "--"; }
 
   // ---- fetch helpers --------------------------------------------------------
@@ -120,16 +125,128 @@
       });
   }
 
-  function honestState(title, body){
-    hide($("cfp-loading")); hide($("cfp-content"));
-    $("cfp-state-title").textContent = title;
-    $("cfp-state-body").textContent = body;
-    show($("cfp-state"));
+  function emptyPeriod(){ return {money:{}, rankings:{}, daily:[]}; }
+  function emptyPerformance(){
+    return {
+      ok: true,
+      linked: true,
+      is_tipped: true,
+      periods: {
+        today: emptyPeriod(),
+        week: emptyPeriod(),
+        month: emptyPeriod(),
+        last30: emptyPeriod(),
+        current_week: emptyPeriod(),
+        last_week: emptyPeriod(),
+        current_month: emptyPeriod(),
+        last_month: emptyPeriod()
+      }
+    };
+  }
+
+  function renderReady(){
+    hide($("cfp-loading"));
+    show($("cfp-content"));
+    setRange(range);
   }
 
   // ---- render ---------------------------------------------------------------
   function rangeLabel(r){
-    return {today:"Today", week:"This week", month:"This month", last30:"Last 30 days"}[r] || r;
+    return {
+      today:"Today",
+      week:"Current week",
+      current_week:"Current week",
+      last_week:"Last week",
+      month:"Current month",
+      current_month:"Current month",
+      last_month:"Last month",
+      last30:"Last 30 days"
+    }[r] || r;
+  }
+  function rangeBadge(r){
+    return {
+      today: CFG.todayLabel || "today",
+      week: "Sun-Sat",
+      current_week: "Sun-Sat",
+      last_week: "Sun-Sat",
+      month: "calendar month",
+      current_month: "calendar month",
+      last_month: "calendar month",
+      last30: "rolling 30"
+    }[r] || "range";
+  }
+  function serviceForRange(r){
+    if(!SERVICE) return {};
+    return SERVICE[r]
+      || (r === "current_week" ? SERVICE.week : null)
+      || (r === "current_month" ? SERVICE.month : null)
+      || {};
+  }
+
+  var TECH_ROWS = [
+    {key:"avg_drink_secs", label:"Avg drink", count:"drink_count"},
+    {key:"avg_app_secs", label:"Avg apps", count:"app_count"},
+    {key:"avg_entree_secs", label:"Avg entree", count:"entree_count"},
+    {key:"avg_gap_secs", label:"Drink-entree gap", count:"gap_count"},
+    {key:"avg_duration_secs", label:"Avg duration", count:"duration_count"},
+    {key:"hours", label:"Hours"}
+  ];
+
+  function liveServiceValue(svc, key){
+    if(!svc) return null;
+    var live = svc.live_toast || {};
+    if(live && live[key] != null) return live[key];
+    return svc[key];
+  }
+
+  function techFromLiveService(def, svc){
+    var raw = liveServiceValue(svc, def.key);
+    var seconds = Number(raw);
+    if(!Number.isFinite(seconds) || seconds <= 0) return null;
+    var display = mins(seconds);
+    var countRaw = liveServiceValue(svc, def.count || "");
+    var count = Number(countRaw);
+    var formula = Number.isFinite(count) && count > 0
+      ? "Toast live timing is averaging " + Math.round(seconds) + " seconds across "
+        + Math.round(count) + " sample" + (Math.round(count) === 1 ? "" : "s")
+        + "; " + Math.round(seconds) + " seconds / 60 = " + display + "."
+      : "Toast live timing is averaging " + Math.round(seconds)
+        + " seconds; " + Math.round(seconds) + " seconds / 60 = " + display + ".";
+    return {
+      label: def.label,
+      value: seconds,
+      display: display,
+      unit: "minutes",
+      source: "Live Toast timing",
+      formula: formula,
+      rows: []
+    };
+  }
+
+  function technicalForRange(p, m){
+    var source = (p && p.technical) || {};
+    var svc = serviceForRange(range);
+    var out = {};
+    TECH_ROWS.forEach(function(def){
+      var item = source[def.key] || {};
+      if(def.key !== "hours"){
+        var liveItem = techFromLiveService(def, svc);
+        if(liveItem && (item.value == null || item.display === "--")){
+          item = liveItem;
+        }
+      } else if(!item.display){
+        item = {
+          label: "Hours",
+          value: Number(m.hours || 0),
+          display: Number(m.hours || 0).toFixed(1) + "h",
+          source: "Performance period",
+          formula: "Hours = the total clocked hours stored for this selected period.",
+          rows: []
+        };
+      }
+      out[def.key] = item;
+    });
+    return out;
   }
 
   function renderRange(){
@@ -141,8 +258,7 @@
     var isToday = range === "today";
 
     $("cfp-hero-label").textContent = rangeLabel(range) + " take-home";
-    $("cfp-hero-range").textContent = isToday ? (CFG.todayLabel||"today")
-      : (range==="week"?"current week":range==="month"?"current month":"rolling 30");
+    $("cfp-hero-range").textContent = rangeBadge(range);
     $("cfp-hero-money").textContent = money(m.total_pay || 0);
 
     // hero sub
@@ -163,7 +279,7 @@
       $("cfp-hg-l2").textContent = "HR Rate";
       $("cfp-hg-rate").textContent = money(m.effective_hourly);
       $("cfp-hg-l3").textContent = "Total Tip %";
-      $("cfp-hg-tip-pct").textContent = pct(m.tip_pct,1);
+      $("cfp-hg-tip-pct").textContent = tipPct(m);
     } else {
       $("cfp-hg-l1").textContent = "Top";
       $("cfp-hg-top").textContent = topRank.rank ? ("#"+topRank.rank) : "--";
@@ -172,8 +288,6 @@
       $("cfp-hg-l3").textContent = "Shifts";
       $("cfp-hg-tip-pct").textContent = String(m.shifts||0);
     }
-    var svc = (SERVICE && SERVICE[range]) || {};
-
     // earnings
     $("cfp-earn-scope").textContent = isToday ? "daily" : "range";
     var cards = [];
@@ -183,27 +297,26 @@
     hide($("cfp-earn-detail"));
     $("cfp-earn-detail").innerHTML = "";
 
-    // technical averages from service blob (real ops metrics); hide if none
-    var techRows = [
-      ["Avg drink", mins(svc.avg_drink_secs)],
-      ["Avg apps", mins(svc.avg_app_secs)],
-      ["Avg entree", mins(svc.avg_entree_secs)],
-      ["Drink-entree gap", mins(svc.avg_gap_secs)],
-      ["Avg duration", mins(svc.avg_duration_secs)],
-      ["Hours", Number(m.hours||0).toFixed(1)+"h"],
-    ];
-    var anyTech = [svc.avg_drink_secs, svc.avg_app_secs, svc.avg_entree_secs, svc.avg_gap_secs, svc.avg_duration_secs]
-      .some(function(v){ return Number(v) > 0; });
-    if(anyTech){
-      $("cfp-tech-grid").innerHTML = techRows.map(function(r){
-        return '<article><span>'+esc(r[0])+'</span><strong>'+esc(r[1])+'</strong></article>';
-      }).join("");
-      show($("cfp-technical"));
-    } else {
-      hide($("cfp-technical"));
-    }
+    renderTechnical(p, m);
 
     renderRankDrawer(null);
+  }
+
+  function renderTechnical(p, m){
+    if($("cfp-tech-scope")) $("cfp-tech-scope").textContent = rangeLabel(range);
+    var tech = technicalForRange(p || {}, m || {});
+    $("cfp-tech-grid").innerHTML = TECH_ROWS.map(function(def){
+      var item = tech[def.key] || {};
+      var display = item.display || "--";
+      return '<button type="button" class="cfp-tech-card'+(display==="--"?" is-missing":"")+'" data-tech-target="'+esc(def.key)+'">'
+        + '<span>'+esc(item.label || def.label)+'</span>'
+        + '<strong>'+esc(display)+'</strong>'
+        + '<em>'+esc(item.source || "Calculation")+'</em>'
+        + '</button>';
+    }).join("");
+    var drawer = $("cfp-tech-detail");
+    if(drawer){ hide(drawer); drawer.innerHTML = ""; }
+    show($("cfp-technical"));
   }
 
   function mcard(label, value, note, target, good){
@@ -308,6 +421,34 @@
     }
   }
 
+  function renderTechDetail(target){
+    var p = (PERF && PERF.periods && PERF.periods[range]) || {};
+    var tech = technicalForRange(p, p.money || {});
+    var item = tech[target] || {};
+    var box = $("cfp-tech-detail");
+    if(!box) return;
+    var rows = item.rows || [];
+    var html = '<div class="cfp-drawer-head"><strong>'+esc(item.label || "Technical average")+'</strong><button type="button" data-detail-close>Close</button></div>'
+      + '<p class="cfp-tech-formula">'+esc(item.formula || "No calculation is posted for this metric yet.")+'</p>';
+    if(rows.length){
+      html += '<div class="cfp-tech-breakdown">'
+        + rows.map(function(row){
+            return '<div>'
+              + '<span>'+esc(row.date || "Shift")+'</span>'
+              + '<b>'+esc(fmtClock(row.clock_in))+'</b>'
+              + '<b>'+esc(fmtClock(row.clock_out))+'</b>'
+              + '<strong>'+Number(row.hours || 0).toFixed(2)+'h</strong>'
+              + '<em>'+esc(row.source || "Clock row")+'</em>'
+              + '</div>';
+          }).join("")
+        + '</div>';
+    } else if(item.source){
+      html += '<p>Source: '+esc(item.source)+'.</p>';
+    }
+    box.innerHTML = html;
+    show(box);
+  }
+
   // ---- range switching ------------------------------------------------------
   function setRange(r){
     range = r;
@@ -332,19 +473,20 @@
     if(ev.target.closest("[data-rank-close]")){ renderRankDrawer(null); return; }
     var metric = ev.target.closest("[data-detail-target]");
     if(metric){ renderEarnDetail(metric.getAttribute("data-detail-target")); return; }
+    var tech = ev.target.closest("[data-tech-target]");
+    if(tech){ renderTechDetail(tech.getAttribute("data-tech-target")); return; }
     if(ev.target.closest("[data-detail-close]")){
       hide($("cfp-earn-detail"));
       $("cfp-earn-detail").innerHTML = "";
+      hide($("cfp-tech-detail"));
+      $("cfp-tech-detail").innerHTML = "";
     }
   });
 
   // ---- boot -----------------------------------------------------------------
   getJson(CFG.perfUrl)
     .then(function(j){
-      if(!j || j.ok === false){ hide($("cfp-loading")); return null; }
-      if(j.linked === false){ honestState("Connect your Toast profile", "Your performance appears here once a manager links your Cena profile to Toast."); return null; }
-      if(j.syncing === true){ honestState("Preparing your numbers", "Your performance is being synced. Check back shortly."); return null; }
-      PERF = j;
+      PERF = (!j || j.ok === false || j.linked === false || j.syncing === true) ? emptyPerformance() : j;
       // pull service averages (best-effort; technical section hides if absent)
       return getJson(CFG.myPerfUrl).then(function(mp){
         SERVICE = {};
@@ -357,12 +499,13 @@
     })
     .then(function(ok){
       if(!ok) return;
-      hide($("cfp-loading")); hide($("cfp-state")); show($("cfp-content"));
-      setRange(range);
+      renderReady();
     })
     .catch(function(e){
-      if(e && e.status === 401){ honestState("Please sign in again", "Your session expired. Reload and sign back in."); return; }
-      hide($("cfp-loading"));
+      PERF = emptyPerformance();
+      SERVICE = {};
+      LIVE_SERVICE = null;
+      renderReady();
     });
 })();
 </script>

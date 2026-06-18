@@ -1939,6 +1939,7 @@ body::after {
 }
 
 .cfp-segment {
+  display: flex;
   gap: 6px;
   padding: 6px;
   overflow-x: auto;
@@ -1949,8 +1950,8 @@ body::after {
 .cfp-segment::-webkit-scrollbar { display: none; }
 .cfp-seg-btn,
 .cfp-seg-link {
-  flex: 0 0 auto;
-  min-width: 74px;
+  flex: 1 1 0%;
+  min-width: 0;
   min-height: 34px;
   border: 0;
   border-radius: 13px;
@@ -1965,9 +1966,9 @@ body::after {
 }
 .cfp-seg-btn.is-on,
 .cfp-seg-link.is-on {
-  color: #160904;
-  background: linear-gradient(145deg, #f6bd59, #ff8d4e);
-  box-shadow: 0 10px 24px rgba(255, 141, 78, .22);
+  color: #ffffff;
+  background: linear-gradient(145deg, #8b1010, #4c0303);
+  box-shadow: 0 10px 24px rgba(139, 16, 16, .35);
 }
 
 .cfp-jump {

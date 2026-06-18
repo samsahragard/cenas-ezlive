@@ -26,6 +26,12 @@
 
 <div id="cfp-loading" class="cfp-block" style="text-align:center;color:var(--cfp-faint);font:800 11px var(--cfp-mono);letter-spacing:.12em;text-transform:uppercase;padding:28px 0;">Loading your tables...</div>
 
+<div id="cfp-empty" class="cfp-empty-state" hidden>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+  <strong>No Active Tables</strong>
+  <p>There are no tables recorded for this period.</p>
+</div>
+
 <div id="cfp-content" hidden>
   <section class="cfp-block" id="cfp-map">
     <div class="cfp-section-head"><h2>Live station map</h2><span id="cfp-map-count"></span></div>
@@ -102,10 +108,11 @@
   function render(timelines){
     if(!timelines.length){
       hide($("cfp-loading")); hide($("cfp-content"));
+      show($("cfp-empty"));
       return;
     }
 
-    hide($("cfp-loading")); show($("cfp-content"));
+    hide($("cfp-loading")); hide($("cfp-empty")); show($("cfp-content"));
     $("cfp-map-count").textContent = timelines.length + (timelines.length===1?" ticket":" tickets");
 
     var map = $("cfp-table-map");

@@ -552,6 +552,64 @@ def server_perf_report(start: datetime, end: datetime,
     }
 
 
+def server_perf_metrics_for_guid(start: datetime, end: datetime, server_guid: str, location_filter: str | None = None) -> dict:
+    """Compute performance metrics (averages) for a specific server GUID in [start, end] range."""
+    client = ToastClient.shared()
+    locations = _resolve_locations(location_filter)
+    item_categories = _load_item_categories()
+
+    dates = []
+    d = start
+    while d <= end:
+        dates.append(d.strftime("%Y%m%d"))
+        d += timedelta(days=1)
+
+    s = {
+        "tickets": 0,
+        "drink_secs": [], "app_secs": [], "entree_secs": [],
+        "gap_secs": [], "duration_secs": [],
+        "cc_subtotal": 0.0, "cc_tips": 0.0, "cash_amount": 0.0,
+    }
+
+    for loc, rg in locations.items():
+        all_orders = []
+        for bd in dates:
+            try:
+                # refresh is False by default for range cache fetches
+                all_orders.extend(client.fetch_orders_for_date(loc, rg, bd, refresh=False))
+            except Exception as ex:
+                log.warning("toast: server_perf_metrics_for_guid skip orders %s/%s: %s", loc, bd, ex)
+
+        for o in all_orders:
+            if o.get("voided"):
+                continue
+            for c in o.get("checks") or []:
+                ac = _analyze_check(c, o, item_categories)
+                if ac and ac.get("server_guid") == server_guid:
+                    s["tickets"] += 1
+                    s["cc_subtotal"] += ac["cc_subtotal"]
+                    s["cc_tips"] += ac["cc_tips"]
+                    s["cash_amount"] += ac["cash_amount"]
+                    if ac["first_drink"]:
+                        s["drink_secs"].append((ac["first_drink"] - ac["opened"]).total_seconds())
+                    if ac["first_appetizer"]:
+                        s["app_secs"].append((ac["first_appetizer"] - ac["opened"]).total_seconds())
+                    if ac["first_entree"]:
+                        s["entree_secs"].append((ac["first_entree"] - ac["opened"]).total_seconds())
+                    if ac["first_drink"] and ac["first_entree"]:
+                        s["gap_secs"].append((ac["first_entree"] - ac["first_drink"]).total_seconds())
+                    if ac["closed"]:
+                        s["duration_secs"].append((ac["closed"] - ac["opened"]).total_seconds())
+
+    return {
+        "avg_drink_secs": statistics.mean(s["drink_secs"]) if s["drink_secs"] else None,
+        "avg_app_secs": statistics.mean(s["app_secs"]) if s["app_secs"] else None,
+        "avg_entree_secs": statistics.mean(s["entree_secs"]) if s["entree_secs"] else None,
+        "avg_gap_secs": statistics.mean(s["gap_secs"]) if s["gap_secs"] else None,
+        "avg_duration_secs": statistics.mean(s["duration_secs"]) if s["duration_secs"] else None,
+    }
+
+
 def server_tips_for_guids(server_guids, location_filter, business_date,
                           refresh: bool = False) -> dict:
     """LIVE credit-card tips for a SPECIFIC set of Toast server guids on ONE

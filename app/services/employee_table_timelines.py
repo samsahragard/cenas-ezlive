@@ -279,7 +279,7 @@ def employee_table_timelines_payload(
             profile_dir=profile_dir,
             limit=limit,
         )
-        if profile_payload is not None:
+        if profile_payload is not None and profile_payload.get("tickets", 0) > 0:
             profile_payload["day"] = day_key
             profile_payload["used_profile_db"] = True
             return profile_payload

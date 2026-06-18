@@ -666,6 +666,28 @@ def my_performance():
                 "tips": round(float(r.tips or 0), 2),
                 "service": (r.service_json or {}),
             } for r in pc_rows]), key=lambda x: _ord.get(x["period"], 99))
+
+            # Compute technical averages on demand for historical periods if missing in cached service dict
+            try:
+                from app.services import toast_reports
+                guids = {l.toast_id for l in links if getattr(l, "toast_id", None)}
+                guid = next(iter(guids)) if guids else None
+                stores = {(l.store_key or "").strip().lower() for l in links if (l.store_key or "").strip()}
+                loc_filter = next(iter(stores)) if len(stores) == 1 else None
+                if guid:
+                    for pp in perf_periods:
+                        if pp["period"] != "today":
+                            svc = dict(pp.get("service") or {})
+                            has_tech = any(svc.get(k) is not None for k in ("avg_drink_secs", "avg_app_secs", "avg_entree_secs", "avg_gap_secs", "avg_duration_secs"))
+                            if not has_tech:
+                                start_dt = datetime.strptime(pp["period_start"], "%Y-%m-%d")
+                                end_dt = datetime.strptime(pp["period_end"], "%Y-%m-%d")
+                                computed = toast_reports.server_perf_metrics_for_guid(start_dt, end_dt, guid, loc_filter)
+                                svc.update(computed)
+                                pp["service"] = svc
+            except Exception:
+                logging.getLogger(__name__).warning("Failed to compute technical averages on demand", exc_info=True)
+
             # per-shift detail (Sam #2938 / samai #2954) -- STRICT WHITELIST: only
             # employee-own fields; NO toast_id / attribution / GUID in the payload.
             try:

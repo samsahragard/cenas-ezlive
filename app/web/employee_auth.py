@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -66,6 +67,15 @@ CODE_TTL_MINUTES = 10              # employee_sms_codes.expires_at = created + 1
 MAX_VERIFY_ATTEMPTS = 5            # "5-attempt lock" on a single code row
 RATE_WINDOW_SECONDS = 60          # request-code rate-limit window
 RATE_MAX_PER_WINDOW = 4           # 5th+ rapid request in the window -> 429 (B2 spec)
+
+# Cross-request cache for per-window service timing (performance_center computes
+# course-timing from Toast per date range; a cold compute can read ~30 days of
+# orders). Keyed (guid, loc, lo_iso, hi_iso) -> (expiry_monotonic, service_dict)
+# so each window computes at most once per worker per TTL, bounding Toast/CPU
+# load when ~dozens of employees load the dashboard. Toast itself disk-caches the
+# raw orders; this caches the parsed/averaged result.
+_SVC_WIN_TTL_SECONDS = 900        # 15 min
+_SVC_WIN_CACHE: dict = {}
 
 
 # --------------------------------------------------------------------------
@@ -1129,6 +1139,18 @@ def performance_center():
             except (TypeError, ValueError):
                 return None
 
+        def _norm_tip_pct(value):
+            # CK rank caches store tip% as a 0..1 RATIO (e.g. 0.18); the employee UI
+            # always shows the percent (18.0). Some caches already carry a percent,
+            # so only scale values that are clearly a ratio. Without this, the cached
+            # path rendered 0.18 -> round(0.18,1)=0.2 -> "0.2%" (Sam: TOTAL TIP % bug).
+            num = _as_float(value)
+            if num is None or num < 0:
+                return None
+            if 0 < num <= 1:
+                num *= 100
+            return round(num, 1)
+
         def _display_minutes(seconds):
             sec = _as_float(seconds)
             if sec is None or sec <= 0:
@@ -1238,8 +1260,16 @@ def performance_center():
                 "rows": rows,
             }
 
-        def _technical_for(r, hours, live_extra, live_bd, live_since):
-            service = r.service_json or {}
+        def _technical_for(r, hours, live_extra, live_bd, live_since,
+                           computed_service=None):
+            service = dict(r.service_json or {})
+            # Fall back to the per-window Toast compute when the cached service_json
+            # carries no timing (v1 cache ships it empty; last_week/last_month never
+            # cache it). Keeps the cached value authoritative when present.
+            if computed_service and not any(
+                service.get(k) is not None for k in _TECH_SECS_KEYS
+            ):
+                service.update(computed_service)
             return {
                 "avg_drink_secs": _service_metric(
                     service, "avg_drink_secs", "Avg drink",
@@ -1370,12 +1400,61 @@ def performance_center():
                 for key in ("effective_hourly", "tip_percent", "tips_per_hour",
                             "combined", "combined_rank"):
                     if key in x:
-                        row[key] = x.get(key)
+                        row[key] = (_norm_tip_pct(x.get(key)) if key == "tip_percent"
+                                    else x.get(key))
                 ranked.append(row)
             if not ranked:
                 ranked = _synth_peer_rows(period, mk)
             ranked.sort(key=lambda x: x["rank"] if x["rank"] is not None else 9999)
             return ranked
+
+        # Per-window service timing (Sam: server computes per-range from Toast so the
+        # "Technical averages" follow the date filter on EVERY range). Sales-clean --
+        # server_perf_metrics_for_guid returns only timing seconds/counts, scoped to
+        # the session employee's OWN Toast server GUID. Guarded + memoized per window
+        # (so aliased windows like current_week/week compute once); any failure
+        # degrades to "--" rather than a 500. Toast pulls ride the shared 30-min
+        # orders cache. This mirrors the on-demand compute already in /my-performance.
+        _TECH_SECS_KEYS = ("avg_drink_secs", "avg_app_secs", "avg_entree_secs",
+                           "avg_gap_secs", "avg_duration_secs")
+        _svc_guids = {l.toast_id for l in links if getattr(l, "toast_id", None)}
+        _svc_guid = next(iter(_svc_guids)) if _svc_guids else None
+        _svc_stores = {(l.store_key or "").strip().lower()
+                       for l in links if (l.store_key or "").strip()}
+        _svc_loc = next(iter(_svc_stores)) if len(_svc_stores) == 1 else None
+        _svc_win_cache = {}
+
+        def _service_for_window(lo_iso, hi_iso):
+            if not _svc_guid or not lo_iso or not hi_iso:
+                return {}
+            ck = (_svc_guid, _svc_loc, lo_iso, hi_iso)
+            now = time.monotonic()
+            # within-request memo (dedupes the period_order windows that overlap)
+            if ck in _svc_win_cache:
+                return _svc_win_cache[ck]
+            # cross-request TTL cache (bounds Toast/CPU cost to once per worker/TTL)
+            hit = _SVC_WIN_CACHE.get(ck)
+            if hit and hit[0] > now:
+                _svc_win_cache[ck] = hit[1]
+                return hit[1]
+            out = {}
+            try:
+                from app.services import toast_reports
+                start_dt = datetime.strptime(lo_iso, "%Y-%m-%d")
+                end_dt = datetime.strptime(hi_iso, "%Y-%m-%d")
+                out = toast_reports.server_perf_metrics_for_guid(
+                    start_dt, end_dt, _svc_guid, _svc_loc) or {}
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "perf-center per-window service compute failed", exc_info=True)
+                out = {}
+            _svc_win_cache[ck] = out
+            _SVC_WIN_CACHE[ck] = (now + _SVC_WIN_TTL_SECONDS, out)
+            # opportunistic prune so the module cache can't grow unbounded
+            if len(_SVC_WIN_CACHE) > 2000:
+                for k in [k for k, v in _SVC_WIN_CACHE.items() if v[0] <= now]:
+                    _SVC_WIN_CACHE.pop(k, None)
+            return out
 
         periods = {}
         period_order = (
@@ -1443,7 +1522,7 @@ def performance_center():
                     money["tips_live"] = True
                 else:
                     tp = ((rj_ranks.get(rank_period) or {}).get("tip_percent") or {}).get("value")
-                    tp_num = _as_float(tp)
+                    tp_num = _norm_tip_pct(tp)   # ratio (0.18) -> percent (18.0)
                     money["tip_pct"] = (
                         None
                         if (tp_num is None or (tp_num <= 0 and tips > 0))
@@ -1458,7 +1537,9 @@ def performance_center():
                 ranked = _peer_rows(rank_period, mk)
                 rankings[mk] = {
                     "rank": rr.get("rank"), "status": rr.get("status"),
-                    "cohort_size": rr.get("cohort_size"), "value": rr.get("value"),
+                    "cohort_size": rr.get("cohort_size"),
+                    "value": (_norm_tip_pct(rr.get("value")) if mk == "tip_pct"
+                              else rr.get("value")),
                     # held-days history not built yet -> clean empty state
                     "days_ranked": 0, "days_at_current_rank": 0, "history": [],
                     "leaders": ranked[:3],
@@ -1529,7 +1610,8 @@ def performance_center():
                                         "since": live_since if live_extra > 0 else None},
                                "daily": daily,
                                "technical": _technical_for(
-                                   r, hours, live_extra, live_bd, live_since
+                                   r, hours, live_extra, live_bd, live_since,
+                                   _service_for_window(r.period_start, r.period_end),
                                )}
 
         return jsonify({"ok": True, "linked": True,

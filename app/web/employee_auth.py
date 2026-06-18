@@ -943,21 +943,16 @@ def performance_center():
         def _range_windows():
             today = _store_day()
             week_start = today - timedelta(days=(today.weekday() + 1) % 7)
-            week_end = week_start + timedelta(days=6)
             last_week_start = week_start - timedelta(days=7)
             last_week_end = week_start - timedelta(days=1)
             month_start = today.replace(day=1)
-            if month_start.month == 12:
-                next_month = month_start.replace(year=month_start.year + 1, month=1)
-            else:
-                next_month = month_start.replace(month=month_start.month + 1)
-            month_end = next_month - timedelta(days=1)
             last_month_end = month_start - timedelta(days=1)
             last_month_start = last_month_end.replace(day=1)
             return {
-                "current_week": (week_start, week_end),
+                "today": (today, today),
+                "current_week": (week_start, today),
                 "last_week": (last_week_start, last_week_end),
-                "current_month": (month_start, month_end),
+                "current_month": (month_start, today),
                 "last_month": (last_month_start, last_month_end),
             }
 
@@ -965,7 +960,20 @@ def performance_center():
         RANGE_CACHE_ALIAS = {"current_week": "week", "current_month": "month"}
         RANGE_RANK_ALIAS = {"current_week": "week", "current_month": "month"}
 
-        def _period_from_shift_rows(period, lo_day, hi_day):
+        def _service_seed_for(period, lo_day=None, hi_day=None):
+            row = pc_by_period.get(period)
+            alias = RANGE_CACHE_ALIAS.get(period)
+            if row is None and alias:
+                row = pc_by_period.get(alias)
+            if row is not None and lo_day is not None and hi_day is not None:
+                if (
+                    str(getattr(row, "period_start", "") or "") != lo_day.isoformat()
+                    or str(getattr(row, "period_end", "") or "") != hi_day.isoformat()
+                ):
+                    return {}
+            return dict(row.service_json or {}) if row is not None else {}
+
+        def _period_from_shift_rows(period, lo_day, hi_day, service_json=None):
             lo = lo_day.isoformat()
             hi = hi_day.isoformat()
             rows = [
@@ -982,18 +990,23 @@ def performance_center():
                 ot_hours=round(sum(float(x.ot_hours or 0) for x in rows), 2),
                 base_pay=round(sum(float(x.base_pay or 0) for x in rows), 2),
                 tips=round(sum(float(x.tips or 0) for x in rows), 2),
-                service_json={},
+                service_json=dict(service_json or {}),
             )
 
         def _period_row(period):
+            if period in RANGE_WINDOWS:
+                lo, hi = RANGE_WINDOWS[period]
+                return _period_from_shift_rows(
+                    period,
+                    lo,
+                    hi,
+                    service_json=_service_seed_for(period, lo, hi),
+                )
             if period in pc_by_period:
                 return pc_by_period[period]
             alias = RANGE_CACHE_ALIAS.get(period)
             if alias and alias in pc_by_period:
                 return pc_by_period[alias]
-            if period in ("last_week", "last_month"):
-                lo, hi = RANGE_WINDOWS[period]
-                return _period_from_shift_rows(period, lo, hi)
             if period != "today":
                 # If a wider current-row cache is missing/stale but Today exists,
                 # avoid showing a false zero while the next perf push catches up.
@@ -1151,6 +1164,158 @@ def performance_center():
                 num *= 100
             return round(num, 1)
 
+        def _employee_visible_service_metrics(metrics):
+            if not isinstance(metrics, dict):
+                return {}
+            allowed = {
+                "tickets",
+                "avg_drink_secs", "drink_count",
+                "avg_drink_count", "drink_samples",
+                "avg_app_secs", "app_count",
+                "avg_app_count", "app_samples",
+                "avg_entree_secs", "entree_count",
+                "avg_entree_count", "entree_samples",
+                "avg_gap_secs", "gap_count",
+                "avg_gap_count", "gap_samples",
+                "avg_duration_secs", "duration_count",
+                "avg_duration_count", "duration_samples",
+                "tip_pct",
+            }
+            return {
+                k: v for k, v in metrics.items()
+                if k in allowed and not str(k).startswith("_")
+            }
+
+        guid_locs = []
+        seen_guid_locs = set()
+        for link in links:
+            guid = (getattr(link, "toast_id", None) or "").strip()
+            if not guid:
+                continue
+            loc = (getattr(link, "store_key", None) or "").strip().lower() or None
+            key = (guid, loc)
+            if key not in seen_guid_locs:
+                seen_guid_locs.add(key)
+                guid_locs.append(key)
+        emp_guid = (getattr(emp, "toast_employee_guid", None) or "").strip()
+        if emp_guid and not any(g == emp_guid for g, _loc in guid_locs):
+            guid_locs.append((emp_guid, None))
+
+        toast_metrics_cache = {}
+
+        def _merge_toast_metric_results(results):
+            avg_fields = {
+                "avg_drink_secs": "drink_count",
+                "avg_app_secs": "app_count",
+                "avg_entree_secs": "entree_count",
+                "avg_gap_secs": "gap_count",
+                "avg_duration_secs": "duration_count",
+            }
+            out = {}
+            total_tickets = 0
+            total_tips = 0.0
+            total_subtotal = 0.0
+            for res in results:
+                if not isinstance(res, dict):
+                    continue
+                total_tickets += int(_as_float(res.get("tickets")) or 0)
+                total_tips += float(_as_float(res.get("_cc_tips")) or 0.0)
+                total_subtotal += float(_as_float(res.get("_cc_subtotal")) or 0.0)
+            if total_tickets:
+                out["tickets"] = total_tickets
+            for avg_key, count_key in avg_fields.items():
+                numer = 0.0
+                denom = 0
+                for res in results:
+                    if not isinstance(res, dict):
+                        continue
+                    avg = _as_float(res.get(avg_key))
+                    count = int(_as_float(res.get(count_key)) or 0)
+                    if avg is None or count <= 0:
+                        continue
+                    numer += avg * count
+                    denom += count
+                out[count_key] = denom
+                out[avg_key] = (numer / denom) if denom > 0 else None
+            out["tip_pct"] = (
+                round(total_tips / total_subtotal * 100, 1)
+                if total_subtotal > 0 else None
+            )
+            return out
+
+        def _toast_metrics_for_range(start_day, end_day):
+            if not guid_locs:
+                return {}
+            lo_iso = start_day.isoformat()
+            hi_iso = end_day.isoformat()
+            key = (lo_iso, hi_iso, tuple(guid_locs))
+            if key in toast_metrics_cache:
+                return toast_metrics_cache[key]
+            now = time.monotonic()
+            global_key = ("employee-perf-service-v2", tuple(guid_locs), lo_iso, hi_iso)
+            hit = _SVC_WIN_CACHE.get(global_key)
+            if hit and hit[0] > now:
+                toast_metrics_cache[key] = hit[1]
+                return hit[1]
+            try:
+                from app.services import toast_reports
+                start_dt = datetime.combine(start_day, datetime.min.time())
+                end_dt = datetime.combine(end_day, datetime.min.time())
+                results = [
+                    toast_reports.server_perf_metrics_for_guid(
+                        start_dt,
+                        end_dt,
+                        guid,
+                        loc,
+                        include_private_totals=True,
+                    )
+                    for guid, loc in guid_locs
+                ]
+                merged = _employee_visible_service_metrics(
+                    _merge_toast_metric_results(results)
+                )
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "employee perf: operations timing lookup failed",
+                    exc_info=True,
+                )
+                merged = {}
+            toast_metrics_cache[key] = merged
+            _SVC_WIN_CACHE[global_key] = (now + _SVC_WIN_TTL_SECONDS, merged)
+            if len(_SVC_WIN_CACHE) > 2000:
+                for k in [k for k, v in _SVC_WIN_CACHE.items() if v[0] <= now]:
+                    _SVC_WIN_CACHE.pop(k, None)
+            return merged
+
+        def _service_for_period(r):
+            service = dict(r.service_json or {})
+            timing_keys = (
+                "avg_drink_secs", "avg_app_secs", "avg_entree_secs",
+                "avg_gap_secs", "avg_duration_secs",
+            )
+            needs_timing = any(service.get(k) is None for k in timing_keys)
+            needs_tip_pct = service.get("tip_pct") is None
+            if not (needs_timing or needs_tip_pct):
+                return _employee_visible_service_metrics(service)
+            try:
+                lo = datetime.fromisoformat(str(r.period_start)).date()
+                hi = datetime.fromisoformat(str(r.period_end)).date()
+            except (TypeError, ValueError):
+                return _employee_visible_service_metrics(service)
+            computed = _toast_metrics_for_range(lo, hi)
+            if computed:
+                for key, val in computed.items():
+                    if val is None:
+                        continue
+                    if (
+                        key == "tip_pct"
+                        or key == "tickets"
+                        or key.endswith("_count")
+                        or (key in timing_keys and service.get(key) is None)
+                    ):
+                        service[key] = val
+            return _employee_visible_service_metrics(service)
+
         def _display_minutes(seconds):
             sec = _as_float(seconds)
             if sec is None or sec <= 0:
@@ -1260,16 +1425,11 @@ def performance_center():
                 "rows": rows,
             }
 
-        def _technical_for(r, hours, live_extra, live_bd, live_since,
-                           computed_service=None):
-            service = dict(r.service_json or {})
-            # Fall back to the per-window Toast compute when the cached service_json
-            # carries no timing (v1 cache ships it empty; last_week/last_month never
-            # cache it). Keeps the cached value authoritative when present.
-            if computed_service and not any(
-                service.get(k) is not None for k in _TECH_SECS_KEYS
-            ):
-                service.update(computed_service)
+        def _technical_for(r, hours, live_extra, live_bd, live_since, service=None):
+            service = (
+                _employee_visible_service_metrics(r.service_json or {})
+                if service is None else service
+            )
             return {
                 "avg_drink_secs": _service_metric(
                     service, "avg_drink_secs", "Avg drink",
@@ -1303,6 +1463,14 @@ def performance_center():
         def _rank_value(rank_json, period, rj):
             obj = _rank_obj(rank_json, period, rj)
             return obj.get("value") if isinstance(obj, dict) else None
+
+        def _rank_period_for(period):
+            if period in rj_ranks or period in raw_ranks or period in rj_lb:
+                return period
+            alias = RANGE_RANK_ALIAS.get(period)
+            if alias and (alias in rj_ranks or alias in raw_ranks or alias in rj_lb):
+                return alias
+            return period
 
         def _synth_peer_rows(period, mk):
             """Fallback for rank caches that carry own ranks but no leaderboard rows.
@@ -1365,7 +1533,7 @@ def performance_center():
                 for key in comparison_fields:
                     val = _rank_value(peer_json, period, key)
                     if val is not None:
-                        row[key] = val
+                        row[key] = _norm_tip_pct(val) if key == "tip_percent" else val
                 if is_tipped:
                     combined_rank = _rank_obj(peer_json, period, "combined").get("rank")
                     if combined_rank is not None:
@@ -1408,54 +1576,6 @@ def performance_center():
             ranked.sort(key=lambda x: x["rank"] if x["rank"] is not None else 9999)
             return ranked
 
-        # Per-window service timing (Sam: server computes per-range from Toast so the
-        # "Technical averages" follow the date filter on EVERY range). Sales-clean --
-        # server_perf_metrics_for_guid returns only timing seconds/counts, scoped to
-        # the session employee's OWN Toast server GUID. Guarded + memoized per window
-        # (so aliased windows like current_week/week compute once); any failure
-        # degrades to "--" rather than a 500. Toast pulls ride the shared 30-min
-        # orders cache. This mirrors the on-demand compute already in /my-performance.
-        _TECH_SECS_KEYS = ("avg_drink_secs", "avg_app_secs", "avg_entree_secs",
-                           "avg_gap_secs", "avg_duration_secs")
-        _svc_guids = {l.toast_id for l in links if getattr(l, "toast_id", None)}
-        _svc_guid = next(iter(_svc_guids)) if _svc_guids else None
-        _svc_stores = {(l.store_key or "").strip().lower()
-                       for l in links if (l.store_key or "").strip()}
-        _svc_loc = next(iter(_svc_stores)) if len(_svc_stores) == 1 else None
-        _svc_win_cache = {}
-
-        def _service_for_window(lo_iso, hi_iso):
-            if not _svc_guid or not lo_iso or not hi_iso:
-                return {}
-            ck = (_svc_guid, _svc_loc, lo_iso, hi_iso)
-            now = time.monotonic()
-            # within-request memo (dedupes the period_order windows that overlap)
-            if ck in _svc_win_cache:
-                return _svc_win_cache[ck]
-            # cross-request TTL cache (bounds Toast/CPU cost to once per worker/TTL)
-            hit = _SVC_WIN_CACHE.get(ck)
-            if hit and hit[0] > now:
-                _svc_win_cache[ck] = hit[1]
-                return hit[1]
-            out = {}
-            try:
-                from app.services import toast_reports
-                start_dt = datetime.strptime(lo_iso, "%Y-%m-%d")
-                end_dt = datetime.strptime(hi_iso, "%Y-%m-%d")
-                out = toast_reports.server_perf_metrics_for_guid(
-                    start_dt, end_dt, _svc_guid, _svc_loc) or {}
-            except Exception:
-                logging.getLogger(__name__).warning(
-                    "perf-center per-window service compute failed", exc_info=True)
-                out = {}
-            _svc_win_cache[ck] = out
-            _SVC_WIN_CACHE[ck] = (now + _SVC_WIN_TTL_SECONDS, out)
-            # opportunistic prune so the module cache can't grow unbounded
-            if len(_SVC_WIN_CACHE) > 2000:
-                for k in [k for k, v in _SVC_WIN_CACHE.items() if v[0] <= now]:
-                    _SVC_WIN_CACHE.pop(k, None)
-            return out
-
         periods = {}
         period_order = (
             "today", "current_week", "last_week", "current_month", "last_month",
@@ -1464,7 +1584,7 @@ def performance_center():
         )
         for period in period_order:
             r = _period_row(period)
-            rank_period = RANGE_RANK_ALIAS.get(period, period)
+            rank_period = _rank_period_for(period)
             if r is None:
                 periods[period] = {"money": {}, "rankings": {},
                                    "attendance": {"late": 0, "missed": 0, "rows": []},
@@ -1506,6 +1626,11 @@ def performance_center():
                      "effective_hourly": (round(total / hours, 2) if hours > 0 else None),
                      "shifts": len(_shifts_in(r))}
             metrics = ["effective_hourly"]
+            service = (
+                _service_for_period(r)
+                if period in RANGE_WINDOWS
+                else _employee_visible_service_metrics(r.service_json or {})
+            )
             if is_tipped:
                 # tip keys ONLY for tipped roles (sales-clean: tips $ + ratios)
                 money["tips"] = tips
@@ -1521,8 +1646,14 @@ def performance_center():
                                          if live_cc_gross is not None else None)
                     money["tips_live"] = True
                 else:
-                    tp = ((rj_ranks.get(rank_period) or {}).get("tip_percent") or {}).get("value")
-                    tp_num = _norm_tip_pct(tp)   # ratio (0.18) -> percent (18.0)
+                    service_tip_pct = _as_float(service.get("tip_pct"))
+                    tp_num = (
+                        round(service_tip_pct, 1)
+                        if service_tip_pct is not None and service_tip_pct > 0
+                        else _norm_tip_pct(
+                            ((rj_ranks.get(rank_period) or {}).get("tip_percent") or {}).get("value")
+                        )
+                    )
                     money["tip_pct"] = (
                         None
                         if (tp_num is None or (tp_num <= 0 and tips > 0))
@@ -1610,8 +1741,7 @@ def performance_center():
                                         "since": live_since if live_extra > 0 else None},
                                "daily": daily,
                                "technical": _technical_for(
-                                   r, hours, live_extra, live_bd, live_since,
-                                   _service_for_window(r.period_start, r.period_end),
+                                   r, hours, live_extra, live_bd, live_since, service,
                                )}
 
         return jsonify({"ok": True, "linked": True,

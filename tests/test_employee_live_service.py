@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timedelta
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from flask import Flask
 from sqlalchemy.orm import sessionmaker
@@ -10,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from app.models import (
     CenaToastLink,
     Employee,
+    EmployeeStoreAssignment,
     PerfPeriodCache,
     PerfRankCache,
     PerfShiftCache,
@@ -376,6 +379,9 @@ def test_my_performance_merges_live_service_into_today_cache(db_session, monkeyp
 def test_performance_center_returns_technical_breakdowns_by_range(db_session, monkeypatch):
     test_session_factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
     monkeypatch.setattr(employee_mod, "SessionLocal", test_session_factory)
+    today = datetime.now(ZoneInfo("America/Chicago")).date()
+    week_start = today - timedelta(days=(today.weekday() + 1) % 7)
+    month_start = today.replace(day=1)
 
     emp = Employee(full_name="Maria Gonzalez", active=True, session_version=1)
     db_session.add(emp)
@@ -390,8 +396,8 @@ def test_performance_center_returns_technical_breakdowns_by_range(db_session, mo
         PerfPeriodCache(
             cena_employee_id=emp.id,
             period="week",
-            period_start="2026-06-14",
-            period_end="2026-06-20",
+            period_start=week_start.isoformat(),
+            period_end=today.isoformat(),
             total_hours=5.5,
             base_pay=44.0,
             tips=82.5,
@@ -407,8 +413,8 @@ def test_performance_center_returns_technical_breakdowns_by_range(db_session, mo
         PerfPeriodCache(
             cena_employee_id=emp.id,
             period="month",
-            period_start="2026-06-01",
-            period_end="2026-06-30",
+            period_start=month_start.isoformat(),
+            period_end=today.isoformat(),
             total_hours=1.0,
             base_pay=10.0,
             tips=10.0,
@@ -416,9 +422,9 @@ def test_performance_center_returns_technical_breakdowns_by_range(db_session, mo
         ),
         PerfShiftCache(
             cena_employee_id=emp.id,
-            business_date="2026-06-17",
-            clock_in="2026-06-17T16:00:00",
-            clock_out="2026-06-17T21:30:00",
+            business_date=today.isoformat(),
+            clock_in=f"{today.isoformat()}T16:00:00",
+            clock_out=f"{today.isoformat()}T21:30:00",
             total_hours=5.5,
             base_pay=44.0,
             tips=82.5,
@@ -471,6 +477,133 @@ def test_performance_center_returns_technical_breakdowns_by_range(db_session, mo
     assert tech["hours"]["display"] == "5.5h"
     assert "sum of 1 clock row" in tech["hours"]["formula"]
     assert tech["hours"]["rows"][0]["hours"] == 5.5
+
+
+def test_performance_center_last_week_uses_employee_uuid_operations_metrics(db_session, monkeypatch):
+    test_session_factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    monkeypatch.setattr(employee_mod, "SessionLocal", test_session_factory)
+
+    today = datetime.now(ZoneInfo("America/Chicago")).date()
+    week_start = today - timedelta(days=(today.weekday() + 1) % 7)
+    last_week_start = week_start - timedelta(days=7)
+    last_week_end = week_start - timedelta(days=1)
+    shift_day = last_week_start + timedelta(days=3)
+
+    emp = Employee(
+        full_name="Yadira Romer Hernandez",
+        active=True,
+        session_version=1,
+        toast_employee_guid="toast-yadira-uuid",
+        toast_employee_name="Yadira Romer Hernandez",
+    )
+    db_session.add(emp)
+    db_session.flush()
+    db_session.add_all([
+        CenaToastLink(
+            cena_employee_id=emp.id,
+            store_key="copperfield",
+            toast_id="toast-yadira-uuid",
+            toast_name="Yadira Romer Hernandez",
+        ),
+        EmployeeStoreAssignment(
+            employee_id=emp.id,
+            store_key="copperfield",
+        ),
+        PerfPeriodCache(
+            cena_employee_id=emp.id,
+            period="today",
+            period_start=today.isoformat(),
+            period_end=today.isoformat(),
+            total_hours=0.0,
+            base_pay=0.0,
+            tips=0.0,
+            service_json={},
+        ),
+        PerfShiftCache(
+            cena_employee_id=emp.id,
+            business_date=shift_day.isoformat(),
+            clock_in=f"{shift_day.isoformat()}T10:00:00",
+            clock_out=f"{shift_day.isoformat()}T18:12:00",
+            total_hours=42.2,
+            base_pay=92.23,
+            tips=492.02,
+        ),
+        PerfRankCache(
+            cena_employee_id=emp.id,
+            rank_json={
+                "is_tipped": True,
+                "ranks": {
+                    "last_week": {
+                        "effective_hourly": {"rank": 7, "value": 13.84},
+                        "tip_percent": {"rank": 3, "value": 0.2105},
+                        "combined": {"rank": 4, "value": 91.0},
+                    }
+                },
+            },
+        ),
+    ])
+    db_session.commit()
+
+    calls = []
+
+    def fake_ops_metrics(start, end, guid, location_filter=None, *, include_private_totals=False):
+        calls.append((start.date(), end.date(), guid, location_filter, include_private_totals))
+        return {
+            "tickets": 16,
+            "avg_drink_secs": 31 * 60 + 11,
+            "drink_count": 16,
+            "avg_app_secs": 19 * 60 + 52,
+            "app_count": 3,
+            "avg_entree_secs": 2 * 60 + 24,
+            "entree_count": 16,
+            "avg_gap_secs": None,
+            "gap_count": 0,
+            "avg_duration_secs": 37 * 60 + 44,
+            "duration_count": 16,
+            "_cc_tips": 128.25,
+            "_cc_subtotal": 610.71,
+        }
+
+    monkeypatch.setattr(toast_reports, "server_perf_metrics_for_guid", fake_ops_metrics)
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(employee_mod.employee_auth)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["employee_id"] = emp.id
+        sess["employee_session_version"] = emp.session_version
+        sess["auth_ok"] = True
+
+    res = client.get("/employee/performance-center")
+    data = res.get_json()
+
+    assert res.status_code == 200
+    last_week = data["periods"]["last_week"]
+    assert last_week["money"]["hours"] == 42.2
+    assert last_week["money"]["total_pay"] == 584.25
+    assert last_week["money"]["effective_hourly"] == 13.84
+    assert last_week["money"]["tip_pct"] == 21.0
+    assert last_week["rankings"]["combined"]["rank"] == 4
+    assert last_week["rankings"]["tip_pct"]["value"] == 21.1
+    assert last_week["technical"]["avg_drink_secs"]["display"] == "31m"
+    assert last_week["technical"]["avg_app_secs"]["display"] == "20m"
+    assert last_week["technical"]["avg_entree_secs"]["display"] == "2m"
+    assert last_week["technical"]["avg_duration_secs"]["display"] == "38m"
+    assert last_week["technical"]["hours"]["display"] == "42.2h"
+    assert any(
+        call == (
+            last_week_start,
+            last_week_end,
+            "toast-yadira-uuid",
+            "copperfield",
+            True,
+        )
+        for call in calls
+    )
+    encoded = json.dumps(data).lower()
+    assert "cc_subtotal" not in encoded
+    assert "_cc_" not in encoded
 
 
 def test_employee_dashboard_has_live_today_surface():

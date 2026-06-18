@@ -552,7 +552,14 @@ def server_perf_report(start: datetime, end: datetime,
     }
 
 
-def server_perf_metrics_for_guid(start: datetime, end: datetime, server_guid: str, location_filter: str | None = None) -> dict:
+def server_perf_metrics_for_guid(
+    start: datetime,
+    end: datetime,
+    server_guid: str,
+    location_filter: str | None = None,
+    *,
+    include_private_totals: bool = False,
+) -> dict:
     """Compute performance metrics (averages) for a specific server GUID in [start, end] range."""
     client = ToastClient.shared()
     locations = _resolve_locations(location_filter)
@@ -601,13 +608,29 @@ def server_perf_metrics_for_guid(start: datetime, end: datetime, server_guid: st
                     if ac["closed"]:
                         s["duration_secs"].append((ac["closed"] - ac["opened"]).total_seconds())
 
-    return {
+    out = {
+        "tickets": s["tickets"],
         "avg_drink_secs": statistics.mean(s["drink_secs"]) if s["drink_secs"] else None,
+        "drink_count": len(s["drink_secs"]),
         "avg_app_secs": statistics.mean(s["app_secs"]) if s["app_secs"] else None,
+        "app_count": len(s["app_secs"]),
         "avg_entree_secs": statistics.mean(s["entree_secs"]) if s["entree_secs"] else None,
+        "entree_count": len(s["entree_secs"]),
         "avg_gap_secs": statistics.mean(s["gap_secs"]) if s["gap_secs"] else None,
+        "gap_count": len(s["gap_secs"]),
         "avg_duration_secs": statistics.mean(s["duration_secs"]) if s["duration_secs"] else None,
+        "duration_count": len(s["duration_secs"]),
+        "tip_pct": (
+            round(s["cc_tips"] / s["cc_subtotal"] * 100, 1)
+            if s["cc_subtotal"] > 0 else None
+        ),
     }
+    if include_private_totals:
+        # Server-only merge support for employee self-view. Callers must not pass
+        # these through to JSON; they exist so multi-store GUIDs combine exactly.
+        out["_cc_tips"] = round(s["cc_tips"], 2)
+        out["_cc_subtotal"] = round(s["cc_subtotal"], 2)
+    return out
 
 
 def server_tips_for_guids(server_guids, location_filter, business_date,

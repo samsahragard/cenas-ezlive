@@ -272,7 +272,12 @@
     }
 
     var ranks = p.rankings || {};
-    var topRank = (tipped ? (ranks.combined || ranks.standing) : (ranks.effective_hourly || ranks.standing)) || {};
+    var combinedRank = ranks.combined || {};
+    var hourlyRank = ranks.effective_hourly || {};
+    var standingRank = ranks.standing || {};
+    var topRank = tipped
+      ? (combinedRank.rank ? combinedRank : standingRank)
+      : (hourlyRank.rank ? hourlyRank : standingRank);
     if(tipped){
       $("cfp-hg-l1").textContent = "Top";
       $("cfp-hg-top").textContent = topRank.rank ? ("#"+topRank.rank) : "--";

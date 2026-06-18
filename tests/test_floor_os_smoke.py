@@ -91,7 +91,7 @@ def test_today_tab_real_wiring_and_no_demo(app_emp):
     assert 'href="#cfp-earnings"' in html
     assert 'href="#cfp-leaderboard"' in html
     assert 'href="#cfp-technical"' in html
-    # Technical averages live on Today now and follow the selected range.
+    # Performance averages live on Today now and follow the selected range.
     assert 'id="cfp-technical"' in html
     assert 'id="cfp-tech-scope"' in html
     assert 'id="cfp-tech-detail"' in html
@@ -99,7 +99,7 @@ def test_today_tab_real_wiring_and_no_demo(app_emp):
     assert 'key:"hours"' in html
     assert 'if(v === null || v === undefined || v === "") return "--";' in html
     assert "tips > 0 && (!Number.isFinite(n) || n <= 0)" in html
-    assert "Technical averages" in html
+    assert "Performance" in html
     assert "Avg drink" in html
     assert "Performance not available" not in html
 

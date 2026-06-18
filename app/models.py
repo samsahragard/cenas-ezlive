@@ -3872,6 +3872,39 @@ class PerfPeriodCache(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class PerfMetricDetailCache(Base):
+    """Employee-visible performance detail cache.
+
+    The summary metrics live on PerfPeriodCache.service_json; this companion table
+    stores the click-through explanation for each metric so dashboard card clicks
+    read the DB instead of calling Toast. It is keyed by the same local employee id
+    used by the profile/performance caches and never stores Toast sales totals or
+    private identifiers.
+    """
+
+    __tablename__ = "perf_metric_detail_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "cena_employee_id", "period", "metric_key",
+            name="uq_perfmetricdetail_emp_period_metric",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cena_employee_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    period: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    metric_key: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    period_start: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    period_end: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    display: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    formula: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    computed_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class PerfShiftCache(Base):
     """Phase 3.5 (Sam #2938 / samai #2954): SANITIZED per-shift rows pushed from the
     CK perf DB. Employee-own + sales-free. attribution_json is INTERNAL (the payload

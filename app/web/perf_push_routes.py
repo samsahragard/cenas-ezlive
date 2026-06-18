@@ -29,12 +29,19 @@ from __future__ import annotations
 import json as _json
 import os
 import re as _re
-from datetime import datetime
+from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 from flask import Blueprint, abort, jsonify, request
 
 from app.db import SessionLocal
-from app.models import PerfPeriodCache, PerfShiftCache, PerfRankCache, rank_peer_rows_ok
+from app.models import (
+    PerfMetricDetailCache,
+    PerfPeriodCache,
+    PerfShiftCache,
+    PerfRankCache,
+    rank_peer_rows_ok,
+)
 
 perf_push_bp = Blueprint("perf_push", __name__)
 
@@ -63,6 +70,29 @@ _SERVICE_VISIBLE_KEYS = set(_SERVICE_TIMING_KEYS) | set(_SERVICE_COUNT_KEYS) | {
     "tickets", "tip_pct",
 }
 
+_SERVICE_METRIC_META = {
+    "avg_drink_secs": {
+        "label": "Avg drink",
+        "count_keys": ("drink_count", "avg_drink_count", "drink_samples"),
+    },
+    "avg_app_secs": {
+        "label": "Avg apps",
+        "count_keys": ("app_count", "avg_app_count", "app_samples"),
+    },
+    "avg_entree_secs": {
+        "label": "Avg entree",
+        "count_keys": ("entree_count", "avg_entree_count", "entree_samples"),
+    },
+    "avg_gap_secs": {
+        "label": "Drink-entree gap",
+        "count_keys": ("gap_count", "avg_gap_count", "gap_samples"),
+    },
+    "avg_duration_secs": {
+        "label": "Avg duration",
+        "count_keys": ("duration_count", "avg_duration_count", "duration_samples"),
+    },
+}
+
 
 def _as_float(value):
     try:
@@ -71,6 +101,246 @@ def _as_float(value):
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _display_minutes(seconds):
+    sec = _as_float(seconds)
+    if sec is None or sec <= 0:
+        return "--"
+    return f"{round(sec / 60)}m"
+
+
+def _store_day():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(os.getenv("APP_TZ", "America/Chicago"))).date()
+    except Exception:
+        return (datetime.utcnow() - timedelta(hours=5)).date()
+
+
+def _range_windows():
+    today = _store_day()
+    week_start = today - timedelta(days=(today.weekday() + 1) % 7)
+    last_week_start = week_start - timedelta(days=7)
+    last_week_end = week_start - timedelta(days=1)
+    month_start = today.replace(day=1)
+    last_month_end = month_start - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    return {
+        "today": (today, today),
+        "current_week": (week_start, today),
+        "last_week": (last_week_start, last_week_end),
+        "current_month": (month_start, today),
+        "last_month": (last_month_start, last_month_end),
+    }
+
+
+def _shifts_for_range(shift_rows, lo, hi):
+    lo_iso = lo.isoformat()
+    hi_iso = hi.isoformat()
+    return [
+        s for s in shift_rows
+        if getattr(s, "business_date", None)
+        and lo_iso <= str(getattr(s, "business_date")) <= hi_iso
+    ]
+
+
+def _period_spec_from_shifts(period, lo, hi, shift_rows, guid_locs):
+    rows = _shifts_for_range(shift_rows, lo, hi)
+    guid, loc = guid_locs[0] if guid_locs else (None, None)
+    return SimpleNamespace(
+        period=period,
+        period_start=lo.isoformat(),
+        period_end=hi.isoformat(),
+        total_hours=round(sum(float(x.total_hours or 0) for x in rows), 2),
+        reg_hours=round(sum(float(x.reg_hours or 0) for x in rows), 2),
+        ot_hours=round(sum(float(x.ot_hours or 0) for x in rows), 2),
+        base_pay=round(sum(float(x.base_pay or 0) for x in rows), 2),
+        tips=round(sum(float(x.tips or 0) for x in rows), 2),
+        toast_id=guid,
+        store_key=loc,
+        service_json={},
+        computed_at=None,
+    )
+
+
+def _period_refresh_specs(period_rows, shift_rows, guid_locs):
+    by_period = {getattr(r, "period", None): r for r in period_rows}
+    specs = []
+    used = set()
+    for period, (lo, hi) in _range_windows().items():
+        row = by_period.get(period)
+        if (
+            row is None
+            or str(getattr(row, "period_start", "") or "") != lo.isoformat()
+            or str(getattr(row, "period_end", "") or "") != hi.isoformat()
+        ):
+            row = _period_spec_from_shifts(period, lo, hi, shift_rows, guid_locs)
+        specs.append(row)
+        used.add(period)
+    for row in period_rows:
+        period = getattr(row, "period", None)
+        if period and period not in used and getattr(row, "period_start", None) and getattr(row, "period_end", None):
+            specs.append(row)
+    return specs
+
+
+def _metric_count(metrics, meta):
+    for key in meta.get("count_keys", ()):
+        val = _as_float((metrics or {}).get(key))
+        if val is not None:
+            return int(val)
+    return 0
+
+
+def _service_metric_detail(row, metric_key, metrics):
+    meta = _SERVICE_METRIC_META[metric_key]
+    label = meta["label"]
+    seconds = _as_float((metrics or {}).get(metric_key))
+    count = _metric_count(metrics, meta)
+    tickets = int(_as_float((metrics or {}).get("tickets")) or 0)
+    display = _display_minutes(seconds)
+    range_label = f"{getattr(row, 'period_start', None) or '--'} to {getattr(row, 'period_end', None) or '--'}"
+    rows = [
+        {"label": "Range", "value": range_label, "source": "Performance DB"},
+        {"label": "Toast samples", "value": str(count), "source": "Operations"},
+    ]
+    if tickets:
+        rows.append({"label": "Tickets", "value": str(tickets), "source": "Operations"})
+    if seconds is None or seconds <= 0:
+        formula = (
+            f"{label} needs Toast timing samples for this employee and period. "
+            "The Performance DB has no usable timing average for this range yet."
+        )
+        return {
+            "label": label,
+            "value": None,
+            "display": "--",
+            "unit": "minutes",
+            "source": "Performance DB",
+            "formula": formula,
+            "count": count,
+            "rows": rows,
+        }
+    if count:
+        formula = (
+            f"Performance DB stores Toast's latest {label.lower()} average as "
+            f"{round(seconds)} seconds across {count} sample"
+            f"{'' if count == 1 else 's'}; {round(seconds)} seconds / 60 = {display}."
+        )
+    else:
+        formula = (
+            f"Performance DB stores Toast's latest {label.lower()} average as "
+            f"{round(seconds)} seconds; {round(seconds)} seconds / 60 = {display}."
+        )
+    return {
+        "label": label,
+        "value": round(seconds, 2),
+        "display": display,
+        "unit": "minutes",
+        "source": "Performance DB",
+        "formula": formula,
+        "count": count,
+        "rows": rows,
+    }
+
+
+def _tip_pct_detail(row, metrics):
+    tip_pct = _as_float((metrics or {}).get("tip_pct"))
+    tickets = int(_as_float((metrics or {}).get("tickets")) or 0)
+    display = f"{tip_pct:.1f}%" if tip_pct is not None and tip_pct > 0 else "--"
+    range_label = f"{getattr(row, 'period_start', None) or '--'} to {getattr(row, 'period_end', None) or '--'}"
+    rows = [
+        {"label": "Range", "value": range_label, "source": "Performance DB"},
+    ]
+    if tickets:
+        rows.append({"label": "Tickets", "value": str(tickets), "source": "Operations"})
+    formula = (
+        f"Performance DB stores Toast's latest credit-card tip percentage for this period as {display}."
+        if display != "--"
+        else "The Performance DB has no valid Toast credit-card tip percentage for this range yet."
+    )
+    return {
+        "label": "Total tip %",
+        "value": round(tip_pct, 2) if tip_pct is not None and tip_pct > 0 else None,
+        "display": display,
+        "unit": "percent",
+        "source": "Performance DB",
+        "formula": formula,
+        "rows": rows,
+    }
+
+
+def _hours_detail(row, shift_rows):
+    try:
+        lo = datetime.strptime(str(getattr(row, "period_start")), "%Y-%m-%d").date()
+        hi = datetime.strptime(str(getattr(row, "period_end")), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        rows = []
+    else:
+        rows = _shifts_for_range(shift_rows, lo, hi)
+    detail_rows = []
+    for s in rows:
+        detail_rows.append({
+            "date": getattr(s, "business_date", None),
+            "clock_in": getattr(s, "clock_in", None),
+            "clock_out": getattr(s, "clock_out", None),
+            "hours": round(float(getattr(s, "total_hours", 0) or 0), 2),
+            "source": "Clocked shift",
+        })
+    hours = round(float(getattr(row, "total_hours", 0) or 0), 2)
+    parts = [f"{round(float(x.get('hours') or 0), 2):g}" for x in detail_rows]
+    if parts:
+        shown = " + ".join(parts[:8])
+        if len(parts) > 8:
+            shown += f" + {len(parts) - 8} more"
+        formula = (
+            f"Hours = sum of {len(detail_rows)} clock row"
+            f"{'' if len(detail_rows) == 1 else 's'} stored in Performance DB: "
+            f"{shown} = {hours:.2f}h."
+        )
+    else:
+        formula = "No clock rows are posted in Performance DB for this employee and range yet."
+    return {
+        "label": "Hours",
+        "value": hours,
+        "display": f"{hours:.1f}h",
+        "unit": "hours",
+        "source": "Performance DB clock rows",
+        "formula": formula,
+        "rows": detail_rows,
+    }
+
+
+def _upsert_metric_detail(db, cid, row, metric_key, detail):
+    cache = (
+        db.query(PerfMetricDetailCache)
+        .filter_by(cena_employee_id=cid, period=getattr(row, "period"), metric_key=metric_key)
+        .first()
+    )
+    if cache is None:
+        cache = PerfMetricDetailCache(
+            cena_employee_id=cid,
+            period=getattr(row, "period"),
+            metric_key=metric_key,
+        )
+        db.add(cache)
+    cache.period_start = getattr(row, "period_start", None)
+    cache.period_end = getattr(row, "period_end", None)
+    cache.value = detail.get("value")
+    cache.display = detail.get("display")
+    cache.source = detail.get("source")
+    cache.formula = detail.get("formula")
+    cache.detail_json = {
+        key: detail.get(key)
+        for key in ("label", "unit", "count", "rows")
+        if detail.get(key) is not None
+    }
+    cache.computed_at = (
+        getattr(row, "computed_at", None)
+        or datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    )
+    cache.synced_at = datetime.utcnow()
 
 
 def _linked_guid_locations(emp, links):
@@ -269,8 +539,9 @@ def cron_employee_perf_push():
 def cron_employee_service_timing_refresh():
     """Compute employee-visible course-timing (avg drink/app/entree/gap/duration
     seconds) and tip percent from Toast and write it into
-    PerfPeriodCache.service_json, so the employee Floor-Pulse "Technical
-    averages" read from the DB instead of a live per-request Toast pull
+    PerfPeriodCache.service_json + PerfMetricDetailCache, so the employee
+    Floor-Pulse "Performance" cards read from the DB instead of a live
+    per-click Toast pull
     (Sam 2026-06-17). Run on a schedule on BOTH the local app and prod so each
     environment's DB is populated.
 
@@ -294,6 +565,7 @@ def cron_employee_service_timing_refresh():
     db = SessionLocal()
     employees = 0
     periods_updated = 0
+    detail_rows_updated = 0
     errors = 0
     try:
         q = db.query(PerfPeriodCache.cena_employee_id).distinct()
@@ -310,24 +582,32 @@ def cron_employee_service_timing_refresh():
                 continue
             employees += 1
             rows = db.query(PerfPeriodCache).filter_by(cena_employee_id=cid).all()
+            shift_rows = db.query(PerfShiftCache).filter_by(cena_employee_id=cid).all()
+            refresh_specs = _period_refresh_specs(rows, shift_rows, guid_locs)
+            metrics_by_range = {}
             changed = False
-            for row in rows:
+            for row in refresh_specs:
                 if not row.period_start or not row.period_end:
                     continue
                 try:
-                    start_dt = datetime.strptime(row.period_start, "%Y-%m-%d")
-                    end_dt = datetime.strptime(row.period_end, "%Y-%m-%d")
-                    results = [
-                        toast_reports.server_perf_metrics_for_guid(
-                            start_dt,
-                            end_dt,
-                            guid,
-                            loc,
-                            include_private_totals=True,
-                        ) or {}
-                        for guid, loc in guid_locs
-                    ]
-                    svc = _merge_employee_service_metrics(results)
+                    range_key = (row.period_start, row.period_end)
+                    if range_key in metrics_by_range:
+                        svc = metrics_by_range[range_key]
+                    else:
+                        start_dt = datetime.strptime(row.period_start, "%Y-%m-%d")
+                        end_dt = datetime.strptime(row.period_end, "%Y-%m-%d")
+                        results = [
+                            toast_reports.server_perf_metrics_for_guid(
+                                start_dt,
+                                end_dt,
+                                guid,
+                                loc,
+                                include_private_totals=True,
+                            ) or {}
+                            for guid, loc in guid_locs
+                        ]
+                        svc = _merge_employee_service_metrics(results)
+                        metrics_by_range[range_key] = svc
                 except Exception:
                     errors += 1
                     continue
@@ -335,17 +615,32 @@ def cron_employee_service_timing_refresh():
                     svc.get("tip_pct") is not None
                     or any(svc.get(k) is not None for k in _SERVICE_TIMING_KEYS)
                 ):
-                    merged = {
-                        key: value for key, value in dict(row.service_json or {}).items()
-                        if key in _SERVICE_VISIBLE_KEYS and not str(key).startswith("_")
-                    }
-                    merged.update(svc)
-                    row.service_json = merged
-                    periods_updated += 1
+                    if isinstance(row, PerfPeriodCache):
+                        merged = {
+                            key: value for key, value in dict(row.service_json or {}).items()
+                            if key in _SERVICE_VISIBLE_KEYS and not str(key).startswith("_")
+                        }
+                        merged.update(svc)
+                        row.service_json = merged
+                        periods_updated += 1
+                        changed = True
+                for metric_key in _SERVICE_METRIC_META:
+                    _upsert_metric_detail(
+                        db, cid, row, metric_key,
+                        _service_metric_detail(row, metric_key, svc),
+                    )
+                    detail_rows_updated += 1
                     changed = True
+                _upsert_metric_detail(db, cid, row, "tip_pct", _tip_pct_detail(row, svc))
+                detail_rows_updated += 1
+                _upsert_metric_detail(db, cid, row, "hours", _hours_detail(row, shift_rows))
+                detail_rows_updated += 1
+                changed = True
             if changed:
                 db.commit()
         return jsonify({"ok": True, "employees": employees,
-                        "periods_updated": periods_updated, "errors": errors}), 200
+                        "periods_updated": periods_updated,
+                        "detail_rows_updated": detail_rows_updated,
+                        "errors": errors}), 200
     finally:
         db.close()

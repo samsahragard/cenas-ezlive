@@ -13,6 +13,7 @@ from app.models import (
     CenaToastLink,
     Employee,
     EmployeeStoreAssignment,
+    PerfMetricDetailCache,
     PerfPeriodCache,
     PerfRankCache,
     PerfShiftCache,
@@ -21,6 +22,7 @@ from app.services import employee_table_timelines
 from app.services import toast_reports
 from app.web import employee_auth as employee_mod
 from app.web import employee_tables_page as tables_mod
+from app.web import perf_push_routes as perf_push_mod
 
 
 def test_server_activity_for_guids_is_employee_scoped_and_sales_clean(monkeypatch):
@@ -465,6 +467,37 @@ def test_performance_center_returns_technical_breakdowns_by_range(db_session, mo
             tips=10.0,
             service_json={},
         ),
+        PerfMetricDetailCache(
+            cena_employee_id=emp.id,
+            period="current_week",
+            metric_key="avg_drink_secs",
+            period_start=week_start.isoformat(),
+            period_end=today.isoformat(),
+            value=305.0,
+            display="5m",
+            source="Performance DB",
+            formula="Cached detail reason for avg drink.",
+            detail_json={
+                "label": "Avg drink",
+                "unit": "minutes",
+                "count": 7,
+                "rows": [
+                    {"label": "Toast samples", "value": "7", "source": "Operations"},
+                ],
+            },
+        ),
+        PerfMetricDetailCache(
+            cena_employee_id=emp.id,
+            period="current_week",
+            metric_key="tip_pct",
+            period_start=week_start.isoformat(),
+            period_end=today.isoformat(),
+            value=18.2,
+            display="18.2%",
+            source="Performance DB",
+            formula="Cached detail reason for tip percent.",
+            detail_json={"label": "Total tip %", "unit": "percent", "rows": []},
+        ),
         PerfShiftCache(
             cena_employee_id=emp.id,
             business_date=today.isoformat(),
@@ -516,7 +549,9 @@ def test_performance_center_returns_technical_breakdowns_by_range(db_session, mo
 
     tech = current_week["technical"]
     assert tech["avg_drink_secs"]["display"] == "5m"
-    assert "300 seconds / 60 = 5m" in tech["avg_drink_secs"]["formula"]
+    assert tech["avg_drink_secs"]["source"] == "Performance DB"
+    assert tech["avg_drink_secs"]["formula"] == "Cached detail reason for avg drink."
+    assert tech["avg_drink_secs"]["rows"][0]["label"] == "Toast samples"
     assert tech["avg_app_secs"]["display"] == "12m"
     assert "2 samples" in tech["avg_app_secs"]["formula"]
     assert tech["hours"]["display"] == "5.5h"
@@ -649,6 +684,112 @@ def test_performance_center_last_week_uses_employee_uuid_operations_metrics(db_s
     encoded = json.dumps(data).lower()
     assert "cc_subtotal" not in encoded
     assert "_cc_" not in encoded
+
+
+def test_service_timing_refresh_writes_performance_detail_cache(db_session, monkeypatch):
+    test_session_factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    monkeypatch.setattr(perf_push_mod, "SessionLocal", test_session_factory)
+    monkeypatch.setenv("CRON_TOKEN", "refresh-token")
+
+    today = datetime.now(ZoneInfo("America/Chicago")).date()
+    week_start = today - timedelta(days=(today.weekday() + 1) % 7)
+
+    emp = Employee(
+        full_name="Jessica Sanchez",
+        active=True,
+        session_version=1,
+        toast_employee_guid="toast-jessica",
+    )
+    db_session.add(emp)
+    db_session.flush()
+    db_session.add_all([
+        CenaToastLink(
+            cena_employee_id=emp.id,
+            store_key="copperfield",
+            toast_id="toast-jessica",
+            toast_name="Jessica Sanchez",
+        ),
+        EmployeeStoreAssignment(
+            employee_id=emp.id,
+            store_key="copperfield",
+        ),
+        PerfPeriodCache(
+            cena_employee_id=emp.id,
+            period="week",
+            period_start=week_start.isoformat(),
+            period_end=today.isoformat(),
+            total_hours=4.25,
+            base_pay=42.5,
+            tips=80.0,
+            service_json={},
+        ),
+        PerfShiftCache(
+            cena_employee_id=emp.id,
+            business_date=today.isoformat(),
+            clock_in=f"{today.isoformat()}T15:00:00",
+            clock_out=f"{today.isoformat()}T19:15:00",
+            total_hours=4.25,
+            base_pay=42.5,
+            tips=80.0,
+        ),
+    ])
+    db_session.commit()
+
+    def fake_ops_metrics(start, end, guid, location_filter=None, *, include_private_totals=False):
+        assert guid == "toast-jessica"
+        assert location_filter == "copperfield"
+        assert include_private_totals is True
+        return {
+            "tickets": 9,
+            "avg_drink_secs": 420,
+            "drink_count": 9,
+            "avg_app_secs": 600,
+            "app_count": 4,
+            "avg_entree_secs": 840,
+            "entree_count": 9,
+            "avg_gap_secs": None,
+            "gap_count": 0,
+            "avg_duration_secs": 2700,
+            "duration_count": 9,
+            "_cc_tips": 45.0,
+            "_cc_subtotal": 250.0,
+        }
+
+    monkeypatch.setattr(toast_reports, "server_perf_metrics_for_guid", fake_ops_metrics)
+
+    app = Flask(__name__)
+    app.secret_key = "test"
+    app.register_blueprint(perf_push_mod.perf_push_bp)
+    res = app.test_client().post(
+        "/cron/employee-service-timing-refresh",
+        headers={"X-Cron-Token": "refresh-token"},
+    )
+    data = res.get_json()
+
+    assert res.status_code == 200
+    assert data["employees"] == 1
+    assert data["detail_rows_updated"] >= 7
+
+    detail = (
+        db_session.query(PerfMetricDetailCache)
+        .filter_by(cena_employee_id=emp.id, period="current_week", metric_key="avg_drink_secs")
+        .one()
+    )
+    assert detail.display == "7m"
+    assert detail.source == "Performance DB"
+    assert "420 seconds / 60 = 7m" in detail.formula
+    assert detail.detail_json["count"] == 9
+    encoded = json.dumps(detail.detail_json).lower()
+    assert "cc_subtotal" not in encoded
+    assert "_cc_" not in encoded
+
+    hours = (
+        db_session.query(PerfMetricDetailCache)
+        .filter_by(cena_employee_id=emp.id, period="current_week", metric_key="hours")
+        .one()
+    )
+    assert hours.display == "4.2h"
+    assert hours.detail_json["rows"][0]["hours"] == 4.25
 
 
 def test_employee_dashboard_has_live_today_surface():

@@ -1923,6 +1923,9 @@ body::after {
   color: #dce6f3;
   font-size: 12px;
 }
+.cfp-tech-breakdown.is-generic > div {
+  grid-template-columns: 1fr auto .9fr;
+}
 .cfp-tech-breakdown span { color: #9facbd; }
 .cfp-tech-breakdown b,
 .cfp-tech-breakdown strong { color: #fff; font-weight: 900; }

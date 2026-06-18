@@ -68,7 +68,7 @@
   </section>
 
   <section class="cfp-block" id="cfp-technical">
-    <div class="cfp-section-head"><h2>Technical averages</h2><span id="cfp-tech-scope">today</span></div>
+    <div class="cfp-section-head"><h2>Performance</h2><span id="cfp-tech-scope">today</span></div>
     <div class="cfp-tech-grid" id="cfp-tech-grid"></div>
     <div class="cfp-detail-drawer" id="cfp-tech-detail" hidden></div>
   </section>
@@ -433,20 +433,33 @@
     var box = $("cfp-tech-detail");
     if(!box) return;
     var rows = item.rows || [];
-    var html = '<div class="cfp-drawer-head"><strong>'+esc(item.label || "Technical average")+'</strong><button type="button" data-detail-close>Close</button></div>'
+    var html = '<div class="cfp-drawer-head"><strong>'+esc(item.label || "Performance")+'</strong><button type="button" data-detail-close>Close</button></div>'
       + '<p class="cfp-tech-formula">'+esc(item.formula || "No calculation is posted for this metric yet.")+'</p>';
     if(rows.length){
-      html += '<div class="cfp-tech-breakdown">'
-        + rows.map(function(row){
-            return '<div>'
-              + '<span>'+esc(row.date || "Shift")+'</span>'
-              + '<b>'+esc(fmtClock(row.clock_in))+'</b>'
-              + '<b>'+esc(fmtClock(row.clock_out))+'</b>'
-              + '<strong>'+Number(row.hours || 0).toFixed(2)+'h</strong>'
-              + '<em>'+esc(row.source || "Clock row")+'</em>'
-              + '</div>';
-          }).join("")
-        + '</div>';
+      var clockRows = rows.some(function(row){ return row.clock_in || row.clock_out || row.hours != null; });
+      if(clockRows){
+        html += '<div class="cfp-tech-breakdown">'
+          + rows.map(function(row){
+              return '<div>'
+                + '<span>'+esc(row.date || "Shift")+'</span>'
+                + '<b>'+esc(fmtClock(row.clock_in))+'</b>'
+                + '<b>'+esc(fmtClock(row.clock_out))+'</b>'
+                + '<strong>'+Number(row.hours || 0).toFixed(2)+'h</strong>'
+                + '<em>'+esc(row.source || "Clock row")+'</em>'
+                + '</div>';
+            }).join("")
+          + '</div>';
+      } else {
+        html += '<div class="cfp-tech-breakdown is-generic">'
+          + rows.map(function(row){
+              return '<div>'
+                + '<span>'+esc(row.label || "Detail")+'</span>'
+                + '<strong>'+esc(row.value == null ? "--" : row.value)+'</strong>'
+                + '<em>'+esc(row.source || "")+'</em>'
+                + '</div>';
+            }).join("")
+          + '</div>';
+      }
     } else if(item.source){
       html += '<p>Source: '+esc(item.source)+'.</p>';
     }

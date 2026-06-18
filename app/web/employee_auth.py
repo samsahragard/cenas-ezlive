@@ -841,7 +841,7 @@ def performance_center():
         if not links:
             return jsonify({"ok": True, "linked": False}), 200
 
-        from app.models import PerfPeriodCache, PerfShiftCache
+        from app.models import PerfMetricDetailCache, PerfPeriodCache, PerfShiftCache
         try:
             pc_rows = (db.query(PerfPeriodCache)
                          .filter(PerfPeriodCache.cena_employee_id == emp.id).all())
@@ -856,6 +856,14 @@ def performance_center():
                          .order_by(PerfShiftCache.clock_in.desc()).all())
         except Exception:
             ps_rows = []
+        try:
+            metric_detail_rows = (
+                db.query(PerfMetricDetailCache)
+                  .filter(PerfMetricDetailCache.cena_employee_id == emp.id)
+                  .all()
+            )
+        except Exception:
+            metric_detail_rows = []
 
         # ATTENDANCE published-schedule source (Sam: late-vs-scheduled hybrid). The
         # published schedule is the Shift model (app DB). Pull THIS employee's shifts
@@ -959,6 +967,10 @@ def performance_center():
         RANGE_WINDOWS = _range_windows()
         RANGE_CACHE_ALIAS = {"current_week": "week", "current_month": "month"}
         RANGE_RANK_ALIAS = {"current_week": "week", "current_month": "month"}
+        metric_detail_by_key = {
+            (getattr(r, "period", None), getattr(r, "metric_key", None)): r
+            for r in metric_detail_rows
+        }
 
         def _service_seed_for(period, lo_day=None, hi_day=None):
             row = pc_by_period.get(period)
@@ -972,6 +984,44 @@ def performance_center():
                 ):
                     return {}
             return dict(row.service_json or {}) if row is not None else {}
+
+        def _cached_metric_detail(period, metric_key, r=None):
+            candidates = [period]
+            alias = RANGE_CACHE_ALIAS.get(period)
+            if alias:
+                candidates.append(alias)
+            for per in candidates:
+                row = metric_detail_by_key.get((per, metric_key))
+                if row is None:
+                    continue
+                if r is not None and (
+                    getattr(row, "period_start", None)
+                    and getattr(row, "period_end", None)
+                    and getattr(r, "period_start", None)
+                    and getattr(r, "period_end", None)
+                ):
+                    if (
+                        str(row.period_start) != str(r.period_start)
+                        or str(row.period_end) != str(r.period_end)
+                    ):
+                        continue
+                return row
+            return None
+
+        def _metric_from_detail(row, label=None):
+            detail = row.detail_json if isinstance(row.detail_json, dict) else {}
+            value = row.value
+            return {
+                "label": detail.get("label") or label or row.metric_key,
+                "value": round(float(value), 2) if value is not None else None,
+                "display": row.display or "--",
+                "unit": detail.get("unit"),
+                "source": row.source or "Performance DB",
+                "formula": row.formula or "This metric is maintained in the Performance DB.",
+                "count": detail.get("count"),
+                "rows": detail.get("rows") if isinstance(detail.get("rows"), list) else [],
+                "computed_at": row.computed_at,
+            }
 
         def _period_from_shift_rows(period, lo_day, hi_day, service_json=None):
             lo = lo_day.isoformat()
@@ -1186,6 +1236,29 @@ def performance_center():
                 if k in allowed and not str(k).startswith("_")
             }
 
+        def _service_from_metric_details(period, r, service):
+            out = dict(service or {})
+            count_keys = {
+                "avg_drink_secs": "drink_count",
+                "avg_app_secs": "app_count",
+                "avg_entree_secs": "entree_count",
+                "avg_gap_secs": "gap_count",
+                "avg_duration_secs": "duration_count",
+            }
+            for metric_key, count_key in count_keys.items():
+                detail_row = _cached_metric_detail(period, metric_key, r)
+                if detail_row is None or detail_row.value is None:
+                    continue
+                out[metric_key] = detail_row.value
+                detail = detail_row.detail_json if isinstance(detail_row.detail_json, dict) else {}
+                count = detail.get("count")
+                if count is not None:
+                    out[count_key] = count
+            tip_detail = _cached_metric_detail(period, "tip_pct", r)
+            if tip_detail is not None and tip_detail.value is not None:
+                out["tip_pct"] = tip_detail.value
+            return _employee_visible_service_metrics(out)
+
         guid_locs = []
         seen_guid_locs = set()
         for link in links:
@@ -1289,6 +1362,7 @@ def performance_center():
 
         def _service_for_period(r):
             service = dict(r.service_json or {})
+            service = _service_from_metric_details(getattr(r, "period", None), r, service)
             timing_keys = (
                 "avg_drink_secs", "avg_app_secs", "avg_entree_secs",
                 "avg_gap_secs", "avg_duration_secs",
@@ -1430,7 +1504,7 @@ def performance_center():
                 _employee_visible_service_metrics(r.service_json or {})
                 if service is None else service
             )
-            return {
+            out = {
                 "avg_drink_secs": _service_metric(
                     service, "avg_drink_secs", "Avg drink",
                     count_keys=("drink_count", "avg_drink_count", "drink_samples"),
@@ -1453,6 +1527,18 @@ def performance_center():
                 ),
                 "hours": _hours_metric(r, hours, live_extra, live_bd, live_since),
             }
+            period = getattr(r, "period", None)
+            labels = {key: item.get("label") for key, item in out.items()}
+            for metric_key in tuple(out.keys()):
+                if metric_key == "hours" and live_extra > 0:
+                    continue
+                detail_row = _cached_metric_detail(period, metric_key, r)
+                if detail_row is not None:
+                    out[metric_key] = _metric_from_detail(
+                        detail_row,
+                        labels.get(metric_key),
+                    )
+            return out
 
         def _rank_obj(rank_json, period, rj):
             if not isinstance(rank_json, dict):

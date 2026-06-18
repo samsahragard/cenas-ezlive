@@ -48,6 +48,12 @@ _SALES_WALL = _re.compile(
     r"ccsubtotal|cashamount|cc_subtotal|cash_amount|net_sales|check_total|store_total", _re.I)
 
 
+_SERVICE_TIMING_KEYS = (
+    "avg_drink_secs", "avg_app_secs", "avg_entree_secs",
+    "avg_gap_secs", "avg_duration_secs",
+)
+
+
 def _extract_cron_token() -> str | None:
     """Self-contained token read (no import from driver_system, which is frozen):
     Authorization: Bearer <t>, or X-Cron-Token header, or ?token= query."""
@@ -99,8 +105,21 @@ def cron_employee_perf_push():
             row.ot_hours = float(p.get("ot_hours") or 0)
             row.base_pay = float(p.get("base_pay") or 0)
             row.tips = float(p.get("tips") or 0)
+            # service_json carries the employee-visible course-timing (avg_*_secs).
+            # The CK perf push does NOT compute timing, so it sends service={} -- if
+            # we blindly overwrote, the every-minute today push would wipe the timing
+            # that /cron/employee-service-timing-refresh writes. So: take the pushed
+            # service ONLY when it actually carries timing; otherwise preserve the
+            # existing row (default {} on first create). Sales-wall already cleared
+            # the whole body above, so svc is safe to store.
             svc = p.get("service")
-            row.service_json = svc if isinstance(svc, dict) else {}
+            if isinstance(svc, dict) and any(
+                svc.get(k) is not None for k in _SERVICE_TIMING_KEYS
+            ):
+                row.service_json = svc
+            elif row.service_json is None:
+                row.service_json = svc if isinstance(svc, dict) else {}
+            # else: preserve the existing (refresh-owned) service_json
             attr = p.get("attribution")
             row.attribution_json = attr if isinstance(attr, dict) else None
             row.computed_at = p.get("computed_at")
@@ -153,5 +172,78 @@ def cron_employee_perf_push():
         return jsonify({"ok": True, "cena_employee_id": cid,
                         "periods_written": written, "shifts_written": shift_written,
                         "rank_written": rank_written}), 200
+    finally:
+        db.close()
+
+
+@perf_push_bp.route("/cron/employee-service-timing-refresh", methods=["POST"])
+def cron_employee_service_timing_refresh():
+    """Compute employee-visible course-timing (avg drink/app/entree/gap/duration
+    seconds) from Toast and write it into PerfPeriodCache.service_json, so the
+    employee Floor-Pulse "Technical averages" read from the DB instead of a live
+    per-request Toast pull (Sam 2026-06-17). Run on a schedule on BOTH the local
+    app and prod so each environment's DB is populated.
+
+    Token-gated (CRON_TOKEN), same as the perf push. Sales-clean by construction:
+    server_perf_metrics_for_guid returns ONLY timing seconds/counts -- no sales,
+    no cross-employee data -- and we store only the timing keys. Scoped to each
+    employee's OWN confirmed Toast GUID. Optional ?employee_id=<id> refreshes a
+    single employee so a scheduler can fan out one-per-request and avoid a long
+    request; with no arg it refreshes every employee that has cached periods.
+    """
+    expected = os.getenv("CRON_TOKEN")
+    if not expected or _extract_cron_token() != expected:
+        abort(403)
+
+    from app.models import Employee
+    from app.services.toast_identity import links_for_employee
+    from app.services import toast_reports
+
+    only = request.args.get("employee_id", type=int)
+    db = SessionLocal()
+    employees = 0
+    periods_updated = 0
+    errors = 0
+    try:
+        q = db.query(PerfPeriodCache.cena_employee_id).distinct()
+        if only:
+            q = q.filter(PerfPeriodCache.cena_employee_id == only)
+        cids = [c for (c,) in q.all() if c]
+        for cid in cids:
+            emp = db.query(Employee).filter(Employee.id == cid).first()
+            if emp is None:
+                continue
+            links = links_for_employee(db, emp)
+            guids = {l.toast_id for l in links if getattr(l, "toast_id", None)}
+            guid = next(iter(guids)) if guids else None
+            stores = {(l.store_key or "").strip().lower()
+                      for l in links if (l.store_key or "").strip()}
+            loc = next(iter(stores)) if len(stores) == 1 else None
+            if not guid:
+                continue
+            employees += 1
+            rows = db.query(PerfPeriodCache).filter_by(cena_employee_id=cid).all()
+            changed = False
+            for row in rows:
+                if not row.period_start or not row.period_end:
+                    continue
+                try:
+                    start_dt = datetime.strptime(row.period_start, "%Y-%m-%d")
+                    end_dt = datetime.strptime(row.period_end, "%Y-%m-%d")
+                    svc = toast_reports.server_perf_metrics_for_guid(
+                        start_dt, end_dt, guid, loc) or {}
+                except Exception:
+                    errors += 1
+                    continue
+                if any(svc.get(k) is not None for k in _SERVICE_TIMING_KEYS):
+                    merged = dict(row.service_json or {})
+                    merged.update(svc)
+                    row.service_json = merged
+                    periods_updated += 1
+                    changed = True
+            if changed:
+                db.commit()
+        return jsonify({"ok": True, "employees": employees,
+                        "periods_updated": periods_updated, "errors": errors}), 200
     finally:
         db.close()

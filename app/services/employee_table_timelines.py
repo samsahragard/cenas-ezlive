@@ -8,6 +8,7 @@ discounts, and tip amounts.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -17,6 +18,8 @@ from zoneinfo import ZoneInfo
 
 from app.services import toast_reports
 from app.services.toast_webhook_store import DEFAULT_EMPLOYEE_PROFILE_DB_DIR
+
+log = logging.getLogger(__name__)
 
 
 def central_business_dates() -> tuple[str, str, str]:
@@ -284,13 +287,31 @@ def employee_table_timelines_payload(
             profile_payload["used_profile_db"] = True
             return profile_payload
 
-    live = toast_reports.server_table_timelines_for_guids(
-        guids,
-        loc_filter,
-        business_date,
-        refresh=(day_key == "today"),
-        limit=limit,
-    )
+    try:
+        live = toast_reports.server_table_timelines_for_guids(
+            guids,
+            loc_filter,
+            business_date,
+            refresh=(day_key == "today"),
+            limit=limit,
+        )
+    except Exception:
+        log.warning(
+            "employee tables: Toast timeline fallback failed for employee %s day=%s",
+            cena_employee_id,
+            day_key,
+            exc_info=True,
+        )
+        return {
+            "ok": True,
+            "day": day_key,
+            "business_date": business_date,
+            "source": "toast_fallback_error" if day_key != "today" else "toast_live_error",
+            "used_profile_db": False,
+            "tickets": 0,
+            "timelines": [],
+            "raw_payloads_included": False,
+        }
     live = dict(live)
     live["ok"] = True
     live["day"] = day_key

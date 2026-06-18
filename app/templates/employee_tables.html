@@ -176,12 +176,11 @@
   fetch(CFG.dataUrl+"?day="+encodeURIComponent(CFG.dayKey)+"&limit=40", {credentials:"same-origin", headers:{Accept:"application/json"}})
     .then(function(r){ var ct=r.headers.get("content-type")||""; if(ct.indexOf("application/json")===-1){ var e=new Error("non-json"); e.status=(r.status===200?401:r.status); throw e; } return r.json(); })
     .then(function(j){
-      if(!j || j.ok===false){ hide($("cfp-loading")); return; }
-      if(j.linked===false){ hide($("cfp-loading")); return; }
+      if(!j || j.ok===false || j.linked===false){ render([]); return; }
       render((j.timelines)||[]);
     })
     .catch(function(e){
-      hide($("cfp-loading"));
+      render([]);
     });
 })();
 </script>

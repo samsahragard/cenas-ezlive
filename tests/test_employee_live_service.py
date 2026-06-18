@@ -307,6 +307,51 @@ def test_employee_tables_yesterday_reads_personal_profile_db(tmp_path, monkeypat
         assert forbidden not in encoded
 
 
+def test_employee_tables_yesterday_fallback_failure_returns_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        employee_table_timelines,
+        "central_business_dates",
+        lambda: ("20260618", "20260617", "2026-06-18"),
+    )
+    profile_db = tmp_path / "cena_employee_101.sqlite"
+    conn = sqlite3.connect(profile_db)
+    conn.executescript(
+        """
+        CREATE TABLE related_order_current (
+            order_guid TEXT PRIMARY KEY,
+            store_key TEXT,
+            business_date TEXT,
+            table_name TEXT,
+            opened_date TEXT,
+            closed_date TEXT,
+            paid_date TEXT,
+            payment_status TEXT
+        );
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    def fail_live(*args, **kwargs):
+        raise RuntimeError("Toast unavailable")
+
+    monkeypatch.setattr(toast_reports, "server_table_timelines_for_guids", fail_live)
+
+    payload = employee_table_timelines.employee_table_timelines_payload(
+        101,
+        [SimpleNamespace(toast_id="toast-kennya", store_key="tomball")],
+        day="yesterday",
+        profile_dir=tmp_path,
+    )
+
+    assert payload["ok"] is True
+    assert payload["day"] == "yesterday"
+    assert payload["business_date"] == "20260617"
+    assert payload["source"] == "toast_fallback_error"
+    assert payload["tickets"] == 0
+    assert payload["timelines"] == []
+
+
 def test_my_performance_merges_live_service_into_today_cache(db_session, monkeypatch):
     test_session_factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
     monkeypatch.setattr(employee_mod, "SessionLocal", test_session_factory)

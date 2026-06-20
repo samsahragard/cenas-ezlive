@@ -207,3 +207,155 @@ def test_store_auto_materializes_impacted_employee_database(tmp_path, monkeypatc
     assert result["employee_profile_db_error"] is None
     assert result["employee_profile_dbs"]["databases"] == 1
     assert (tmp_path / "live_profiles" / "cena_employee_101.sqlite").exists()
+
+
+def test_api_entity_mirror_projects_operational_tables(tmp_path):
+    store = ToastWebhookStore(tmp_path / "toast.sqlite")
+    store.init_schema()
+
+    rows = [
+        (
+            "employee",
+            {
+                "guid": "employee-1",
+                "externalEmployeeId": "EMP-1",
+                "firstName": "Yadira",
+                "chosenName": "Yadi",
+                "lastName": "Hernandez",
+                "email": "yadira@example.test",
+            },
+        ),
+        ("job", {"guid": "job-server", "title": "Server", "wageType": "HOURLY"}),
+        (
+            "service_area",
+            {
+                "guid": "service-area-main",
+                "name": "Main Dining",
+            },
+        ),
+        (
+            "table",
+            {
+                "guid": "table-101",
+                "name": "101",
+                "serviceArea": {"guid": "service-area-main"},
+            },
+        ),
+        (
+            "time_entry",
+            {
+                "guid": "time-entry-1",
+                "employeeReference": {"guid": "employee-1"},
+                "jobReference": {"guid": "job-server"},
+                "businessDate": 20260620,
+                "inDate": "2026-06-20T09:00:00.000-0500",
+                "outDate": "2026-06-20T13:30:00.000-0500",
+                "regularHours": 4.0,
+                "overtimeHours": 0.5,
+            },
+        ),
+        (
+            "shift",
+            {
+                "guid": "shift-1",
+                "employeeReference": {"guid": "employee-1"},
+                "jobReference": {"guid": "job-server"},
+                "businessDate": 20260620,
+                "inDate": "2026-06-20T09:00:00.000-0500",
+                "outDate": "2026-06-20T14:00:00.000-0500",
+            },
+        ),
+    ]
+
+    for domain, payload in rows:
+        assert store.upsert_api_entity(
+            domain=domain,
+            store_key="tomball",
+            payload=payload,
+            source="test_sync",
+        )
+
+    assert store.upsert_api_entity(
+        domain="employee",
+        store_key="tomball",
+        payload={
+            "guid": "employee-1",
+            "firstName": "Yadira",
+            "chosenName": "Yadira R",
+            "lastName": "Hernandez",
+        },
+        source="test_sync",
+    )
+    assert not store.upsert_api_entity(
+        domain="employee",
+        store_key="tomball",
+        payload={"firstName": "Missing Guid"},
+        source="test_sync",
+    )
+
+    store.set_watermark(
+        domain="employee",
+        store_key="tomball",
+        key="last_success_at",
+        value="2026-06-20T14:00:00Z",
+    )
+    store.record_pull_log(
+        domain="employee",
+        store_key="tomball",
+        scope_start=None,
+        scope_end=None,
+        started_at="2026-06-20T13:59:00Z",
+        ok=True,
+        row_count=1,
+    )
+
+    with store.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM toast_dimension_item").fetchone()[0] == 6
+        employee = conn.execute(
+            "SELECT chosen_name, last_name FROM toast_employee_current WHERE employee_guid = 'employee-1'"
+        ).fetchone()
+        assert dict(employee) == {"chosen_name": "Yadira R", "last_name": "Hernandez"}
+        table = conn.execute(
+            "SELECT name, service_area_guid FROM toast_table_current WHERE table_guid = 'table-101'"
+        ).fetchone()
+        assert dict(table) == {"name": "101", "service_area_guid": "service-area-main"}
+        time_entry = conn.execute(
+            """
+            SELECT employee_guid, job_guid, business_date, total_hours
+            FROM toast_time_entry_current
+            WHERE time_entry_guid = 'time-entry-1'
+            """
+        ).fetchone()
+        assert dict(time_entry) == {
+            "employee_guid": "employee-1",
+            "job_guid": "job-server",
+            "business_date": "20260620",
+            "total_hours": 4.5,
+        }
+        shift = conn.execute(
+            """
+            SELECT employee_guid, job_guid, business_date
+            FROM toast_shift_current
+            WHERE shift_guid = 'shift-1'
+            """
+        ).fetchone()
+        assert dict(shift) == {
+            "employee_guid": "employee-1",
+            "job_guid": "job-server",
+            "business_date": "20260620",
+        }
+        assert conn.execute("SELECT COUNT(*) FROM toast_mirror_pull_log").fetchone()[0] == 1
+
+    health = store.health()["counts"]
+    assert health["employees"] == 1
+    assert health["jobs"] == 1
+    assert health["tables"] == 1
+    assert health["service_areas"] == 1
+    assert health["time_entries"] == 1
+    assert health["shifts"] == 1
+    assert health["watermarks"] == 1
+    assert store.get_watermark(
+        domain="employee",
+        store_key="tomball",
+        key="last_success_at",
+    ) == "2026-06-20T14:00:00Z"

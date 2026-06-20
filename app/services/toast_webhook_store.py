@@ -83,6 +83,50 @@ def _business_date(value: Any) -> str | None:
     return text or None
 
 
+def _entity_guid(row: dict[str, Any]) -> str | None:
+    guid = _text(row.get("guid"))
+    if guid:
+        return guid
+    for key in ("reference", "entityReference"):
+        ref_guid = _ref_guid(row.get(key))
+        if ref_guid:
+            return ref_guid
+    return None
+
+
+def _entity_name(row: dict[str, Any]) -> str | None:
+    for key in ("name", "displayName", "description", "jobName", "title"):
+        value = _text(row.get(key), 180)
+        if value:
+            return value
+    first = _text(row.get("firstName") or row.get("chosenName"), 80)
+    last = _text(row.get("lastName"), 80)
+    return " ".join(part for part in (first, last) if part) or None
+
+
+def _deleted(row: dict[str, Any]) -> int:
+    return int(bool(row.get("deleted") or row.get("archived") or row.get("voided")))
+
+
+def _ref_or_text(*values: Any) -> str | None:
+    for value in values:
+        guid = _guid_from_any(value)
+        if guid:
+            return guid
+    return None
+
+
+def _date_from_timestamp(value: str | None) -> str | None:
+    if not value:
+        return None
+    text = str(value)
+    if len(text) >= 10:
+        day = text[:10]
+        if len(day) == 10 and day[4] == "-" and day[7] == "-":
+            return day
+    return None
+
+
 def _order_from_payload(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     details = payload.get("details")
     if isinstance(details, dict):
@@ -337,6 +381,124 @@ class ToastWebhookStore:
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY(domain, store_key, toast_guid)
             );
+
+            CREATE TABLE IF NOT EXISTS toast_employee_current (
+                store_key TEXT NOT NULL,
+                employee_guid TEXT NOT NULL,
+                external_employee_id TEXT,
+                first_name TEXT,
+                chosen_name TEXT,
+                last_name TEXT,
+                email TEXT,
+                phone TEXT,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                employee_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(store_key, employee_guid)
+            );
+            CREATE INDEX IF NOT EXISTS ix_toast_employee_current_name
+                ON toast_employee_current(store_key, last_name, first_name);
+
+            CREATE TABLE IF NOT EXISTS toast_job_current (
+                store_key TEXT NOT NULL,
+                job_guid TEXT NOT NULL,
+                title TEXT,
+                wage_type TEXT,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                job_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(store_key, job_guid)
+            );
+
+            CREATE TABLE IF NOT EXISTS toast_table_current (
+                store_key TEXT NOT NULL,
+                table_guid TEXT NOT NULL,
+                name TEXT,
+                service_area_guid TEXT,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                table_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(store_key, table_guid)
+            );
+            CREATE INDEX IF NOT EXISTS ix_toast_table_current_area
+                ON toast_table_current(store_key, service_area_guid);
+
+            CREATE TABLE IF NOT EXISTS toast_service_area_current (
+                store_key TEXT NOT NULL,
+                service_area_guid TEXT NOT NULL,
+                name TEXT,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                service_area_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(store_key, service_area_guid)
+            );
+
+            CREATE TABLE IF NOT EXISTS toast_time_entry_current (
+                store_key TEXT NOT NULL,
+                time_entry_guid TEXT NOT NULL,
+                employee_guid TEXT,
+                job_guid TEXT,
+                business_date TEXT,
+                clock_in TEXT,
+                clock_out TEXT,
+                regular_hours REAL,
+                overtime_hours REAL,
+                total_hours REAL,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                time_entry_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(store_key, time_entry_guid)
+            );
+            CREATE INDEX IF NOT EXISTS ix_toast_time_entry_employee
+                ON toast_time_entry_current(store_key, employee_guid, business_date);
+            CREATE INDEX IF NOT EXISTS ix_toast_time_entry_clock
+                ON toast_time_entry_current(store_key, clock_in);
+
+            CREATE TABLE IF NOT EXISTS toast_shift_current (
+                store_key TEXT NOT NULL,
+                shift_guid TEXT NOT NULL,
+                employee_guid TEXT,
+                job_guid TEXT,
+                business_date TEXT,
+                scheduled_in TEXT,
+                scheduled_out TEXT,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                shift_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(store_key, shift_guid)
+            );
+            CREATE INDEX IF NOT EXISTS ix_toast_shift_employee
+                ON toast_shift_current(store_key, employee_guid, business_date);
+
+            CREATE TABLE IF NOT EXISTS toast_mirror_watermark (
+                domain TEXT NOT NULL,
+                store_key TEXT NOT NULL,
+                watermark_key TEXT NOT NULL,
+                watermark_value TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(domain, store_key, watermark_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS toast_mirror_pull_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT NOT NULL,
+                store_key TEXT,
+                scope_start TEXT,
+                scope_end TEXT,
+                started_at TEXT NOT NULL,
+                finished_at TEXT NOT NULL,
+                ok INTEGER NOT NULL DEFAULT 0,
+                row_count INTEGER NOT NULL DEFAULT 0,
+                error TEXT
+            );
+            CREATE INDEX IF NOT EXISTS ix_toast_mirror_pull_log_domain
+                ON toast_mirror_pull_log(domain, store_key, started_at);
 
             CREATE TABLE IF NOT EXISTS employee_toast_identity_map (
                 store_key TEXT NOT NULL,
@@ -1092,6 +1254,403 @@ class ToastWebhookStore:
             )
             conn.commit()
 
+    def upsert_api_entity(
+        self,
+        *,
+        domain: str,
+        store_key: str,
+        payload: dict[str, Any],
+        source: str = "api",
+    ) -> bool:
+        """Upsert one Toast API row into the local mirror.
+
+        Every row is stored in toast_dimension_item as raw JSON, then known
+        domains are projected into explicit current-state tables. This lets the
+        mirror start broad and stay rebuildable when Toast adds or reshapes
+        fields.
+        """
+        if not isinstance(payload, dict):
+            return False
+        toast_guid = _entity_guid(payload)
+        if not toast_guid:
+            return False
+        self.init_schema()
+        with self.connect() as conn:
+            self._upsert_api_entity_conn(
+                conn,
+                domain=domain,
+                store_key=store_key,
+                toast_guid=toast_guid,
+                payload=payload,
+                source=source,
+            )
+            conn.commit()
+        return True
+
+    def _upsert_api_entity_conn(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        domain: str,
+        store_key: str,
+        toast_guid: str,
+        payload: dict[str, Any],
+        source: str,
+    ) -> None:
+        now = _utc_now()
+        name = _entity_name(payload)
+        conn.execute(
+            """
+            INSERT INTO toast_dimension_item
+                (domain, store_key, toast_guid, name, payload_json, source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(domain, store_key, toast_guid) DO UPDATE SET
+                name = excluded.name,
+                payload_json = excluded.payload_json,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (domain, store_key, toast_guid, name, _as_json(payload), source, now),
+        )
+        if domain == "employee":
+            self._upsert_employee_current(conn, store_key, toast_guid, payload, source, now)
+        elif domain == "job":
+            self._upsert_job_current(conn, store_key, toast_guid, payload, source, now)
+        elif domain == "table":
+            self._upsert_table_current(conn, store_key, toast_guid, payload, source, now)
+        elif domain == "service_area":
+            self._upsert_service_area_current(conn, store_key, toast_guid, payload, source, now)
+        elif domain == "time_entry":
+            self._upsert_time_entry_current(conn, store_key, toast_guid, payload, source, now)
+        elif domain == "shift":
+            self._upsert_shift_current(conn, store_key, toast_guid, payload, source, now)
+
+    def _upsert_employee_current(
+        self,
+        conn: sqlite3.Connection,
+        store_key: str,
+        employee_guid: str,
+        payload: dict[str, Any],
+        source: str,
+        now: str,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO toast_employee_current
+                (store_key, employee_guid, external_employee_id, first_name,
+                 chosen_name, last_name, email, phone, deleted, employee_json,
+                 source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(store_key, employee_guid) DO UPDATE SET
+                external_employee_id = excluded.external_employee_id,
+                first_name = excluded.first_name,
+                chosen_name = excluded.chosen_name,
+                last_name = excluded.last_name,
+                email = excluded.email,
+                phone = excluded.phone,
+                deleted = excluded.deleted,
+                employee_json = excluded.employee_json,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                store_key,
+                employee_guid,
+                _text(payload.get("externalEmployeeId") or payload.get("externalId"), 80),
+                _text(payload.get("firstName"), 80),
+                _text(payload.get("chosenName"), 80),
+                _text(payload.get("lastName"), 80),
+                _text(payload.get("email"), 180),
+                _text(payload.get("phoneNumber") or payload.get("phone"), 60),
+                _deleted(payload),
+                _as_json(payload),
+                source,
+                now,
+            ),
+        )
+
+    def _upsert_job_current(
+        self,
+        conn: sqlite3.Connection,
+        store_key: str,
+        job_guid: str,
+        payload: dict[str, Any],
+        source: str,
+        now: str,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO toast_job_current
+                (store_key, job_guid, title, wage_type, deleted, job_json,
+                 source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(store_key, job_guid) DO UPDATE SET
+                title = excluded.title,
+                wage_type = excluded.wage_type,
+                deleted = excluded.deleted,
+                job_json = excluded.job_json,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                store_key,
+                job_guid,
+                _entity_name(payload),
+                _text(payload.get("wageType") or payload.get("payType"), 80),
+                _deleted(payload),
+                _as_json(payload),
+                source,
+                now,
+            ),
+        )
+
+    def _upsert_table_current(
+        self,
+        conn: sqlite3.Connection,
+        store_key: str,
+        table_guid: str,
+        payload: dict[str, Any],
+        source: str,
+        now: str,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO toast_table_current
+                (store_key, table_guid, name, service_area_guid, deleted,
+                 table_json, source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(store_key, table_guid) DO UPDATE SET
+                name = excluded.name,
+                service_area_guid = excluded.service_area_guid,
+                deleted = excluded.deleted,
+                table_json = excluded.table_json,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                store_key,
+                table_guid,
+                _entity_name(payload),
+                _ref_or_text(payload.get("serviceArea"), payload.get("serviceAreaReference"), payload.get("serviceAreaGuid")),
+                _deleted(payload),
+                _as_json(payload),
+                source,
+                now,
+            ),
+        )
+
+    def _upsert_service_area_current(
+        self,
+        conn: sqlite3.Connection,
+        store_key: str,
+        service_area_guid: str,
+        payload: dict[str, Any],
+        source: str,
+        now: str,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO toast_service_area_current
+                (store_key, service_area_guid, name, deleted, service_area_json,
+                 source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(store_key, service_area_guid) DO UPDATE SET
+                name = excluded.name,
+                deleted = excluded.deleted,
+                service_area_json = excluded.service_area_json,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                store_key,
+                service_area_guid,
+                _entity_name(payload),
+                _deleted(payload),
+                _as_json(payload),
+                source,
+                now,
+            ),
+        )
+
+    def _upsert_time_entry_current(
+        self,
+        conn: sqlite3.Connection,
+        store_key: str,
+        time_entry_guid: str,
+        payload: dict[str, Any],
+        source: str,
+        now: str,
+    ) -> None:
+        clock_in = _text(payload.get("inDate") or payload.get("clockIn") or payload.get("startedAt"), 80)
+        clock_out = _text(payload.get("outDate") or payload.get("clockOut") or payload.get("endedAt"), 80)
+        regular = _amount(payload.get("regularHours") or payload.get("regular_hours"))
+        overtime = _amount(payload.get("overtimeHours") or payload.get("otHours") or payload.get("overtime_hours"))
+        total = _amount(payload.get("totalHours") or payload.get("hours") or payload.get("total_hours"))
+        if total is None and (regular is not None or overtime is not None):
+            total = round(float(regular or 0) + float(overtime or 0), 4)
+        business_date = (
+            _business_date(payload.get("businessDate"))
+            or _date_from_timestamp(clock_in)
+            or _date_from_timestamp(clock_out)
+        )
+        conn.execute(
+            """
+            INSERT INTO toast_time_entry_current
+                (store_key, time_entry_guid, employee_guid, job_guid, business_date,
+                 clock_in, clock_out, regular_hours, overtime_hours, total_hours,
+                 deleted, time_entry_json, source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(store_key, time_entry_guid) DO UPDATE SET
+                employee_guid = excluded.employee_guid,
+                job_guid = excluded.job_guid,
+                business_date = excluded.business_date,
+                clock_in = excluded.clock_in,
+                clock_out = excluded.clock_out,
+                regular_hours = excluded.regular_hours,
+                overtime_hours = excluded.overtime_hours,
+                total_hours = excluded.total_hours,
+                deleted = excluded.deleted,
+                time_entry_json = excluded.time_entry_json,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                store_key,
+                time_entry_guid,
+                _ref_or_text(payload.get("employeeReference"), payload.get("employee"), payload.get("employeeGuid")),
+                _ref_or_text(payload.get("jobReference"), payload.get("job"), payload.get("jobGuid")),
+                business_date,
+                clock_in,
+                clock_out,
+                regular,
+                overtime,
+                total,
+                _deleted(payload),
+                _as_json(payload),
+                source,
+                now,
+            ),
+        )
+
+    def _upsert_shift_current(
+        self,
+        conn: sqlite3.Connection,
+        store_key: str,
+        shift_guid: str,
+        payload: dict[str, Any],
+        source: str,
+        now: str,
+    ) -> None:
+        scheduled_in = _text(payload.get("inDate") or payload.get("startDate") or payload.get("startAt"), 80)
+        scheduled_out = _text(payload.get("outDate") or payload.get("endDate") or payload.get("endAt"), 80)
+        business_date = (
+            _business_date(payload.get("businessDate"))
+            or _date_from_timestamp(scheduled_in)
+            or _date_from_timestamp(scheduled_out)
+        )
+        conn.execute(
+            """
+            INSERT INTO toast_shift_current
+                (store_key, shift_guid, employee_guid, job_guid, business_date,
+                 scheduled_in, scheduled_out, deleted, shift_json, source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(store_key, shift_guid) DO UPDATE SET
+                employee_guid = excluded.employee_guid,
+                job_guid = excluded.job_guid,
+                business_date = excluded.business_date,
+                scheduled_in = excluded.scheduled_in,
+                scheduled_out = excluded.scheduled_out,
+                deleted = excluded.deleted,
+                shift_json = excluded.shift_json,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                store_key,
+                shift_guid,
+                _ref_or_text(payload.get("employeeReference"), payload.get("employee"), payload.get("employeeGuid")),
+                _ref_or_text(payload.get("jobReference"), payload.get("job"), payload.get("jobGuid")),
+                business_date,
+                scheduled_in,
+                scheduled_out,
+                _deleted(payload),
+                _as_json(payload),
+                source,
+                now,
+            ),
+        )
+
+    def record_pull_log(
+        self,
+        *,
+        domain: str,
+        store_key: str | None,
+        scope_start: str | None,
+        scope_end: str | None,
+        started_at: str,
+        ok: bool,
+        row_count: int,
+        error: str | None = None,
+    ) -> None:
+        self.init_schema()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO toast_mirror_pull_log
+                    (domain, store_key, scope_start, scope_end, started_at,
+                     finished_at, ok, row_count, error)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    domain,
+                    store_key,
+                    scope_start,
+                    scope_end,
+                    started_at,
+                    _utc_now(),
+                    int(ok),
+                    int(row_count or 0),
+                    _text(error, 600),
+                ),
+            )
+            conn.commit()
+
+    def set_watermark(
+        self,
+        *,
+        domain: str,
+        store_key: str,
+        key: str,
+        value: str | None,
+    ) -> None:
+        self.init_schema()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO toast_mirror_watermark
+                    (domain, store_key, watermark_key, watermark_value, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(domain, store_key, watermark_key) DO UPDATE SET
+                    watermark_value = excluded.watermark_value,
+                    updated_at = excluded.updated_at
+                """,
+                (domain, store_key, key, value, _utc_now()),
+            )
+            conn.commit()
+
+    def get_watermark(self, *, domain: str, store_key: str, key: str) -> str | None:
+        self.init_schema()
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT watermark_value
+                FROM toast_mirror_watermark
+                WHERE domain = ? AND store_key = ? AND watermark_key = ?
+                """,
+                (domain, store_key, key),
+            ).fetchone()
+            return row["watermark_value"] if row else None
+
     def seed_employee_profiles_and_identity(
         self,
         *,
@@ -1332,6 +1891,16 @@ class ToastWebhookStore:
             counts = {
                 "events": conn.execute("SELECT COUNT(*) FROM toast_webhook_event").fetchone()[0],
                 "orders": conn.execute("SELECT COUNT(*) FROM toast_order_current").fetchone()[0],
+                "checks": conn.execute("SELECT COUNT(*) FROM toast_check_current").fetchone()[0],
+                "selections": conn.execute("SELECT COUNT(*) FROM toast_selection_current").fetchone()[0],
+                "payments": conn.execute("SELECT COUNT(*) FROM toast_payment_current").fetchone()[0],
+                "employees": conn.execute("SELECT COUNT(*) FROM toast_employee_current").fetchone()[0],
+                "jobs": conn.execute("SELECT COUNT(*) FROM toast_job_current").fetchone()[0],
+                "tables": conn.execute("SELECT COUNT(*) FROM toast_table_current").fetchone()[0],
+                "service_areas": conn.execute("SELECT COUNT(*) FROM toast_service_area_current").fetchone()[0],
+                "time_entries": conn.execute("SELECT COUNT(*) FROM toast_time_entry_current").fetchone()[0],
+                "shifts": conn.execute("SELECT COUNT(*) FROM toast_shift_current").fetchone()[0],
+                "watermarks": conn.execute("SELECT COUNT(*) FROM toast_mirror_watermark").fetchone()[0],
                 "employee_facts": conn.execute("SELECT COUNT(*) FROM employee_toast_fact").fetchone()[0],
                 "identity_links": conn.execute("SELECT COUNT(*) FROM employee_toast_identity_map").fetchone()[0],
                 "unmatched": conn.execute("SELECT COUNT(*) FROM employee_toast_unmatched").fetchone()[0],

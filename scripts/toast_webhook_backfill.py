@@ -4,7 +4,7 @@ import argparse
 import json
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.services.toast_client import ToastClient, restaurant_guids
@@ -16,6 +16,10 @@ from app.services.toast_webhook_store import (
 
 
 log = logging.getLogger("toast_webhook_backfill")
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _load_toast_env_file(path: str) -> None:
@@ -68,27 +72,52 @@ def sync_dimensions(store: ToastWebhookStore, refresh: bool) -> dict[str, int]:
     for store_key, restaurant_guid in restaurant_guids().items():
         pulls = {
             "table": lambda: client.fetch_tables(store_key, restaurant_guid, refresh=refresh),
+            "service_area": lambda: client.fetch_service_areas(store_key, restaurant_guid, refresh=refresh),
             "employee": lambda: client.fetch_employees(store_key, restaurant_guid, refresh=refresh),
             "job": lambda: client.fetch_jobs(store_key, restaurant_guid, refresh=refresh),
         }
         for domain, pull in pulls.items():
-            rows = pull() or []
+            started_at = _utc_now()
             written = 0
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                guid = _dimension_guid(row)
-                if not guid:
-                    continue
-                store.upsert_dimension_item(
+            try:
+                rows = pull() or []
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    if store.upsert_api_entity(
+                        domain=domain,
+                        store_key=store_key,
+                        payload=row,
+                        source="api_sync",
+                    ):
+                        written += 1
+                store.set_watermark(
                     domain=domain,
                     store_key=store_key,
-                    toast_guid=guid,
-                    name=_dimension_name(row),
-                    payload=row,
-                    source="api",
+                    key="last_success_at",
+                    value=_utc_now(),
                 )
-                written += 1
+                store.record_pull_log(
+                    domain=domain,
+                    store_key=store_key,
+                    scope_start=None,
+                    scope_end=None,
+                    started_at=started_at,
+                    ok=True,
+                    row_count=written,
+                )
+            except Exception as ex:  # noqa: BLE001 - keep other stores/domains moving.
+                log.exception("dimension sync failed for %s/%s", store_key, domain)
+                store.record_pull_log(
+                    domain=domain,
+                    store_key=store_key,
+                    scope_start=None,
+                    scope_end=None,
+                    started_at=started_at,
+                    ok=False,
+                    row_count=written,
+                    error=f"{type(ex).__name__}: {ex}",
+                )
             counts[f"{store_key}.{domain}"] = written
     return counts
 
@@ -98,61 +127,129 @@ def backfill_orders(store: ToastWebhookStore, days: int, refresh: bool) -> dict[
     counts: dict[str, int] = {}
     for store_key, restaurant_guid in restaurant_guids().items():
         written = 0
-        for business_date in business_dates_for_backfill(days):
-            orders = client.fetch_orders_for_date(store_key, restaurant_guid, business_date, refresh=refresh)
-            for order in orders or []:
-                if not isinstance(order, dict):
-                    continue
-                event = {
-                    "timestamp": order.get("modifiedDate") or order.get("openedDate") or datetime.utcnow().isoformat() + "Z",
-                    "eventCategory": "order_updated",
-                    "eventType": "order_updated",
-                    "guid": synthetic_event_guid(f"ordersBulk:{store_key}:{business_date}", order),
-                    "details": {"restaurantGuid": restaurant_guid, "order": order},
-                }
-                raw = json.dumps(event, ensure_ascii=False, sort_keys=True).encode("utf-8")
-                store.store_webhook_event(
-                    payload=event,
-                    raw_body=raw,
-                    headers={
-                        "Toast-Attempt-Number": "0",
-                        "Toast-Event-Type": "order_updated",
-                        "Toast-Event-Category": "order_updated",
-                        "Toast-Restaurant-External-ID": restaurant_guid,
-                    },
-                    signature_verified=False,
-                    source="ordersBulk_backfill",
-                )
-                written += 1
+        started_at = _utc_now()
+        dates = business_dates_for_backfill(days)
+        try:
+            for business_date in dates:
+                orders = client.fetch_orders_for_date(store_key, restaurant_guid, business_date, refresh=refresh)
+                for order in orders or []:
+                    if not isinstance(order, dict):
+                        continue
+                    event = {
+                        "timestamp": order.get("modifiedDate") or order.get("openedDate") or _utc_now(),
+                        "eventCategory": "order_updated",
+                        "eventType": "order_updated",
+                        "guid": synthetic_event_guid(f"ordersBulk:{store_key}:{business_date}", order),
+                        "details": {"restaurantGuid": restaurant_guid, "order": order},
+                    }
+                    raw = json.dumps(event, ensure_ascii=False, sort_keys=True).encode("utf-8")
+                    store.store_webhook_event(
+                        payload=event,
+                        raw_body=raw,
+                        headers={
+                            "Toast-Attempt-Number": "0",
+                            "Toast-Event-Type": "order_updated",
+                            "Toast-Event-Category": "order_updated",
+                            "Toast-Restaurant-External-ID": restaurant_guid,
+                        },
+                        signature_verified=False,
+                        source="ordersBulk_backfill",
+                    )
+                    written += 1
+            store.set_watermark(
+                domain="order",
+                store_key=store_key,
+                key="last_business_date",
+                value=(dates[-1] if dates else None),
+            )
+            store.set_watermark(
+                domain="order",
+                store_key=store_key,
+                key="last_success_at",
+                value=_utc_now(),
+            )
+            store.record_pull_log(
+                domain="order",
+                store_key=store_key,
+                scope_start=(dates[0] if dates else None),
+                scope_end=(dates[-1] if dates else None),
+                started_at=started_at,
+                ok=True,
+                row_count=written,
+            )
+        except Exception as ex:  # noqa: BLE001 - keep other stores moving.
+            log.exception("order backfill failed for %s", store_key)
+            store.record_pull_log(
+                domain="order",
+                store_key=store_key,
+                scope_start=(dates[0] if dates else None),
+                scope_end=(dates[-1] if dates else None),
+                started_at=started_at,
+                ok=False,
+                row_count=written,
+                error=f"{type(ex).__name__}: {ex}",
+            )
         counts[store_key] = written
     return counts
 
 
 def sync_labor_recent(store: ToastWebhookStore, days: int, refresh: bool) -> dict[str, int]:
     client = ToastClient.shared()
-    end = datetime.utcnow() - timedelta(hours=5)
+    end = datetime.now(timezone.utc) - timedelta(hours=5)
     start = end - timedelta(days=max(days - 1, 0))
     counts: dict[str, int] = {}
     for store_key, restaurant_guid in restaurant_guids().items():
-        time_entries = client.fetch_time_entries(store_key, restaurant_guid, start, end, refresh=refresh)
-        shifts = client.fetch_shifts(store_key, restaurant_guid, start, end, refresh=refresh)
-        for domain, rows in (("time_entry", time_entries or []), ("shift", shifts or [])):
+        for domain, pull in (
+            ("time_entry", lambda: client.fetch_time_entries(store_key, restaurant_guid, start, end, refresh=refresh)),
+            ("shift", lambda: client.fetch_shifts(store_key, restaurant_guid, start, end, refresh=refresh)),
+        ):
+            started_at = _utc_now()
             written = 0
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                guid = _dimension_guid(row)
-                if not guid:
-                    continue
-                store.upsert_dimension_item(
+            try:
+                rows = pull() or []
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    if store.upsert_api_entity(
+                        domain=domain,
+                        store_key=store_key,
+                        payload=row,
+                        source="api_sync",
+                    ):
+                        written += 1
+                store.set_watermark(
                     domain=domain,
                     store_key=store_key,
-                    toast_guid=guid,
-                    name=_dimension_name(row),
-                    payload=row,
-                    source="api",
+                    key="last_success_at",
+                    value=_utc_now(),
                 )
-                written += 1
+                store.set_watermark(
+                    domain=domain,
+                    store_key=store_key,
+                    key="last_scope_end",
+                    value=end.date().isoformat(),
+                )
+                store.record_pull_log(
+                    domain=domain,
+                    store_key=store_key,
+                    scope_start=start.date().isoformat(),
+                    scope_end=end.date().isoformat(),
+                    started_at=started_at,
+                    ok=True,
+                    row_count=written,
+                )
+            except Exception as ex:  # noqa: BLE001
+                log.exception("labor sync failed for %s/%s", store_key, domain)
+                store.record_pull_log(
+                    domain=domain,
+                    store_key=store_key,
+                    scope_start=start.date().isoformat(),
+                    scope_end=end.date().isoformat(),
+                    started_at=started_at,
+                    ok=False,
+                    row_count=written,
+                    error=f"{type(ex).__name__}: {ex}",
+                )
             counts[f"{store_key}.{domain}"] = written
     return counts
 

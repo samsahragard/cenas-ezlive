@@ -66,6 +66,24 @@ def _dimension_name(row: dict[str, Any]) -> str | None:
     return None
 
 
+def _stable_order_event_payload(store_key: str, business_date: str, order: dict[str, Any]) -> dict[str, str]:
+    order_guid = str(order.get("guid") or "").strip()
+    if not order_guid:
+        order_guid = synthetic_event_guid("ordersBulk:orderPayload", order)
+    change_marker = str(
+        order.get("modifiedDate")
+        or order.get("closedDate")
+        or order.get("openedDate")
+        or business_date
+    ).strip()
+    return {
+        "store_key": store_key,
+        "business_date": business_date,
+        "order_guid": order_guid,
+        "change_marker": change_marker,
+    }
+
+
 def sync_dimensions(store: ToastWebhookStore, refresh: bool) -> dict[str, int]:
     client = ToastClient.shared()
     counts: dict[str, int] = {}
@@ -139,7 +157,10 @@ def backfill_orders(store: ToastWebhookStore, days: int, refresh: bool) -> dict[
                         "timestamp": order.get("modifiedDate") or order.get("openedDate") or _utc_now(),
                         "eventCategory": "order_updated",
                         "eventType": "order_updated",
-                        "guid": synthetic_event_guid(f"ordersBulk:{store_key}:{business_date}", order),
+                        "guid": synthetic_event_guid(
+                            f"ordersBulk:{store_key}:{business_date}",
+                            _stable_order_event_payload(store_key, business_date, order),
+                        ),
                         "details": {"restaurantGuid": restaurant_guid, "order": order},
                     }
                     raw = json.dumps(event, ensure_ascii=False, sort_keys=True).encode("utf-8")

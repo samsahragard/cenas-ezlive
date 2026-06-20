@@ -1790,6 +1790,7 @@ body::after {
   background: rgba(127, 225, 95, .055); border: 1px solid rgba(127, 225, 95, .16);
   color: #dcefe0;
 }
+.cfp-empty-state[hidden] { display: none !important; }
 .cfp-empty-state.compact { margin: 0 0 10px; }
 .cfp-empty-state svg { color: var(--cfp-green); }
 .cfp-empty-state strong { font-size: 15px; color: var(--cfp-text); }

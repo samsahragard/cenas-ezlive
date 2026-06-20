@@ -138,6 +138,9 @@ def test_tables_tab_real_wiring_and_no_demo(app_emp):
     assert "cfp-ticket-list" in html
     # Day toggle present.
     assert "/employee/tables?day=yesterday" in html
+    css_path = os.path.join(os.getcwd(), "app", "static", "css", "employee_console.css")
+    with open(css_path, encoding="utf-8") as fh:
+        assert ".cfp-empty-state[hidden]" in fh.read()
 
 
 def test_shifts_tab_renders_and_no_demo(app_emp):

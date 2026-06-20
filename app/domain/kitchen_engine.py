@@ -73,6 +73,8 @@ _PREP_SMALL_SPOON_COMPONENT_VALUES = {
 _PREP_SAUCE_COMPONENT_VALUES = {"Red Sauce", "Green Sauce"}
 
 _DESSERT_TONGS_KEYS = {"churros", "sopapillas"}
+_TABLEWARE_ITEM_KEYS = {"tableware", "plates_and_bowls"}
+_AUTO_TABLEWARE_TYPES = _TRAY_TYPES | {"sides", "a_la_carte", "desserts"}
 
 def _utensil_summary(sub: dict) -> str:
     return (
@@ -119,6 +121,38 @@ def _tray_items(order: NormalizedOrder) -> list:
         i for i in order["normalized_items"]
         if i["package_type"] in _TRAY_TYPES and not _is_individual_meal(i)
     ]
+
+
+def _has_explicit_tableware(order: NormalizedOrder) -> bool:
+    return any(i.get("item_key") in _TABLEWARE_ITEM_KEYS for i in order["normalized_items"])
+
+
+def _needs_auto_tableware(order: NormalizedOrder) -> bool:
+    if _has_explicit_tableware(order):
+        return False
+    return any(i.get("package_type") in _AUTO_TABLEWARE_TYPES for i in order["normalized_items"])
+
+
+def _auto_tableware_item() -> NormalizedItem:
+    return {
+        "item_key": "tableware",
+        "package_type": "non_food_items",
+        "qty": 1,
+        "choices": {
+            "packaging": "none",
+            "beans": "none",
+            "tortillas": "none",
+            "with_ice": None,
+        },
+        "extras": [],
+        "container": None,
+        "source": {
+            "raw_alias": "Tableware",
+            "raw_qty": 1,
+            "raw_line_items": [],
+        },
+        "flags": ["AUTO_TABLEWARE"],
+    }
 
 
 def rule_tableware(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
@@ -277,6 +311,8 @@ def build_kitchen_result(order: NormalizedOrder) -> KitchenOrderResult:
     for item in order["normalized_items"]:
         handler = RULES.get(item["package_type"], rule_other)
         breakdowns.append(handler(item, order))
+    if _needs_auto_tableware(order):
+        breakdowns.append(rule_tableware(_auto_tableware_item(), order))
     
     _apply_prep_utensils(breakdowns)
 

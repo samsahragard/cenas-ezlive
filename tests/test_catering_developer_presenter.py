@@ -105,6 +105,27 @@ def test_developer_calculation_explains_bulk_food_and_tableware():
     assert "80 x 2.5 tortillas" in tortillas["calculation"]
 
 
+def test_developer_calculation_adds_tableware_without_pdf_tableware_line():
+    detail = _detail([
+        _item("fajitas_mixed", "fajitas", 65, beans="charro", tortillas="flour"),
+        _item("cenas_exec_spread", "premium", 10, packaging="tray", tortillas="flour"),
+    ])
+
+    silverware = _row(detail, "Silverware")
+    plates = _row(detail, "Plates")
+    large_spoons = _row(detail, "Black Large Spoons")
+    small_spoons = _row(detail, "Black Small Spoons")
+    black_tongs = _row(detail, "Black Tongs")
+
+    assert silverware["amount"] == "78"
+    assert silverware["calculation"] == "75 bulk + 3 buffer = 78"
+    assert plates["amount"] == "78"
+    assert plates["calculation"] == "75 bulk + 3 buffer = 78"
+    assert large_spoons["amount"] != ""
+    assert small_spoons["amount"] != ""
+    assert black_tongs["amount"] != ""
+
+
 def test_developer_calculation_explains_individual_tableware():
     detail = _detail([
         _item("fajitas_mixed", "fajitas", 30, packaging="individual", beans="charro", tortillas="flour"),

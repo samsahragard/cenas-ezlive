@@ -385,6 +385,19 @@ def test_bulk_tableware_uses_ordered_food_qty_plus_buffer():
     assert tableware["utensil_sub_counts"]["silverware"] == 13
 
 
+def test_bulk_tableware_is_generated_when_pdf_has_no_tableware_line():
+    items = [
+        _item("fajitas_mixed", "fajitas", qty=10, packaging="tray", beans="charro", tortillas="flour"),
+    ]
+
+    result = build_kitchen_result(_order(items, headcount=100))
+    tableware = next(b for b in result["breakdowns"] if b["item_key"] == "tableware")
+
+    assert "AUTO_TABLEWARE" in tableware["flags"]
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 13
+    assert tableware["utensil_sub_counts"]["silverware"] == 13
+
+
 def test_bulk_tableware_ignores_pdf_plate_override_when_food_qty_exists():
     items = [
         _item("fajitas_mixed", "fajitas", qty=30, packaging="tray", beans="charro", tortillas="flour"),
@@ -506,6 +519,23 @@ def test_saved_bulk_order_refreshes_tableware_from_food_qty_not_pdf_plates():
     assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 18
 
 
+def test_saved_bulk_order_without_tableware_gets_generated_tableware():
+    order = _row_order(headcount=0)
+    order.delivery_date = "2099-01-01"
+    items = [
+        _row_item(1, "fajitas_mixed", "fajitas", 15, "tray", "Beef & Chicken Fajita Party Package"),
+    ]
+
+    bundle = reconstruct_bundle(order, items, {})
+    tableware = next(b for b in bundle["kitchen_result"]["breakdowns"] if b["item_key"] == "tableware")
+
+    assert "AUTO_TABLEWARE" in tableware["flags"]
+    assert tableware["utensil_sub_counts"]["silverware"] == 18
+    assert tableware["utensil_sub_counts"]["plates_and_bowls"] == 18
+    assert bundle["views"]["master"]["item.silverware"] == "18"
+    assert bundle["views"]["master"]["item.plates_and_bowls"] == "18"
+
+
 def test_active_saved_salad_order_refreshes_current_food_breakdown():
     items = [
         _row_item(
@@ -534,8 +564,10 @@ def test_active_saved_salad_order_refreshes_current_food_breakdown():
         "summary_line": "9ppl - Cobb Salad | Dressing: Most Popular",
         "flags": [],
     }
+    order = _row_order(headcount=0)
+    order.delivery_date = "2099-01-01"
     bundle = reconstruct_bundle(
-        _row_order(headcount=0),
+        order,
         items,
         {1: [SimpleNamespace(breakdown=stale_salad)]},
     )

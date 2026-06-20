@@ -143,6 +143,10 @@ def _kitchen_result_from_rows(order: Order, items: list[OrderItem],
             breakdowns.append(current)
         elif stored:
             breakdowns.append(stored)
+
+    for current in current_breakdowns[len(items):]:
+        if refresh_current or _is_tableware_breakdown(current):
+            breakdowns.append(current)
     return {
         "kitchen_ready_time": order.kitchen_ready_time,
         "order_id": order.external_order_id,

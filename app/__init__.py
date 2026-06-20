@@ -1545,6 +1545,30 @@ def create_app():
         logging.getLogger(__name__).exception(
             "recipes seed failed (non-fatal)")
 
+    # One-shot recipe-card backfill (Sam 2026-06-20). The Time / Yield /
+    # Shelf Life boxes were blank on every recipe (cards showed a
+    # "15 min / — / 1 day" placeholder). Fill them from the fixture, by
+    # name, WITHOUT touching any recipe content. Gated to fire once — only
+    # while rows still lack a yield — so it overwrites the placeholders on
+    # the first deploy carrying card values and is a no-op afterward (later
+    # manual edits are preserved). Re-apply on demand: /sam/cena/run-recipe-cards.
+    try:
+        from app.services.recipes_seed import (
+            apply_recipe_cards_from_fixture as _apply_cards,
+            _fixture_has_card_values as _fix_has_cards,
+            _recipes_need_card_backfill as _need_cards,
+        )
+        if _fix_has_cards() and _need_cards():
+            _cu, _cun, _cmiss = _apply_cards()
+            logging.getLogger(__name__).info(
+                "recipe cards backfill (boot): updated=%d unchanged=%d "
+                "missing=%d", _cu, _cun, len(_cmiss))
+    except FileNotFoundError:
+        pass  # fixture not on disk yet — non-fatal
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "recipe cards backfill (boot) failed (non-fatal)")
+
     # manager_incident_report v3 fields (migration 33, ck build-order
     # Sam #10:11/#10:15 2026-05-19 — convert Incident Reports v1 text-
     # heavy shell to the samai+dck v3 design). Additive: 5 columns + 1

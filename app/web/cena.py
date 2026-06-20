@@ -3461,6 +3461,35 @@ def cena_run_recipes_replace():
         db.close()
 
 
+@cena_bp.route("/sam/cena/run-recipe-cards", methods=["POST"])
+def cena_run_recipe_cards():
+    """Apply ONLY the recipe-card display boxes — Time (prep_time/_es),
+    Yield (batch_sizes_json {yield_en,yield_es}) and Shelf Life
+    (shelf_life/_es) — to existing recipes from the committed fixture,
+    matched by NAME. Does NOT alter ingredients, instructions, code,
+    category, name or notes (Sam 2026-06-20: "DO NOT CHANGE ANYTHING in
+    the recipes"). Idempotent re-apply path for the one-shot boot backfill.
+
+    Prod write -> gated by BOTH X-Cena-Token and X-Sam-Ops-Token (the
+    Sam-only write gate, 2026-06-10)."""
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+    gate = _require_sam_ops_token()
+    if gate is not None:
+        return gate
+    try:
+        from app.services.recipes_seed import apply_recipe_cards_from_fixture
+        updated, unchanged, missing = apply_recipe_cards_from_fixture()
+        return jsonify({"ok": True, "updated": updated,
+                        "unchanged": unchanged, "missing": missing})
+    except FileNotFoundError:
+        return jsonify({"ok": False, "error": "seed fixture not found"}), 500
+    except Exception as e:  # noqa: BLE001
+        logger.exception("cena: run-recipe-cards crashed")
+        return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"}), 500
+
+
 @cena_bp.route("/sam/cena/db-probe/recipes-backup", methods=["GET"])
 def cena_db_probe_recipes_backup():
     """Read-only full dump of all recipes for a pre-replace BACKUP snapshot

@@ -134,3 +134,132 @@ def seed_recipes_from_json(
         "recipes seed: created=%d skipped=%d errored=%d (replace=%s)",
         created, skipped, errored, replace)
     return created, skipped, errored
+
+
+# ============================================================
+# Recipe-card boxes — Time / Yield / Shelf Life only (Sam 2026-06-20).
+# These three display boxes were blank on every recipe (the cards fell
+# back to a "15 min / — / 1 day" placeholder). Fill them from the fixture
+# WITHOUT altering any recipe content. Yield is stored EN/ES inside
+# batch_sizes_json (the shape recipes_index reads). Matched by NAME because
+# recipe `code` is not unique in the fixture.
+# ============================================================
+_CARD_FIELDS = ("prep_time_en", "prep_time_es", "shelf_life_en",
+                "shelf_life_es", "yield_en", "yield_es")
+
+
+def _fixture_has_card_values(path: Path | None = None) -> bool:
+    """True if the fixture defines any card values (time / shelf / yield)."""
+    try:
+        recipes = _load_fixture(path)
+    except Exception:
+        return False
+    return any(any(r.get(k) for k in _CARD_FIELDS) for r in recipes)
+
+
+def _recipes_need_card_backfill() -> bool:
+    """True if any recipe row still lacks a yield value — the marker that the
+    one-shot card backfill has not run yet. Gates the boot apply so it fires
+    once on the first deploy that carries card values, then leaves the table
+    (incl. later manual edits) alone."""
+    from app.db import get_db
+    from app.models import Recipe
+    db = next(get_db())
+    try:
+        rows = db.query(Recipe.batch_sizes_json).all()
+        if not rows:
+            return False  # empty table -> the seed handles it, not this
+        for (bsj,) in rows:
+            try:
+                obj = json.loads(bsj) if bsj else None
+            except Exception:
+                obj = None
+            has_yield = isinstance(obj, dict) and (
+                obj.get("yield_en") or obj.get("yield_es"))
+            if not has_yield:
+                return True
+        return False
+    finally:
+        db.close()
+
+
+def apply_recipe_cards_from_fixture(
+    fixture_path: Path | None = None,
+) -> tuple[int, int, list[str]]:
+    """Update ONLY the recipe-card display boxes for existing recipes:
+
+      - Time       -> prep_time / prep_time_es
+      - Shelf Life -> shelf_life / shelf_life_es
+      - Yield      -> batch_sizes_json = {"yield_en": ..., "yield_es": ...}
+
+    Matched by NAME. Deliberately does NOT touch ingredients, english/
+    spanish instructions, code, category, name or notes — the recipe
+    content is left exactly as-is (Sam 2026-06-20: "DO NOT CHANGE ANYTHING
+    in the recipes"). Idempotent: re-running writes the same values.
+    Returns (updated, unchanged, missing_names).
+    """
+    from app.db import get_db
+    from app.models import Recipe
+
+    recipes = _load_fixture(fixture_path)
+    db = next(get_db())
+    updated = 0
+    unchanged = 0
+    missing: list[str] = []
+    try:
+        for r in recipes:
+            name = (r.get("name") or "").strip()
+            if not name:
+                continue
+            row = db.query(Recipe).filter(Recipe.name == name[:200]).first()
+            if row is None:
+                missing.append(name)
+                continue
+
+            pte = (r.get("prep_time_en") or r.get("prep_time") or "").strip()
+            ptes = (r.get("prep_time_es") or "").strip()
+            sle = (r.get("shelf_life_en") or r.get("shelf_life") or "").strip()
+            sles = (r.get("shelf_life_es") or "").strip()
+            ye = (r.get("yield_en") or "").strip()
+            ys = (r.get("yield_es") or "").strip()
+
+            changed = False
+            if pte and row.prep_time != pte[:80]:
+                row.prep_time = pte[:80]
+                changed = True
+            if ptes and row.prep_time_es != ptes[:80]:
+                row.prep_time_es = ptes[:80]
+                changed = True
+            if sle and row.shelf_life != sle[:80]:
+                row.shelf_life = sle[:80]
+                changed = True
+            if sles and row.shelf_life_es != sles[:80]:
+                row.shelf_life_es = sles[:80]
+                changed = True
+            if ye or ys:
+                blob = json.dumps({"yield_en": ye or None,
+                                   "yield_es": ys or None})
+                if row.batch_sizes_json != blob:
+                    try:
+                        prev = json.loads(row.batch_sizes_json or "[]")
+                    except Exception:
+                        prev = None
+                    if isinstance(prev, list) and prev:
+                        logger.info(
+                            "recipe cards: %r had legacy batch_sizes list %r"
+                            " -> replaced with yield dict", name, prev)
+                    row.batch_sizes_json = blob
+                    changed = True
+
+            if changed:
+                updated += 1
+            else:
+                unchanged += 1
+        db.commit()
+    finally:
+        db.close()
+
+    logger.info(
+        "recipe cards backfill: updated=%d unchanged=%d missing=%d",
+        updated, unchanged, len(missing))
+    return updated, unchanged, missing

@@ -4,6 +4,26 @@ from sqlalchemy.orm import sessionmaker
 from app.services import corporate_shop
 
 
+def test_corporate_catalog_merges_takeout_departments():
+    seed = corporate_shop.load_catalog_seed()
+    legacy = {
+        "1-3 Compartment Containers",
+        "Aluminum Foil Pans & Containers",
+        "Togo & Catering",
+    }
+    category_labels = {row["label"] for row in seed["categories"]}
+    merged_items = [
+        item for item in seed["items"]
+        if item["category"] == "Take-out & Catering"
+    ]
+
+    assert "Take-out & Catering" in category_labels
+    assert category_labels.isdisjoint(legacy)
+    assert len(merged_items) == 31
+    assert {item["category_key"] for item in merged_items} == {"takeout_catering"}
+    assert all(item["category"] not in legacy for item in seed["items"])
+
+
 def test_list_orders_filters_store_before_limit(monkeypatch):
     engine = create_engine("sqlite:///:memory:", future=True)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)

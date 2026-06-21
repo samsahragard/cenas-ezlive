@@ -75,6 +75,12 @@ PIN_SCOPE_BY_SLUG = {
     profile["store_slug"]: scope
     for scope, profile in ORDER_PORTAL_PROFILES.items()
 }
+TAKEOUT_CATERING_CATEGORY = "Take-out & Catering"
+LEGACY_CATEGORY_ALIASES = {
+    "1-3 Compartment Containers": TAKEOUT_CATERING_CATEGORY,
+    "Aluminum Foil Pans & Containers": TAKEOUT_CATERING_CATEGORY,
+    "Togo & Catering": TAKEOUT_CATERING_CATEGORY,
+}
 
 
 def _pin_digest(scope: str, pin: str) -> str:
@@ -405,6 +411,7 @@ def view():
         log.exception("corporate_order: catalog seed check failed")
 
     selected_category = (request.args.get("category") or "").strip()
+    selected_category = LEGACY_CATEGORY_ALIASES.get(selected_category, selected_category)
     products = corporate_shop.list_products(category=selected_category or None)
     categories = corporate_shop.list_categories()
 

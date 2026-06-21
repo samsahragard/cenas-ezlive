@@ -6,20 +6,12 @@
       "label": "Take-out & Catering"
     },
     {
-      "key": "bar",
-      "label": "Bar"
-    },
-    {
       "key": "clean",
       "label": "Cleaning Supplies"
     },
     {
       "key": "cups_lids",
       "label": "Cups & Lids"
-    },
-    {
-      "key": "host",
-      "label": "Host & Togo"
     },
     {
       "key": "office",
@@ -126,8 +118,8 @@
     },
     {
       "name": "Amaretto (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -137,8 +129,8 @@
     },
     {
       "name": "Banana (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 15,
       "par_level": 5,
@@ -148,8 +140,8 @@
     },
     {
       "name": "Bar Napkins (250/case)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 32,
       "par_level": 5,
@@ -159,8 +151,8 @@
     },
     {
       "name": "Bloody Mary Mix (Single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 21,
       "par_level": 5,
@@ -170,8 +162,8 @@
     },
     {
       "name": "Chamoy (2.5 Liter) (Single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 14,
       "par_level": 5,
@@ -181,8 +173,8 @@
     },
     {
       "name": "Chamoy Stick (Single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 12,
       "par_level": 5,
@@ -192,8 +184,8 @@
     },
     {
       "name": "Cherry (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -203,8 +195,8 @@
     },
     {
       "name": "Mango (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 24,
       "par_level": 5,
@@ -214,8 +206,8 @@
     },
     {
       "name": "Peach (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 22,
       "par_level": 5,
@@ -225,8 +217,8 @@
     },
     {
       "name": "Pineapple (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -236,8 +228,8 @@
     },
     {
       "name": "Pomegranate (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -247,8 +239,8 @@
     },
     {
       "name": "Raspberry (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,
@@ -258,8 +250,8 @@
     },
     {
       "name": "Strawberry (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 29,
       "par_level": 5,
@@ -269,8 +261,8 @@
     },
     {
       "name": "Watermelon (single)",
-      "category": "Bar",
-      "category_key": "bar",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 20,
       "par_level": 5,
@@ -511,8 +503,8 @@
     },
     {
       "name": "Chocolate Ice Cream (6/case)",
-      "category": "Host & Togo",
-      "category_key": "host",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -522,8 +514,8 @@
     },
     {
       "name": "Clear Expo To Go Ticket Tape (Single)",
-      "category": "Host & Togo",
-      "category_key": "host",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 4,
       "par_level": 5,
@@ -533,8 +525,8 @@
     },
     {
       "name": "Crayons (3000/case)",
-      "category": "Host & Togo",
-      "category_key": "host",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 1,
       "par_level": 5,
@@ -544,8 +536,8 @@
     },
     {
       "name": "Kids Menu (1000/case)",
-      "category": "Host & Togo",
-      "category_key": "host",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 0,
       "par_level": 5,
@@ -555,8 +547,8 @@
     },
     {
       "name": "Silverware Bands (2000/box)",
-      "category": "Host & Togo",
-      "category_key": "host",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -566,8 +558,8 @@
     },
     {
       "name": "Silverware Napkins (3000/box)",
-      "category": "Host & Togo",
-      "category_key": "host",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 18,
       "par_level": 5,
@@ -577,8 +569,8 @@
     },
     {
       "name": "To Go Menu (1000 pc)",
-      "category": "Host & Togo",
-      "category_key": "host",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 0,
       "par_level": 5,
@@ -588,8 +580,8 @@
     },
     {
       "name": "Vanilla Ice Cream (6/box)",
-      "category": "Host & Togo",
-      "category_key": "host",
+      "category": "Server",
+      "category_key": "server",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,

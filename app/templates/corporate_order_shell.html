@@ -64,6 +64,13 @@
       gap: 18px;
       padding: 4px 0 18px;
     }
+    html.is-framed .corp-topbar {
+      padding: 0 0 12px;
+    }
+    html.is-framed .corp-topbar > div:first-child,
+    html.is-framed .corp-page-head {
+      display: none;
+    }
     .corp-brand {
       font-family: var(--font-display);
       font-size: 32px;
@@ -87,6 +94,9 @@
       gap: 10px;
       flex-wrap: wrap;
       justify-content: flex-end;
+    }
+    html.is-framed .corp-userbar {
+      justify-content: flex-start;
     }
     .corp-badge {
       border: 2px solid var(--red);

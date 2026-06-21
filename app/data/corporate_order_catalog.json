@@ -1,5 +1,5 @@
 {
-  "source": "Sam pasted corporate order catalog, 2026-06-20",
+  "source": "Sam pasted product-admin inventory table, 2026-06-20",
   "categories": [
     {
       "key": "comp",
@@ -65,7 +65,10 @@
       "category_key": "comp",
       "unit": "each",
       "in_stock": 20,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 62,
+      "date_added": "Oct 13, 2025",
+      "image_label": "3 Comp Black Plastic (100/case)"
     },
     {
       "name": "3 Comp Aluminum Ench",
@@ -73,7 +76,10 @@
       "category_key": "foil",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 67,
+      "date_added": "Oct 15, 2025",
+      "image_label": "3 Comp Aluminum Ench"
     },
     {
       "name": "9 Inch Around Aluminum Pan (500/case)",
@@ -81,7 +87,10 @@
       "category_key": "foil",
       "unit": "each",
       "in_stock": 14,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 63,
+      "date_added": "Oct 15, 2025",
+      "image_label": "9 Inch Around Aluminum Pan (500/case)"
     },
     {
       "name": "9 Inch Round Clear Lid (500/case)",
@@ -89,7 +98,10 @@
       "category_key": "foil",
       "unit": "each",
       "in_stock": 14,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 64,
+      "date_added": "Oct 15, 2025",
+      "image_label": "9 Inch Round Clear Lid (500/case)"
     },
     {
       "name": "Half Size Foil Pan Lids",
@@ -97,7 +109,10 @@
       "category_key": "foil",
       "unit": "each",
       "in_stock": 19,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 66,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Half Size Foil Pan Lids"
     },
     {
       "name": "Half Size Foil Pans (100 pc)",
@@ -105,7 +120,10 @@
       "category_key": "foil",
       "unit": "each",
       "in_stock": 16,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 65,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Half Size Foil Pans (100 pc)"
     },
     {
       "name": "Tortilla Foil Sheets (3,000/case)",
@@ -113,7 +131,10 @@
       "category_key": "foil",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 68,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Tortilla Foil Sheets (3,000/case)"
     },
     {
       "name": "Amaretto (single)",
@@ -121,7 +142,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 1,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Amaretto (single)"
     },
     {
       "name": "Banana (single)",
@@ -129,7 +153,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 15,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 2,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Banana (single)"
     },
     {
       "name": "Bar Napkins (250/case)",
@@ -137,7 +164,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 32,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 27,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Bar Napkins (250/case)"
     },
     {
       "name": "Bloody Mary Mix (Single)",
@@ -145,7 +175,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 21,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 46,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Bloody Mary Mix (Single)"
     },
     {
       "name": "Chamoy (2.5 Liter) (Single)",
@@ -153,7 +186,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 14,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 44,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Chamoy (2.5 Liter) (Single)"
     },
     {
       "name": "Chamoy Stick (Single)",
@@ -161,7 +197,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 12,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 45,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Chamoy Stick (Single)"
     },
     {
       "name": "Cherry (single)",
@@ -169,7 +208,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 3,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Cherry (single)"
     },
     {
       "name": "Mango (single)",
@@ -177,7 +219,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 24,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 4,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Mango (single)"
     },
     {
       "name": "Peach (single)",
@@ -185,7 +230,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 22,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 5,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Peach (single)"
     },
     {
       "name": "Pineapple (single)",
@@ -193,7 +241,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 7,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Pineapple (single)"
     },
     {
       "name": "Pomegranate (single)",
@@ -201,7 +252,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 6,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Pomegranate (single)"
     },
     {
       "name": "Raspberry (single)",
@@ -209,7 +263,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 8,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Raspberry (single)"
     },
     {
       "name": "Strawberry (single)",
@@ -217,7 +274,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 29,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 9,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Strawberry (single)"
     },
     {
       "name": "Watermelon (single)",
@@ -225,7 +285,10 @@
       "category_key": "bar",
       "unit": "each",
       "in_stock": 20,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 43,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Watermelon (single)"
     },
     {
       "name": "Bleach (6/case)",
@@ -233,7 +296,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 15,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 107,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Bleach (6/case)"
     },
     {
       "name": "Blue Windex Glass Cleaner (4/case)",
@@ -241,7 +307,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 15,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 106,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Blue Windex Glass Cleaner (4/case)"
     },
     {
       "name": "Brown Paper Towels (6/case)",
@@ -249,7 +318,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 20,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 99,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Brown Paper Towels (6/case)"
     },
     {
       "name": "Degreasers (4/case)",
@@ -257,7 +329,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 25,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 100,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Degreasers (4/case)"
     },
     {
       "name": "Extra Large Gloves (10/case)",
@@ -265,7 +340,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 16,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 97,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Extra Large Gloves (10/case)"
     },
     {
       "name": "Fabuloso (Glamoroso) (4/case)",
@@ -273,7 +351,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 108,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Fabuloso (Glamoroso) (4/case)"
     },
     {
       "name": "Hairnet Cap (100 Pack)",
@@ -281,7 +362,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 1,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 95,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Hairnet Cap (100 Pack)"
     },
     {
       "name": "Medium Gloves (10/case)",
@@ -289,7 +373,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 18,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 96,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Medium Gloves (10/case)"
     },
     {
       "name": "Pink Hand Soap (4 Gallon/Case)",
@@ -297,7 +384,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 16,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 105,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Pink Hand Soap (4 Gallon/Case)"
     },
     {
       "name": "Pots and Pans Dish Soap (4/case)",
@@ -305,7 +395,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 24,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 104,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Pots and Pans Dish Soap (4/case)"
     },
     {
       "name": "Sanitizer Tablets Bottle (6 bottles/case)",
@@ -313,7 +406,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 2,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 101,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Sanitizer Tablets Bottle (6 bottles/case)"
     },
     {
       "name": "Scouring Pads (60/case)",
@@ -321,7 +417,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 3,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 102,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Scouring Pads (60/case)"
     },
     {
       "name": "Toilet Paper Rolls (12/case)",
@@ -329,7 +428,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 11,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 98,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Toilet Paper Rolls (12/case)"
     },
     {
       "name": "Urinal Screens Men's Bathroom (12/pack)",
@@ -337,7 +439,10 @@
       "category_key": "clean",
       "unit": "each",
       "in_stock": 3,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 109,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Urinal Screens Men's Bathroom (12/pack)"
     },
     {
       "name": "12 Oz Cup Lids (1000/case)",
@@ -345,7 +450,10 @@
       "category_key": "foam",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 57,
+      "date_added": "Oct 13, 2025",
+      "image_label": "12 Oz Cup Lids (1000/case)"
     },
     {
       "name": "12 Oz Cups (1000/case)",
@@ -353,7 +461,10 @@
       "category_key": "foam",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 56,
+      "date_added": "Oct 13, 2025",
+      "image_label": "12 Oz Cups (1000/case)"
     },
     {
       "name": "20 Oz Cup Lids (1000/case)",
@@ -361,7 +472,10 @@
       "category_key": "foam",
       "unit": "each",
       "in_stock": 7,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 55,
+      "date_added": "Oct 13, 2025",
+      "image_label": "20 Oz Cup Lids (1000/case)"
     },
     {
       "name": "20 Oz Cups (1000/case)",
@@ -369,7 +483,10 @@
       "category_key": "foam",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 54,
+      "date_added": "Oct 13, 2025",
+      "image_label": "20 Oz Cups (1000/case)"
     },
     {
       "name": "Half Gallon for Beans (120/case)",
@@ -377,7 +494,10 @@
       "category_key": "foam",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 60,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Half Gallon for Beans (120/case)"
     },
     {
       "name": "Half Pint 8 Oz Cup Lids (1000/case)",
@@ -385,7 +505,10 @@
       "category_key": "foam",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 59,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Half Pint 8 Oz Cup Lids (1000/case)"
     },
     {
       "name": "Half Pint 8 Oz Cups (1000/case)",
@@ -393,7 +516,10 @@
       "category_key": "foam",
       "unit": "each",
       "in_stock": 7,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 58,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Half Pint 8 Oz Cups (1000/case)"
     },
     {
       "name": "Chocolate Ice Cream (6/case)",
@@ -401,7 +527,10 @@
       "category_key": "host",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 25,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Chocolate Ice Cream (6/case)"
     },
     {
       "name": "Clear Expo To Go Ticket Tape (Single)",
@@ -409,7 +538,10 @@
       "category_key": "host",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 21,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Clear Expo To Go Ticket Tape (Single)"
     },
     {
       "name": "Crayons (3000/case)",
@@ -417,7 +549,10 @@
       "category_key": "host",
       "unit": "each",
       "in_stock": 1,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 20,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Crayons (3000/case)"
     },
     {
       "name": "Kids Menu (1000/case)",
@@ -425,7 +560,10 @@
       "category_key": "host",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 19,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Kids Menu (1000/case)"
     },
     {
       "name": "Silverware Bands (2000/box)",
@@ -433,7 +571,10 @@
       "category_key": "host",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 23,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Silverware Bands (2000/box)"
     },
     {
       "name": "Silverware Napkins (3000/box)",
@@ -441,7 +582,10 @@
       "category_key": "host",
       "unit": "each",
       "in_stock": 18,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 22,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Silverware Napkins (3000/box)"
     },
     {
       "name": "To Go Menu (1000 pc)",
@@ -449,7 +593,10 @@
       "category_key": "host",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 18,
+      "date_added": "Oct 13, 2025",
+      "image_label": "To Go Menu (1000 pc)"
     },
     {
       "name": "Vanilla Ice Cream (6/box)",
@@ -457,7 +604,10 @@
       "category_key": "host",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 24,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Vanilla Ice Cream (6/box)"
     },
     {
       "name": "$ 10 Paper GC (1000/box)",
@@ -465,7 +615,10 @@
       "category_key": "office",
       "unit": "each",
       "in_stock": 18,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 30,
+      "date_added": "Oct 13, 2025",
+      "image_label": "$ 10 Paper GC (1000/box)"
     },
     {
       "name": "Copy Paper (Single)",
@@ -473,7 +626,10 @@
       "category_key": "office",
       "unit": "each",
       "in_stock": 23,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 28,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Copy Paper (Single)"
     },
     {
       "name": "Ink Ribbon (12/box)",
@@ -481,7 +637,10 @@
       "category_key": "office",
       "unit": "each",
       "in_stock": 11,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 29,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Ink Ribbon (12/box)"
     },
     {
       "name": "Masking Kitchen Label Tape (6/roll)",
@@ -489,7 +648,10 @@
       "category_key": "office",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 32,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Masking Kitchen Label Tape (6/roll)"
     },
     {
       "name": "Scotch Box Tape",
@@ -497,7 +659,10 @@
       "category_key": "office",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 31,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Scotch Box Tape"
     },
     {
       "name": "Brown Paper Bags (500/box)",
@@ -505,7 +670,10 @@
       "category_key": "bags",
       "unit": "each",
       "in_stock": 28,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 74,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Brown Paper Bags (500/box)"
     },
     {
       "name": "Clear Plastic Chip Bags",
@@ -513,7 +681,10 @@
       "category_key": "bags",
       "unit": "each",
       "in_stock": 16,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 75,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Clear Plastic Chip Bags"
     },
     {
       "name": "Ice Bags 500/case",
@@ -521,7 +692,10 @@
       "category_key": "bags",
       "unit": "each",
       "in_stock": 13,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 155,
+      "date_added": "Mar 28, 2026",
+      "image_label": "Ice Bags 500/case"
     },
     {
       "name": "Steam Table Bags (12/Case)",
@@ -529,7 +703,10 @@
       "category_key": "bags",
       "unit": "each",
       "in_stock": 6,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 76,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Steam Table Bags (12/Case)"
     },
     {
       "name": "To Go Thank You Bags (60/box)",
@@ -537,7 +714,10 @@
       "category_key": "bags",
       "unit": "each",
       "in_stock": 20,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 73,
+      "date_added": "Oct 15, 2025",
+      "image_label": "To Go Thank You Bags (60/box)"
     },
     {
       "name": "Trash Bags (8/box)",
@@ -545,7 +725,10 @@
       "category_key": "bags",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 77,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Trash Bags (8/box)"
     },
     {
       "name": "Copita Cup Lids (1.5 Oz) (2500/box)",
@@ -553,7 +736,10 @@
       "category_key": "portion",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 70,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Copita Cup Lids (1.5 Oz) (2500/box)"
     },
     {
       "name": "Copita Cups (1.5 Oz) (2500/box)",
@@ -561,7 +747,10 @@
       "category_key": "portion",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 69,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Copita Cups (1.5 Oz) (2500/box)"
     },
     {
       "name": "Copota Cup Lids (3.5 Oz) (2500/box)",
@@ -569,7 +758,10 @@
       "category_key": "portion",
       "unit": "each",
       "in_stock": 30,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 72,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Copota Cup Lids (3.5 Oz) (2500/box)"
     },
     {
       "name": "Copota Cups (3.5 Oz)",
@@ -577,7 +769,10 @@
       "category_key": "portion",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 71,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Copota Cups (3.5 Oz)"
     },
     {
       "name": "Bond Rolls - Kitchen (50/box)",
@@ -585,7 +780,10 @@
       "category_key": "server",
       "unit": "each",
       "in_stock": 7,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 14,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Bond Rolls - Kitchen (50/box)"
     },
     {
       "name": "Dinner Straws (Case)",
@@ -593,7 +791,10 @@
       "category_key": "server",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 16,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Dinner Straws (Case)"
     },
     {
       "name": "Ice Tea Filters (2500/box)",
@@ -601,7 +802,10 @@
       "category_key": "server",
       "unit": "each",
       "in_stock": 96,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 17,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Ice Tea Filters (2500/box)"
     },
     {
       "name": "Thermal Rolls (50/box)",
@@ -609,7 +813,10 @@
       "category_key": "server",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 15,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Thermal Rolls (50/box)"
     },
     {
       "name": "Bar Chili Salt (5 Lb/bag)",
@@ -617,7 +824,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 1,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 91,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Bar Chili Salt (5 Lb/bag)"
     },
     {
       "name": "Beef Fajita Spices (20/bag)",
@@ -625,7 +835,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 83,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Beef Fajita Spices (20/bag)"
     },
     {
       "name": "Black Pepper (5 Lb Box)",
@@ -633,7 +846,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 79,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Black Pepper (5 Lb Box)"
     },
     {
       "name": "Cancun Spices (5 Lb/bag)",
@@ -641,7 +857,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 3,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 90,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Cancun Spices (5 Lb/bag)"
     },
     {
       "name": "Cayenne Pepper (5 Lb/bag)",
@@ -649,7 +868,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 92,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Cayenne Pepper (5 Lb/bag)"
     },
     {
       "name": "Charro Spices (5 Lb/bag)",
@@ -657,7 +879,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 1,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 89,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Charro Spices (5 Lb/bag)"
     },
     {
       "name": "Chicken Fajita Spices (20/bag)",
@@ -665,7 +890,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 84,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Chicken Fajita Spices (20/bag)"
     },
     {
       "name": "Chili Gravy Spices (20/bag)",
@@ -673,7 +901,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 85,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Chili Gravy Spices (20/bag)"
     },
     {
       "name": "Chili Powder (5 Lb/bag)",
@@ -681,7 +912,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 78,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Chili Powder (5 Lb/bag)"
     },
     {
       "name": "Cumin (5 Lb/bag)",
@@ -689,7 +923,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 81,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Cumin (5 Lb/bag)"
     },
     {
       "name": "Garlic Powder (5 Lb/bag)",
@@ -697,7 +934,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 36,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 93,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Garlic Powder (5 Lb/bag)"
     },
     {
       "name": "Ranchera (20/bag)",
@@ -705,7 +945,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 2,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 87,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Ranchera (20/bag)"
     },
     {
       "name": "Ribs Spices (5 Lb/bag)",
@@ -713,7 +956,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 2,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 88,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Ribs Spices (5 Lb/bag)"
     },
     {
       "name": "Rice Spices (20/bag)",
@@ -721,7 +967,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 82,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Rice Spices (20/bag)"
     },
     {
       "name": "Taco Meat Spices (20/bag)",
@@ -729,7 +978,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 86,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Taco Meat Spices (20/bag)"
     },
     {
       "name": "Veggie Season (5 Lb/bag)",
@@ -737,7 +989,10 @@
       "category_key": "spices",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 80,
+      "date_added": "Oct 15, 2025",
+      "image_label": "Veggie Season (5 Lb/bag)"
     },
     {
       "name": "11 Inch Quesadilla Plate - 4/Case",
@@ -745,7 +1000,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 7,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 133,
+      "date_added": "Nov 24, 2025",
+      "image_label": "11 Inch Quesadilla Plate - 4/Case"
     },
     {
       "name": "12 Inch Enchilada Plate - 4/case",
@@ -753,7 +1011,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 2,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 132,
+      "date_added": "Nov 24, 2025",
+      "image_label": "12 Inch Enchilada Plate - 4/case"
     },
     {
       "name": "12 oz Rita Glasses - 12/Case",
@@ -761,7 +1022,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 1,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 139,
+      "date_added": "Nov 24, 2025",
+      "image_label": "12 oz Rita Glasses - 12/Case"
     },
     {
       "name": "12\" Skewer - 12/Case",
@@ -769,7 +1033,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 128,
+      "date_added": "Nov 24, 2025",
+      "image_label": "12\" Skewer - 12/Case"
     },
     {
       "name": "1.5 oz. Cup - 12/Pack",
@@ -777,7 +1044,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 125,
+      "date_added": "Nov 24, 2025",
+      "image_label": "1.5 oz. Cup - 12/Pack"
     },
     {
       "name": "1.5 oz. Shot Glass 12/Case",
@@ -785,7 +1055,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 147,
+      "date_added": "Nov 25, 2025",
+      "image_label": "1.5 oz. Shot Glass 12/Case"
     },
     {
       "name": "18\" Flight Paddle - Single",
@@ -793,7 +1066,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 12,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 141,
+      "date_added": "Nov 24, 2025",
+      "image_label": "18\" Flight Paddle - Single"
     },
     {
       "name": "20.5 oz. Suprema Schooner Glass - 12/Case",
@@ -801,7 +1077,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 126,
+      "date_added": "Nov 24, 2025",
+      "image_label": "20.5 oz. Suprema Schooner Glass - 12/Case"
     },
     {
       "name": "22 oz Tea/Lemonade Glasses - 24/Case",
@@ -809,7 +1088,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 2,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 138,
+      "date_added": "Nov 24, 2025",
+      "image_label": "22 oz Tea/Lemonade Glasses - 24/Case"
     },
     {
       "name": "24 oz. Sapphire Blue Plastic Tumbler - 36/Case",
@@ -817,7 +1099,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 149,
+      "date_added": "Nov 25, 2025",
+      "image_label": "24 oz. Sapphire Blue Plastic Tumbler - 36/Case"
     },
     {
       "name": "25 oz Tortilla Soup Cup - 6/Case",
@@ -825,7 +1110,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 135,
+      "date_added": "Nov 24, 2025",
+      "image_label": "25 oz Tortilla Soup Cup - 6/Case"
     },
     {
       "name": "32 Oz Tortilla Soup Bowl - 6/Case",
@@ -833,7 +1121,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 134,
+      "date_added": "Nov 24, 2025",
+      "image_label": "32 Oz Tortilla Soup Bowl - 6/Case"
     },
     {
       "name": "50 oz Salad Bowl - Single",
@@ -841,7 +1132,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 136,
+      "date_added": "Nov 24, 2025",
+      "image_label": "50 oz Salad Bowl - Single"
     },
     {
       "name": "5.5\" Queso App Plate - Single",
@@ -849,7 +1143,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 246,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 142,
+      "date_added": "Nov 24, 2025",
+      "image_label": "5.5\" Queso App Plate - Single"
     },
     {
       "name": "6 oz Glasses for flight - 12/Case",
@@ -857,7 +1154,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 140,
+      "date_added": "Nov 24, 2025",
+      "image_label": "6 oz Glasses for flight - 12/Case"
     },
     {
       "name": "7.87\" Fajitas x 2 Cold Plate - Single",
@@ -865,7 +1165,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 143,
+      "date_added": "Nov 24, 2025",
+      "image_label": "7.87\" Fajitas x 2 Cold Plate - Single"
     },
     {
       "name": "8 oz Stainless Steel Bowl (single)",
@@ -873,7 +1176,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 127,
+      "date_added": "Nov 24, 2025",
+      "image_label": "8 oz Stainless Steel Bowl (single)"
     },
     {
       "name": "Acopa 14 oz. Wine Glass - 12/Case",
@@ -881,7 +1187,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 144,
+      "date_added": "Nov 25, 2025",
+      "image_label": "Acopa 14 oz. Wine Glass - 12/Case"
     },
     {
       "name": "Acopa 21 oz. Ceramic Tiki Mug - 12/Case",
@@ -889,7 +1198,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 148,
+      "date_added": "Nov 25, 2025",
+      "image_label": "Acopa 21 oz. Ceramic Tiki Mug - 12/Case"
     },
     {
       "name": "Acopa Memphis 9 oz. Rocks Glass - 12/Pack",
@@ -897,7 +1209,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 1,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 145,
+      "date_added": "Nov 25, 2025",
+      "image_label": "Acopa Memphis 9 oz. Rocks Glass - 12/Pack"
     },
     {
       "name": "Choice 60 oz. Amber Plastic Pitcher with 3 Spouts (Single)",
@@ -905,7 +1220,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 2,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 153,
+      "date_added": "Nov 25, 2025",
+      "image_label": "Choice 60 oz. Amber Plastic Pitcher with 3 Spouts (Single)"
     },
     {
       "name": "Coffee Mugs 3 dozen/case",
@@ -913,7 +1231,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 3,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 146,
+      "date_added": "Nov 25, 2025",
+      "image_label": "Coffee Mugs 3 dozen/case"
     },
     {
       "name": "Gold Stainless Sugar Caddy",
@@ -921,7 +1242,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 38,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 131,
+      "date_added": "Nov 24, 2025",
+      "image_label": "Gold Stainless Sugar Caddy"
     },
     {
       "name": "Iced Tea Spoon - 12/Case",
@@ -929,7 +1253,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 129,
+      "date_added": "Nov 24, 2025",
+      "image_label": "Iced Tea Spoon - 12/Case"
     },
     {
       "name": "KIT - Grill Brush",
@@ -937,7 +1264,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 113,
+      "date_added": "Oct 15, 2025",
+      "image_label": "KIT - Grill Brush"
     },
     {
       "name": "KIT - Portion Spoon 2oz",
@@ -945,7 +1275,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 3,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 115,
+      "date_added": "Oct 15, 2025",
+      "image_label": "KIT - Portion Spoon 2oz"
     },
     {
       "name": "KIT - Portion Spoon 3oz",
@@ -953,7 +1286,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 17,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 116,
+      "date_added": "Oct 15, 2025",
+      "image_label": "KIT - Portion Spoon 3oz"
     },
     {
       "name": "KIT - Portion Spoon 6oz",
@@ -961,7 +1297,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 15,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 117,
+      "date_added": "Oct 15, 2025",
+      "image_label": "KIT - Portion Spoon 6oz"
     },
     {
       "name": "KIT - Scoop 1oz",
@@ -969,7 +1308,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 114,
+      "date_added": "Oct 15, 2025",
+      "image_label": "KIT - Scoop 1oz"
     },
     {
       "name": "KIT - Spatula 10\"",
@@ -977,7 +1319,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 11,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 110,
+      "date_added": "Oct 15, 2025",
+      "image_label": "KIT - Spatula 10\""
     },
     {
       "name": "KIT - Spatula 14\"",
@@ -985,7 +1330,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 11,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 111,
+      "date_added": "Oct 15, 2025",
+      "image_label": "KIT - Spatula 14\""
     },
     {
       "name": "KIT - Trash Can 23G Black",
@@ -993,7 +1341,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 112,
+      "date_added": "Oct 15, 2025",
+      "image_label": "KIT - Trash Can 23G Black"
     },
     {
       "name": "Measuring Glass (single)",
@@ -1001,7 +1352,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 152,
+      "date_added": "Nov 25, 2025",
+      "image_label": "Measuring Glass (single)"
     },
     {
       "name": "SALSERO CUPS 4oz (24/box)",
@@ -1009,7 +1363,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 121,
+      "date_added": "Oct 15, 2025",
+      "image_label": "SALSERO CUPS 4oz (24/box)"
     },
     {
       "name": "SALSERO CUPS 8oz 50/case",
@@ -1017,7 +1374,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 37,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 151,
+      "date_added": "Nov 25, 2025",
+      "image_label": "SALSERO CUPS 8oz 50/case"
     },
     {
       "name": "SILVERWARE - Charro Spoon (Dozen)",
@@ -1025,7 +1385,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 69,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 120,
+      "date_added": "Oct 15, 2025",
+      "image_label": "SILVERWARE - Charro Spoon (Dozen)"
     },
     {
       "name": "SILVERWARE - Fork (Dozen)",
@@ -1033,7 +1396,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 119,
+      "date_added": "Oct 15, 2025",
+      "image_label": "SILVERWARE - Fork (Dozen)"
     },
     {
       "name": "SILVERWARE - Knife (Dozen)",
@@ -1041,7 +1407,10 @@
       "category_key": "corp",
       "unit": "each",
       "in_stock": 500,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 118,
+      "date_added": "Oct 15, 2025",
+      "image_label": "SILVERWARE - Knife (Dozen)"
     },
     {
       "name": "160 oz. Black PET Plastic Round Catering bowl - 25/Case",
@@ -1049,7 +1418,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 158,
+      "date_added": "Apr 05, 2026",
+      "image_label": "160 oz. Black PET Plastic Round Catering bowl - 25/Case"
     },
     {
       "name": "16 oz. Black Square Plastic Bowl - 504/Case",
@@ -1057,7 +1429,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 166,
+      "date_added": "Apr 24, 2026",
+      "image_label": "16 oz. Black Square Plastic Bowl - 504/Case"
     },
     {
       "name": "32 oz. Black Square Plastic Bowl - 252/Case",
@@ -1065,7 +1440,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 159,
+      "date_added": "Apr 05, 2026",
+      "image_label": "32 oz. Black Square Plastic Bowl - 252/Case"
     },
     {
       "name": "48 oz. Black Square Plastic Bowl - 252/Case",
@@ -1073,7 +1451,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 156,
+      "date_added": "Apr 05, 2026",
+      "image_label": "48 oz. Black Square Plastic Bowl - 252/Case"
     },
     {
       "name": "64 oz. Black Square Plastic Bowl - 252/Case",
@@ -1081,7 +1462,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 157,
+      "date_added": "Apr 05, 2026",
+      "image_label": "64 oz. Black Square Plastic Bowl - 252/Case"
     },
     {
       "name": "8 oz. Black Square Plastic Bowl - 504/Case",
@@ -1089,7 +1473,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 165,
+      "date_added": "Apr 24, 2026",
+      "image_label": "8 oz. Black Square Plastic Bowl - 504/Case"
     },
     {
       "name": "Catering LG Spoons (72/box)",
@@ -1097,7 +1484,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 28,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 49,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Catering LG Spoons (72/box)"
     },
     {
       "name": "Catering Plates (500/box)",
@@ -1105,7 +1495,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 30,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 47,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Catering Plates (500/box)"
     },
     {
       "name": "Catering SM Spoons (2000/box)",
@@ -1113,7 +1506,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 14,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 50,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Catering SM Spoons (2000/box)"
     },
     {
       "name": "Catering Tongs (72/box)",
@@ -1121,7 +1517,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 14,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 48,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Catering Tongs (72/box)"
     },
     {
       "name": "Chafing Dishes (Single)",
@@ -1129,7 +1528,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 15,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 53,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Chafing Dishes (Single)"
     },
     {
       "name": "Clear Square Lid for 24, 32, 48, and 64 oz. Square Plastic Bowls - 252/Case",
@@ -1137,7 +1539,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 160,
+      "date_added": "Apr 05, 2026",
+      "image_label": "Clear Square Lid for 24, 32, 48, and 64 oz. Square Plastic Bowls - 252/Case"
     },
     {
       "name": "Clear Square Lid for 8, 12, and 16 oz. Square Plastic Bowls - 504/Case",
@@ -1145,7 +1550,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 161,
+      "date_added": "Apr 05, 2026",
+      "image_label": "Clear Square Lid for 8, 12, and 16 oz. Square Plastic Bowls - 504/Case"
     },
     {
       "name": "Cup Holder 4 (300/box)",
@@ -1153,7 +1561,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 2,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 51,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Cup Holder 4 (300/box)"
     },
     {
       "name": "Deli Sandwich Wrap Paper",
@@ -1161,7 +1572,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 2,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 123,
+      "date_added": "Nov 17, 2025",
+      "image_label": "Deli Sandwich Wrap Paper"
     },
     {
       "name": "Foil Steam Table Pan Lid - Full Size - 50/Case",
@@ -1169,7 +1583,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 164,
+      "date_added": "Apr 24, 2026",
+      "image_label": "Foil Steam Table Pan Lid - Full Size - 50/Case"
     },
     {
       "name": "Foil Steam Table Pan Lid - Third Size - 100/Case",
@@ -1177,7 +1594,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 168,
+      "date_added": "Apr 24, 2026",
+      "image_label": "Foil Steam Table Pan Lid - Third Size - 100/Case"
     },
     {
       "name": "Food Tray",
@@ -1185,7 +1605,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 1,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 124,
+      "date_added": "Nov 17, 2025",
+      "image_label": "Food Tray"
     },
     {
       "name": "Full Size Foil Steam Table Pan Deep 3 3/8\" Depth - Full Size Deep - 50/Case",
@@ -1193,7 +1616,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 11,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 163,
+      "date_added": "Apr 24, 2026",
+      "image_label": "Full Size Foil Steam Table Pan Deep 3 3/8\" Depth - Full Size Deep - 50/Case"
     },
     {
       "name": "Hinged Lid Plastic Container - 200/Case",
@@ -1201,7 +1627,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 4,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 162,
+      "date_added": "Apr 24, 2026",
+      "image_label": "Hinged Lid Plastic Container - 200/Case"
     },
     {
       "name": "Plastic Dome Lid for 160 oz. Round Bowls - 25/Case",
@@ -1209,7 +1638,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 5,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 169,
+      "date_added": "Apr 29, 2026",
+      "image_label": "Plastic Dome Lid for 160 oz. Round Bowls - 25/Case"
     },
     {
       "name": "Sternoes (24/box)",
@@ -1217,7 +1649,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 1,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 52,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Sternoes (24/box)"
     },
     {
       "name": "Third Size Foil Steam Pan Deep 3 5/16\" Depth - 100/Case",
@@ -1225,7 +1660,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 10,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 167,
+      "date_added": "Apr 24, 2026",
+      "image_label": "Third Size Foil Steam Pan Deep 3 5/16\" Depth - 100/Case"
     },
     {
       "name": "To Go Silverware (250/box)",
@@ -1233,7 +1671,10 @@
       "category_key": "togo",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 42,
+      "date_added": "Oct 13, 2025",
+      "image_label": "To Go Silverware (250/box)"
     },
     {
       "name": "ATM Shirts Large (Single)",
@@ -1241,7 +1682,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 14,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 35,
+      "date_added": "Oct 13, 2025",
+      "image_label": "ATM Shirts Large (Single)"
     },
     {
       "name": "ATM Shirts Medium (Single)",
@@ -1249,7 +1693,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 34,
+      "date_added": "Oct 13, 2025",
+      "image_label": "ATM Shirts Medium (Single)"
     },
     {
       "name": "ATM Shirts Small (Single)",
@@ -1257,7 +1704,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 33,
+      "date_added": "Oct 13, 2025",
+      "image_label": "ATM Shirts Small (Single)"
     },
     {
       "name": "ATM Shirts XL (Single)",
@@ -1265,7 +1715,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 20,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 36,
+      "date_added": "Oct 13, 2025",
+      "image_label": "ATM Shirts XL (Single)"
     },
     {
       "name": "Cook Aprons (Single)",
@@ -1273,7 +1726,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 9,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 40,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Cook Aprons (Single)"
     },
     {
       "name": "Dish Aprons (Single)",
@@ -1281,7 +1737,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 41,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Dish Aprons (Single)"
     },
     {
       "name": "Hot Pads (Single)",
@@ -1289,7 +1748,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 8,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 37,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Hot Pads (Single)"
     },
     {
       "name": "Kitchen Hats",
@@ -1297,7 +1759,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 24,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 122,
+      "date_added": "Nov 12, 2025",
+      "image_label": "Kitchen Hats"
     },
     {
       "name": "Name Tags (10/pack)",
@@ -1305,7 +1770,10 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 0,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 39,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Name Tags (10/pack)"
     },
     {
       "name": "Waiter Aprons (Single)",
@@ -1313,7 +1781,11 @@
       "category_key": "uni",
       "unit": "each",
       "in_stock": 27,
-      "par_level": 5
+      "par_level": 5,
+      "product_id": 38,
+      "date_added": "Oct 13, 2025",
+      "image_label": "Waiter Aprons (Single)"
     }
-  ]
+  ],
+  "inventory_source": "Cenas website product admin export pasted into Codex attachment 3f03e125-d80c-4e91-bf8a-65b35770617d"
 }

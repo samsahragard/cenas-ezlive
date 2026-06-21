@@ -5263,8 +5263,7 @@ def fresh_food_developer():
         db.close()
 
 
-@store_bp.route("/fresh-food/recent-orders", methods=["GET"])
-def fresh_food_recent_orders():
+def _render_fresh_food_orders_tab(ff_tab: str):
     if not _kitchen_dashboard_ok():
         abort(403)
     from app.models import FreshFoodOrder
@@ -5287,10 +5286,25 @@ def fresh_food_recent_orders():
             variance_rows=variance_rows,
             rolling_avg_by_slug=avg_by_slug,
             lines_by_order=lines_by_order,
-            active="fresh_food_recent_orders",
+            ff_tab=ff_tab,
+            active=(
+                "fresh_food_fulfill_order"
+                if ff_tab == "fulfill"
+                else "fresh_food_recent_orders"
+            ),
         )
     finally:
         db.close()
+
+
+@store_bp.route("/fresh-food/fulfill-order", methods=["GET"])
+def fresh_food_fulfill_order():
+    return _render_fresh_food_orders_tab("fulfill")
+
+
+@store_bp.route("/fresh-food/recent-orders", methods=["GET"])
+def fresh_food_recent_orders():
+    return _render_fresh_food_orders_tab("history")
 
 
 @store_bp.route("/fresh-food/recent-orders/<int:order_id>/fulfill",

@@ -222,7 +222,8 @@
   </div>
   <div class="ff-tabs">
     <a class="ff-tab" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
-    <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">Recent Orders</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill Order</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
     <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
   </div>
 
@@ -237,7 +238,7 @@
 
   <div class="ffdev-cards">
     <div class="ffdev-card">
-      <div class="k">Recent orders</div>
+      <div class="k">Order history</div>
       <div class="v">{{ summary.order_count }}</div>
       <div class="s">{{ summary.active_count }} active / {{ summary.completed_count }} completed</div>
     </div>

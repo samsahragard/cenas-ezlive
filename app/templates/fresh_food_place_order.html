@@ -189,8 +189,26 @@
   }
   input.ff-num::placeholder { color: #5c4a16; opacity: 1; }
   input.ff-num:focus { outline: none; border-color: #1a1208; background: #edc25a; }
-  input.ff-num.has-value { border-color: #a07d1f; }
-  input.ff-num-order.has-value { border-color: #1a1208; background: #edc25a; }
+  input.ff-num-inv.has-value {
+    border-color: #6f9f4f;
+    background: #9CCB76;
+    color: #101908;
+  }
+  input.ff-num-inv.has-value:focus {
+    border-color: #d8f0b6;
+    background: #a8d583;
+    color: #101908;
+  }
+  input.ff-num-order.has-positive {
+    border-color: #8f3030;
+    background: #E56B6B;
+    color: #1a0808;
+  }
+  input.ff-num-order.has-positive:focus {
+    border-color: #ffd1d1;
+    background: #ec7b7b;
+    color: #1a0808;
+  }
   .ff-avg {
     text-align: center;
     font-size: 11.5px;
@@ -262,7 +280,8 @@
 <div class="ffpo-page">
   <div class="ff-tabs">
     <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
-    <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">Recent Orders</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill Order</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
   </div>
   {% set today = today_date %}
@@ -313,11 +332,11 @@
             {% set avg = rolling_avg_by_slug.get(item.slug, 0) %}
             <div class="ff-item-row">
               <div class="ff-item-name">{{ item.label }}</div>
-              <input type="number" step="1" min="0" inputmode="numeric"
-                     class="ff-num"
+              <input type="number" step="0.1" min="0" inputmode="decimal"
+                     class="ff-num ff-num-inv"
                      data-kind="inv" data-slug="{{ item.slug }}" data-cat="{{ cat.name }}"
                      placeholder="—">
-              <input type="number" step="1" min="0" inputmode="numeric"
+              <input type="number" step="0.1" min="0" inputmode="decimal"
                      class="ff-num ff-num-order"
                      data-kind="or" data-slug="{{ item.slug }}" data-cat="{{ cat.name }}"
                      placeholder="—">
@@ -386,7 +405,12 @@
   function refreshCount(){
     for(var i=0; i<todayInputs.length; i++){
       var el = todayInputs[i];
-      el.classList.toggle('has-value', el.value.trim() !== '');
+      var raw = el.value.trim();
+      var val = parseFloat(raw);
+      var isNumber = raw !== '' && !isNaN(val);
+      var isOrder = el.getAttribute('data-kind') === 'or';
+      el.classList.toggle('has-value', isNumber && !isOrder);
+      el.classList.toggle('has-positive', isOrder && isNumber && val > 0);
     }
   }
   for(var j=0; j<todayInputs.length; j++){

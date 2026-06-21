@@ -126,6 +126,26 @@ def test_developer_calculation_adds_tableware_without_pdf_tableware_line():
     assert black_tongs["amount"] != ""
 
 
+def test_developer_calculation_explains_executive_meat_rates():
+    mixed = _detail([
+        _item("cenas_exec_spread", "premium", 15, packaging="tray", tortillas="flour"),
+    ])
+    beef_only_item = _item("cenas_exec_spread", "premium", 15, packaging="tray", tortillas="flour")
+    beef_only_item["extras"] = [{"name": "protein", "raw_text": "beef"}]
+    beef_only = _detail([beef_only_item])
+
+    chicken = _row(mixed, "Chicken (Lb)")
+    beef = _row(mixed, "Beef (Lb)")
+    all_beef = _row(beef_only, "Beef (Lb)")
+
+    assert chicken["amount"] == "2.81"
+    assert chicken["calculation"] == "15 x 3oz = 45oz = 2.81lb"
+    assert beef["amount"] == "2.81"
+    assert beef["calculation"] == "15 x 3oz = 45oz = 2.81lb"
+    assert all_beef["amount"] == "5.62"
+    assert all_beef["calculation"] == "15 x 6oz = 90oz = 5.62lb"
+
+
 def test_developer_calculation_explains_individual_tableware():
     detail = _detail([
         _item("fajitas_mixed", "fajitas", 30, packaging="individual", beans="charro", tortillas="flour"),

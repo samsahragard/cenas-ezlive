@@ -24,6 +24,25 @@ def test_corporate_catalog_merges_takeout_departments():
     assert all(item["category"] not in legacy for item in seed["items"])
 
 
+def test_corporate_catalog_merges_cups_and_lids_departments():
+    seed = corporate_shop.load_catalog_seed()
+    legacy = {
+        "Foam Cups and Lids",
+        "Portion Cup & Lids",
+    }
+    category_labels = {row["label"] for row in seed["categories"]}
+    merged_items = [
+        item for item in seed["items"]
+        if item["category"] == "Cups & Lids"
+    ]
+
+    assert "Cups & Lids" in category_labels
+    assert category_labels.isdisjoint(legacy)
+    assert len(merged_items) == 11
+    assert {item["category_key"] for item in merged_items} == {"cups_lids"}
+    assert all(item["category"] not in legacy for item in seed["items"])
+
+
 def test_list_orders_filters_store_before_limit(monkeypatch):
     engine = create_engine("sqlite:///:memory:", future=True)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)

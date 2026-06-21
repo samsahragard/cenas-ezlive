@@ -76,10 +76,13 @@ PIN_SCOPE_BY_SLUG = {
     for scope, profile in ORDER_PORTAL_PROFILES.items()
 }
 TAKEOUT_CATERING_CATEGORY = "Take-out & Catering"
+CUPS_LIDS_CATEGORY = "Cups & Lids"
 LEGACY_CATEGORY_ALIASES = {
     "1-3 Compartment Containers": TAKEOUT_CATERING_CATEGORY,
     "Aluminum Foil Pans & Containers": TAKEOUT_CATERING_CATEGORY,
     "Togo & Catering": TAKEOUT_CATERING_CATEGORY,
+    "Foam Cups and Lids": CUPS_LIDS_CATEGORY,
+    "Portion Cup & Lids": CUPS_LIDS_CATEGORY,
 }
 
 

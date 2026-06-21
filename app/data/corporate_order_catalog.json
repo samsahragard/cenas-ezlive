@@ -14,8 +14,8 @@
       "label": "Cleaning Supplies"
     },
     {
-      "key": "foam",
-      "label": "Foam Cups and Lids"
+      "key": "cups_lids",
+      "label": "Cups & Lids"
     },
     {
       "key": "host",
@@ -28,10 +28,6 @@
     {
       "key": "bags",
       "label": "Plastic & Paper Bags"
-    },
-    {
-      "key": "portion",
-      "label": "Portion Cup & Lids"
     },
     {
       "key": "server",
@@ -438,8 +434,8 @@
     },
     {
       "name": "12 Oz Cup Lids (1000/case)",
-      "category": "Foam Cups and Lids",
-      "category_key": "foam",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 5,
       "par_level": 5,
@@ -449,8 +445,8 @@
     },
     {
       "name": "12 Oz Cups (1000/case)",
-      "category": "Foam Cups and Lids",
-      "category_key": "foam",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 4,
       "par_level": 5,
@@ -460,8 +456,8 @@
     },
     {
       "name": "20 Oz Cup Lids (1000/case)",
-      "category": "Foam Cups and Lids",
-      "category_key": "foam",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 7,
       "par_level": 5,
@@ -471,8 +467,8 @@
     },
     {
       "name": "20 Oz Cups (1000/case)",
-      "category": "Foam Cups and Lids",
-      "category_key": "foam",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -482,8 +478,8 @@
     },
     {
       "name": "Half Gallon for Beans (120/case)",
-      "category": "Foam Cups and Lids",
-      "category_key": "foam",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 500,
       "par_level": 5,
@@ -493,8 +489,8 @@
     },
     {
       "name": "Half Pint 8 Oz Cup Lids (1000/case)",
-      "category": "Foam Cups and Lids",
-      "category_key": "foam",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,
@@ -504,8 +500,8 @@
     },
     {
       "name": "Half Pint 8 Oz Cups (1000/case)",
-      "category": "Foam Cups and Lids",
-      "category_key": "foam",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 7,
       "par_level": 5,
@@ -724,8 +720,8 @@
     },
     {
       "name": "Copita Cup Lids (1.5 Oz) (2500/box)",
-      "category": "Portion Cup & Lids",
-      "category_key": "portion",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -735,8 +731,8 @@
     },
     {
       "name": "Copita Cups (1.5 Oz) (2500/box)",
-      "category": "Portion Cup & Lids",
-      "category_key": "portion",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -746,8 +742,8 @@
     },
     {
       "name": "Copota Cup Lids (3.5 Oz) (2500/box)",
-      "category": "Portion Cup & Lids",
-      "category_key": "portion",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 30,
       "par_level": 5,
@@ -757,8 +753,8 @@
     },
     {
       "name": "Copota Cups (3.5 Oz)",
-      "category": "Portion Cup & Lids",
-      "category_key": "portion",
+      "category": "Cups & Lids",
+      "category_key": "cups_lids",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,

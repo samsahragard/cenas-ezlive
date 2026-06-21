@@ -22,8 +22,8 @@
       "label": "Plastic & Paper Bags"
     },
     {
-      "key": "server",
-      "label": "Server"
+      "key": "foh",
+      "label": "FOH"
     },
     {
       "key": "spices",
@@ -118,8 +118,8 @@
     },
     {
       "name": "Amaretto (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -129,8 +129,8 @@
     },
     {
       "name": "Banana (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 15,
       "par_level": 5,
@@ -140,8 +140,8 @@
     },
     {
       "name": "Bar Napkins (250/case)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 32,
       "par_level": 5,
@@ -151,8 +151,8 @@
     },
     {
       "name": "Bloody Mary Mix (Single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 21,
       "par_level": 5,
@@ -162,8 +162,8 @@
     },
     {
       "name": "Chamoy (2.5 Liter) (Single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 14,
       "par_level": 5,
@@ -173,8 +173,8 @@
     },
     {
       "name": "Chamoy Stick (Single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 12,
       "par_level": 5,
@@ -184,8 +184,8 @@
     },
     {
       "name": "Cherry (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -195,8 +195,8 @@
     },
     {
       "name": "Mango (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 24,
       "par_level": 5,
@@ -206,8 +206,8 @@
     },
     {
       "name": "Peach (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 22,
       "par_level": 5,
@@ -217,8 +217,8 @@
     },
     {
       "name": "Pineapple (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -228,8 +228,8 @@
     },
     {
       "name": "Pomegranate (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -239,8 +239,8 @@
     },
     {
       "name": "Raspberry (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,
@@ -250,8 +250,8 @@
     },
     {
       "name": "Strawberry (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 29,
       "par_level": 5,
@@ -261,8 +261,8 @@
     },
     {
       "name": "Watermelon (single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 20,
       "par_level": 5,
@@ -503,8 +503,8 @@
     },
     {
       "name": "Chocolate Ice Cream (6/case)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -514,8 +514,8 @@
     },
     {
       "name": "Clear Expo To Go Ticket Tape (Single)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 4,
       "par_level": 5,
@@ -525,8 +525,8 @@
     },
     {
       "name": "Crayons (3000/case)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 1,
       "par_level": 5,
@@ -536,8 +536,8 @@
     },
     {
       "name": "Kids Menu (1000/case)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 0,
       "par_level": 5,
@@ -547,8 +547,8 @@
     },
     {
       "name": "Silverware Bands (2000/box)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -558,8 +558,8 @@
     },
     {
       "name": "Silverware Napkins (3000/box)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 18,
       "par_level": 5,
@@ -569,8 +569,8 @@
     },
     {
       "name": "To Go Menu (1000 pc)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 0,
       "par_level": 5,
@@ -580,8 +580,8 @@
     },
     {
       "name": "Vanilla Ice Cream (6/box)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,
@@ -756,8 +756,8 @@
     },
     {
       "name": "Bond Rolls - Kitchen (50/box)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 7,
       "par_level": 5,
@@ -767,8 +767,8 @@
     },
     {
       "name": "Dinner Straws (Case)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 5,
       "par_level": 5,
@@ -778,8 +778,8 @@
     },
     {
       "name": "Ice Tea Filters (2500/box)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 96,
       "par_level": 5,
@@ -789,8 +789,8 @@
     },
     {
       "name": "Thermal Rolls (50/box)",
-      "category": "Server",
-      "category_key": "server",
+      "category": "FOH",
+      "category_key": "foh",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -1769,3 +1769,4 @@
   ],
   "inventory_source": "Cenas website product admin export pasted into Codex attachment 3f03e125-d80c-4e91-bf8a-65b35770617d"
 }
+

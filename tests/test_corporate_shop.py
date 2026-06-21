@@ -43,22 +43,23 @@ def test_corporate_catalog_merges_cups_and_lids_departments():
     assert all(item["category"] not in legacy for item in seed["items"])
 
 
-def test_corporate_catalog_merges_host_togo_and_bar_into_server():
+def test_corporate_catalog_merges_host_togo_bar_and_server_into_foh():
     seed = corporate_shop.load_catalog_seed()
     legacy = {
+        "Server",
         "Host & Togo",
         "Bar",
     }
     category_labels = {row["label"] for row in seed["categories"]}
     merged_items = [
         item for item in seed["items"]
-        if item["category"] == "Server"
+        if item["category"] == "FOH"
     ]
 
-    assert "Server" in category_labels
+    assert "FOH" in category_labels
     assert category_labels.isdisjoint(legacy)
     assert len(merged_items) == 26
-    assert {item["category_key"] for item in merged_items} == {"server"}
+    assert {item["category_key"] for item in merged_items} == {"foh"}
     assert all(item["category"] not in legacy for item in seed["items"])
 
 

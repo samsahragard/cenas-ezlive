@@ -10,6 +10,8 @@ from app.models import (
     Position,
     Schedule,
     Shift,
+    ShiftTag,
+    Tag,
 )
 from app.services.schedule_draft_import import import_draft_records
 
@@ -40,6 +42,7 @@ def test_draft_import_creates_unpublished_schedule_and_name_only_rows(db_session
             "start": "9:00 AM",
             "end": "5:00 PM",
             "position_name": "Cook",
+            "tags": ["ENCH/TOGO 1", " WINDOW ", "ENCH/TOGO 1"],
         },
         {
             "employee_name": "Unmatched Person",
@@ -47,8 +50,9 @@ def test_draft_import_creates_unpublished_schedule_and_name_only_rows(db_session
             "shift_date": "2026-06-14",
             "start": "10:00 AM",
             "end": "4:00 PM",
-            "position_name": "Server Trainee",
+            "position_name": "Floor Manager",
             "notes": "training shadow",
+            "tags": ["Floor-Close"],
         },
     ]
 
@@ -65,7 +69,8 @@ def test_draft_import_creates_unpublished_schedule_and_name_only_rows(db_session
     assert summary["shifts"] == 2
     assert summary["matched"] == 1
     assert summary["name_only"] == 1
-    assert summary["mapped_roles"] == {"Server Trainee -> Training": 1}
+    assert summary["mapped_roles"] == {"Floor Manager -> FOH Manager": 1}
+    assert summary["per_tag"] == {"ENCH/TOGO 1": 1, "WINDOW": 1, "Floor-Close": 1}
 
     schedules = db_session.query(Schedule).order_by(Schedule.store_key).all()
     assert [(s.store_key, s.week_start, s.status, s.published_at) for s in schedules] == [
@@ -78,7 +83,15 @@ def test_draft_import_creates_unpublished_schedule_and_name_only_rows(db_session
     assert shifts[0].display_name is None
     assert shifts[1].employee_id is None
     assert shifts[1].display_name == "Unmatched Person"
-    assert "Sling role: Server Trainee" in shifts[1].notes
+    assert "Sling role: Floor Manager" in shifts[1].notes
+    tags = {tag.name: tag.id for tag in db_session.query(Tag).all()}
+    assert {"ENCH/TOGO 1", "WINDOW", "Floor-Close"}.issubset(tags)
+    by_shift = {
+        shift_id: {tag_id for (tag_id,) in db_session.query(ShiftTag.tag_id).filter_by(shift_id=shift_id)}
+        for shift_id in [shifts[0].id, shifts[1].id]
+    }
+    assert by_shift[shifts[0].id] == {tags["ENCH/TOGO 1"], tags["WINDOW"]}
+    assert by_shift[shifts[1].id] == {tags["Floor-Close"]}
 
 
 def test_draft_import_refuses_week_with_existing_shifts(db_session):

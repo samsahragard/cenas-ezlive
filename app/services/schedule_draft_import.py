@@ -25,6 +25,7 @@ from app.models import (
     ShiftOffer,
     ShiftSwap,
     ShiftTag,
+    Tag,
     TimeOffRequest,
 )
 from app.services.toast_identity import linked_employee_store_keys
@@ -40,6 +41,7 @@ STORE_ALIASES = {
 }
 
 POSITION_ALIASES = {
+    "floor manager": "FOH Manager",
     "server trainee": "Training",
     "cashier training": "Training",
     "food runner": "Expo",
@@ -115,6 +117,53 @@ def _position_ids(db) -> dict[str, int]:
             db.add(pos)
             db.flush()
             out[name.casefold()] = pos.id
+    return out
+
+
+def _clean_tags(value) -> list[str]:
+    raw = value
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        parts = [raw]
+    else:
+        try:
+            parts = list(raw)
+        except TypeError:
+            parts = [raw]
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        name = re.sub(r"\s+", " ", str(part or "").strip())
+        if not name:
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(name[:120])
+    return out
+
+
+def _tag_ids(db, names: list[str], now: datetime) -> dict[str, int]:
+    if not names:
+        return {}
+    wanted = {name.casefold(): name for name in names}
+    out: dict[str, int] = {}
+    existing = db.query(Tag).all()
+    for tag in existing:
+        if not tag.name:
+            continue
+        key = tag.name.casefold()
+        if key in wanted and key not in out:
+            out[key] = tag.id
+    for key, name in wanted.items():
+        if key in out:
+            continue
+        tag = Tag(name=name, color=None, created_at=now)
+        db.add(tag)
+        db.flush()
+        out[key] = tag.id
     return out
 
 
@@ -240,6 +289,7 @@ def _prepare_records(records: list[dict], week_start: date) -> tuple[list[dict],
             if position is None:
                 raise ValueError("unknown position")
             notes = re.sub(r"\s+", " ", str(record.get("notes") or "").strip()) or None
+            tags = _clean_tags(record.get("tags") or record.get("tag_names"))
             prepared.append({
                 "name": name,
                 "store": store,
@@ -249,6 +299,7 @@ def _prepare_records(records: list[dict], week_start: date) -> tuple[list[dict],
                 "original_position": original_position,
                 "break_minutes": int(record.get("break_minutes") or 0),
                 "notes": notes,
+                "tags": tags,
             })
         except Exception as exc:  # noqa: BLE001 - returned to caller as row data.
             errors.append({"row": idx, "error": str(exc), "record": record})
@@ -340,7 +391,13 @@ def import_draft_records(
     mapped_roles: Counter[str] = Counter()
     per_store: Counter[str] = Counter()
     per_position: Counter[str] = Counter()
+    per_tag: Counter[str] = Counter()
     cleared = {"schedules": 0, "shifts": 0}
+
+    tag_ids: dict[str, int] = {}
+    if commit:
+        tag_names = sorted({tag for rec in prepared for tag in rec["tags"]})
+        tag_ids = _tag_ids(db, tag_names, now)
 
     if commit:
         if replace_existing:
@@ -388,8 +445,10 @@ def import_draft_records(
 
         per_store[rec["store"]] += 1
         per_position[rec["position"]] += 1
+        for tag in rec["tags"]:
+            per_tag[tag] += 1
         if commit:
-            db.add(Shift(
+            shift = Shift(
                 schedule_id=schedules[rec["store"]].id,
                 employee_id=emp_id,
                 display_name=None if emp_id else rec["name"],
@@ -402,7 +461,13 @@ def import_draft_records(
                 published_at=None,
                 created_at=now,
                 updated_at=now,
-            ))
+            )
+            db.add(shift)
+            db.flush()
+            for tag in rec["tags"]:
+                tag_id = tag_ids.get(tag.casefold())
+                if tag_id:
+                    db.add(ShiftTag(shift_id=shift.id, tag_id=tag_id, created_at=now))
 
     if commit:
         db.commit()
@@ -421,6 +486,7 @@ def import_draft_records(
         "mapped_roles": dict(mapped_roles),
         "per_store": dict(per_store),
         "per_position": dict(per_position),
+        "per_tag": dict(per_tag),
         "schedule_ids": {store: schedules[store].id for store in schedules} if commit else {},
         "published_shifts": 0,
         "replace_existing": bool(replace_existing),

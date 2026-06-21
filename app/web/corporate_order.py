@@ -78,6 +78,7 @@ PIN_SCOPE_BY_SLUG = {
 TAKEOUT_CATERING_CATEGORY = "Take-out & Catering"
 CUPS_LIDS_CATEGORY = "Cups & Lids"
 FOH_CATEGORY = "FOH"
+OFFICE_UNIFORMS_CATEGORY = "Office & Uniforms"
 LEGACY_CATEGORY_ALIASES = {
     "1-3 Compartment Containers": TAKEOUT_CATERING_CATEGORY,
     "Aluminum Foil Pans & Containers": TAKEOUT_CATERING_CATEGORY,
@@ -87,6 +88,8 @@ LEGACY_CATEGORY_ALIASES = {
     "Server": FOH_CATEGORY,
     "Host & Togo": FOH_CATEGORY,
     "Bar": FOH_CATEGORY,
+    "Office": OFFICE_UNIFORMS_CATEGORY,
+    "Uniforms": OFFICE_UNIFORMS_CATEGORY,
 }
 
 

@@ -14,8 +14,8 @@
       "label": "Cups & Lids"
     },
     {
-      "key": "office",
-      "label": "Office"
+      "key": "office_uniforms",
+      "label": "Office & Uniforms"
     },
     {
       "key": "bags",
@@ -32,10 +32,6 @@
     {
       "key": "corp",
       "label": "Supplies Available at Corporate"
-    },
-    {
-      "key": "uni",
-      "label": "Uniforms"
     }
   ],
   "items": [
@@ -591,8 +587,8 @@
     },
     {
       "name": "$ 10 Paper GC (1000/box)",
-      "category": "Office",
-      "category_key": "office",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 18,
       "par_level": 5,
@@ -602,8 +598,8 @@
     },
     {
       "name": "Copy Paper (Single)",
-      "category": "Office",
-      "category_key": "office",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 23,
       "par_level": 5,
@@ -613,8 +609,8 @@
     },
     {
       "name": "Ink Ribbon (12/box)",
-      "category": "Office",
-      "category_key": "office",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 11,
       "par_level": 5,
@@ -624,8 +620,8 @@
     },
     {
       "name": "Masking Kitchen Label Tape (6/roll)",
-      "category": "Office",
-      "category_key": "office",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,
@@ -635,8 +631,8 @@
     },
     {
       "name": "Scotch Box Tape",
-      "category": "Office",
-      "category_key": "office",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -1658,8 +1654,8 @@
     },
     {
       "name": "ATM Shirts Large (Single)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 14,
       "par_level": 5,
@@ -1669,8 +1665,8 @@
     },
     {
       "name": "ATM Shirts Medium (Single)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 0,
       "par_level": 5,
@@ -1680,8 +1676,8 @@
     },
     {
       "name": "ATM Shirts Small (Single)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -1691,8 +1687,8 @@
     },
     {
       "name": "ATM Shirts XL (Single)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 20,
       "par_level": 5,
@@ -1702,8 +1698,8 @@
     },
     {
       "name": "Cook Aprons (Single)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 9,
       "par_level": 5,
@@ -1713,8 +1709,8 @@
     },
     {
       "name": "Dish Aprons (Single)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 0,
       "par_level": 5,
@@ -1724,8 +1720,8 @@
     },
     {
       "name": "Hot Pads (Single)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 8,
       "par_level": 5,
@@ -1735,8 +1731,8 @@
     },
     {
       "name": "Kitchen Hats",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 24,
       "par_level": 5,
@@ -1746,8 +1742,8 @@
     },
     {
       "name": "Name Tags (10/pack)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 0,
       "par_level": 5,
@@ -1757,8 +1753,8 @@
     },
     {
       "name": "Waiter Aprons (Single)",
-      "category": "Uniforms",
-      "category_key": "uni",
+      "category": "Office & Uniforms",
+      "category_key": "office_uniforms",
       "unit": "each",
       "in_stock": 27,
       "par_level": 5,
@@ -1769,4 +1765,3 @@
   ],
   "inventory_source": "Cenas website product admin export pasted into Codex attachment 3f03e125-d80c-4e91-bf8a-65b35770617d"
 }
-

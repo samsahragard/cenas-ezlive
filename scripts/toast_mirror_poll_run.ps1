@@ -4,6 +4,7 @@ param(
     [string]$ProjectRoot = "C:\Users\sam\cena-ai-assistant",
     [string]$RepoRoot = "C:\Users\sam\cenas-kitchen-runtime",
     [string]$DbPath = "C:\Users\sam\cena-ai-assistant\toast_webhook\toast_webhook.sqlite",
+    [string]$ReviewDbPath = "C:\Users\sam\cena-ai-assistant\toast_webhook\toast_shift_reviews.sqlite",
     [string]$ToastEnvFile = "C:\Users\sam\cena-secrets\toast_render_env.txt"
 )
 
@@ -33,6 +34,7 @@ if (Test-Path -LiteralPath $lockPath) {
 New-Item -ItemType Directory -Path $lockPath -ErrorAction Stop | Out-Null
 
 $env:TOAST_WEBHOOK_DB = $DbPath
+$env:TOAST_SHIFT_REVIEW_DB = $ReviewDbPath
 $env:TOAST_CACHE_DIR = $toastCacheDir
 if ($env:PYTHONPATH) {
     $env:PYTHONPATH = "$RepoRoot;$env:PYTHONPATH"
@@ -85,6 +87,30 @@ Set-EnvFromExportFile -Path $ToastEnvFile -Names @(
 
 Set-Location -LiteralPath $RepoRoot
 
+function Invoke-ShiftReviewProjection {
+    param([int]$Days)
+
+    $reviewLockPath = Join-Path $logs "toast_shift_review_projection.lock"
+    if (Test-Path -LiteralPath $reviewLockPath) {
+        $reviewLock = Get-Item -LiteralPath $reviewLockPath
+        if ($reviewLock.LastWriteTime -lt (Get-Date).AddMinutes(-30)) {
+            Remove-Item -LiteralPath $reviewLockPath -Force -Recurse
+        } else {
+            Write-Output "$(Get-Date -Format o) shift-review projection already running; skipped."
+            return
+        }
+    }
+    New-Item -ItemType Directory -Path $reviewLockPath -ErrorAction Stop | Out-Null
+    try {
+        python -m scripts.toast_shift_review_projection `
+            --source-db $DbPath `
+            --review-db $ReviewDbPath `
+            --days $Days
+    } finally {
+        Remove-Item -LiteralPath $reviewLockPath -Force -Recurse -ErrorAction SilentlyContinue
+    }
+}
+
 try {
     if ($Mode -eq "fast") {
         python -m scripts.toast_webhook_backfill `
@@ -93,12 +119,14 @@ try {
             --sync-labor-days 1 `
             --backfill-orders-days 2 `
             --refresh
+        Invoke-ShiftReviewProjection -Days 2
     } else {
         python -m scripts.toast_webhook_backfill `
             --db $DbPath `
             --toast-env-file $ToastEnvFile `
             --sync-dimensions `
             --refresh
+        Invoke-ShiftReviewProjection -Days 30
     }
 } finally {
     Remove-Item -LiteralPath $lockPath -Force -Recurse -ErrorAction SilentlyContinue

@@ -70,6 +70,11 @@ def _client_as(app, user: User):
     return client
 
 
+def _grant_corporate_order_scope(client, store_slug: str):
+    with client.session_transaction() as sess:
+        sess["corporate_order_scope"] = store_slug
+
+
 def _tab_keys(html: str) -> set[str]:
     keys: set[str] = set()
     marker = 'data-tab="'
@@ -175,8 +180,8 @@ def test_expo_today_and_operations_are_limited_to_allowed_tabs(dashboard_app):
 
     assert client.get("/dos/team").status_code == 200
     assert client.get("/dos/schedules-v2/team-roster").status_code == 200
-    assert client.get("/dos/corporate-order").status_code == 200
-    assert client.get("/dos/corporate-order/reports").status_code == 403
+    assert client.get("/dos/corporate-order").status_code == 302
+    assert client.get("/dos/corporate-order/reports").status_code == 302
     assert client.get("/dos/performance").status_code == 403
 
 
@@ -184,6 +189,7 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
     flask_app, db = dashboard_app
     km = _seed_actor(db, uid=121, role="km", position="KM")
     client = _client_as(flask_app, km)
+    _grant_corporate_order_scope(client, "dos")
 
     from app.services import corporate_shop
 
@@ -216,6 +222,7 @@ def test_corporate_order_submit_maps_dos_to_tomball(dashboard_app, monkeypatch):
     flask_app, db = dashboard_app
     km = _seed_actor(db, uid=122, role="km", position="KM")
     client = _client_as(flask_app, km)
+    _grant_corporate_order_scope(client, "dos")
 
     from app.services import corporate_shop
     from app.web import corporate_order as corporate_order_mod
@@ -250,6 +257,9 @@ def test_corporate_order_public_pin_gate_opens_store_portal(dashboard_app, monke
     resp = client.get("/dos/corporate-order", follow_redirects=False)
     assert resp.status_code == 302
     assert "/corporate-order?target=tomball" in resp.headers["Location"]
+    legacy = client.get("/partner/corporate-order", follow_redirects=False)
+    assert legacy.status_code == 302
+    assert "/corporate-order?target=corporate" in legacy.headers["Location"]
 
     bad = client.post(
         "/corporate-order/login",
@@ -295,6 +305,7 @@ def test_corporate_fulfillment_update_saves_actual_sent_counts(dashboard_app, mo
     flask_app, db = dashboard_app
     corp = _seed_actor(db, uid=123, role="corporate", position="GM")
     client = _client_as(flask_app, corp)
+    _grant_corporate_order_scope(client, "corporate")
 
     from app.services import corporate_shop
 
@@ -329,6 +340,7 @@ def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboa
     flask_app, db = dashboard_app
     corp = _seed_actor(db, uid=124, role="corporate", position="GM")
     client = _client_as(flask_app, corp)
+    _grant_corporate_order_scope(client, "corporate")
 
     from app.services import corporate_shop
 
@@ -431,6 +443,28 @@ def test_operations_dashboard_groups_analytics_and_keeps_team_default(dashboard_
     assert _active_operations_leaf(html) is None
     assert "hidden" not in _operations_panel_class(html, "team")
     assert _operations_frame_src(html, "team") == "/dos/team"
+
+
+@pytest.mark.parametrize("path", ["/dos/operations?tab=corp-order", "/partner/operations?tab=corp-order"])
+def test_operations_corp_order_tab_embeds_public_pin_portal(dashboard_app, path):
+    flask_app, db = dashboard_app
+    user = _seed_actor(
+        db,
+        uid=125 if path.startswith("/dos") else 126,
+        role="km" if path.startswith("/dos") else "partner",
+        position="KM" if path.startswith("/dos") else "GM",
+    )
+    client = _client_as(flask_app, user)
+    if path.startswith("/partner"):
+        with client.session_transaction() as sess:
+            sess["partner_auth_ok"] = True
+
+    resp = client.get(path)
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert _active_operations_group(html) == "corp-order"
+    assert "hidden" not in _operations_panel_class(html, "corp-order")
+    assert _operations_frame_src(html, "corp-order") == "/corporate-order"
 
 
 @pytest.mark.parametrize(

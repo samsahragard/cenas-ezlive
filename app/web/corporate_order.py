@@ -207,29 +207,31 @@ def _inject_store(endpoint, values):
 
 @corp_order.before_request
 def _partner_gate():
-    """Mirror store_bp's _partner_gate so /partner/corporate-order requires the
-    second password too. /uno/, /dos/, /corporate/ rely solely on the site
-    EZLIVE_PASSWORD already enforced by auth.py."""
+    """Keep legacy /partner/corporate-order from bypassing the PIN portal."""
+    if getattr(g, "current_store", None) == "partner":
+        return None
     if _valid_platform_session(getattr(g, "current_store", None)):
         return None
-    if getattr(g, "current_store", None) == "partner" and not session.get("partner_auth_ok"):
-        return redirect(url_for("auth.partner_login"))
 
 
 @corp_order.before_request
 def _dashboard_gate():
     """Corporate Order is the only Operations sub-tab Expo may reach."""
-    from app.web.permissions import accessible_store_slugs
-
     target = getattr(g, "current_store", None)
     if target:
         session["last_store_slug"] = target
+    if target == "partner":
+        return redirect(url_for(
+            "corporate_order_public.entry",
+            target="corporate",
+            next=url_for("corporate_order.view", store_slug="corporate"),
+        ))
     if target in PIN_SCOPE_BY_SLUG and _valid_platform_session(target):
         return None
-    if target in PIN_SCOPE_BY_SLUG and not getattr(g, "current_user", None):
-        if _valid_platform_session(target):
-            return None
+    if target in PIN_SCOPE_BY_SLUG:
         return redirect(_platform_login_url(target))
+
+    from app.web.permissions import accessible_store_slugs
 
     user = getattr(g, "current_user", None)
     if user is not None and user.permission_level not in ("partner", "corporate"):

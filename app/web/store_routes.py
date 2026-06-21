@@ -6259,14 +6259,13 @@ def _operations_dash_full_url(tab_key):
                                                      (store.server_performance)
       schedule         -> /<store>/schedules-v2/     (store.sv2_week_page) V2 (samai #2156)
       schedule-reports -> /<store>/schedule           (store.schedule) old date-range report
-      corp-order       -> /<store>/corporate-order    (corporate_order.view)
+      corp-order       -> /corporate-order            (4-digit corporate order portal)
       forecasts   -> not built yet — returns "" (no iframe, coming-soon)
     team.team_page lives outside the /<store> blueprint, so url_for on
-    it resolves to the flat /partner/team with no slug. corporate_order
-    is reached with an explicit store_slug (the convention everywhere
-    else this file links to it). store.* endpoints take the slug from
-    the current request. Falls back to "" on an unknown key so an
-    iframe src is never wrong."""
+    it resolves to the flat /partner/team with no slug. Corporate Order
+    opens the flat public PIN portal first. store.* endpoints take the
+    slug from the current request. Falls back to "" on an unknown key so
+    an iframe src is never wrong."""
     if tab_key == "team":
         # The unified workspace is per-store (its Schedule/Market iframes need a
         # real store). Partner/corporate-level Operations have no single store --
@@ -6293,7 +6292,7 @@ def _operations_dash_full_url(tab_key):
     if tab_key == "schedule-reports":
         return url_for("store.schedule")        # the OLD date-range report - kept, just relabeled so it is not mistaken for scheduling
     if tab_key == "corp-order":
-        return url_for("corporate_order.view", store_slug=g.current_store)
+        return url_for("corporate_order_public.entry")
     return ""   # 'forecasts' (not built) or any unknown key
 
 

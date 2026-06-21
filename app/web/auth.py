@@ -33,6 +33,7 @@ EXEMPT_PREFIXES = (
     "/dos/corporate-order",      # Tomball corporate-order portal uses its own 4-digit gate
     "/uno/corporate-order",      # Copperfield corporate-order portal uses its own 4-digit gate
     "/corporate/corporate-order",  # Corporate order admin portal uses its own 4-digit gate
+    "/partner/corporate-order",  # Legacy partner corp-order links redirect to the 4-digit portal
     "/partner/schedules-v2/migration/run",  # B3 Sling import trigger - partner_auth_ok OR INGEST_TOKEN bearer gated inside the view (employee firewall still 403s employee sessions)
     "/static/",                  # static assets
     "/favicon.ico",

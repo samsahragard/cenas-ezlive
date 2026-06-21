@@ -1,4 +1,4 @@
-{% extends "base_dashboard.html" %}
+{% extends "corporate_order_shell.html" if platform_mode else "base_dashboard.html" %}
 {% set active = active|default('corporate_order') %}
 {% block title %}Corporate Order - Cenas Kitchen{% endblock %}
 
@@ -204,6 +204,68 @@
   .corp-orders {
     margin-top: 28px;
   }
+  .corp-analytics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .corp-stat,
+  .corp-admin-add {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.30);
+  }
+  .corp-stat {
+    padding: 12px;
+  }
+  .corp-stat span {
+    display: block;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+  }
+  .corp-stat strong {
+    display: block;
+    margin-top: 3px;
+    color: #fff;
+    font-family: var(--font-mono, monospace);
+    font-size: 20px;
+  }
+  .corp-admin-add {
+    margin-bottom: 14px;
+    padding: 12px;
+  }
+  .corp-admin-add h2 {
+    margin: 0 0 10px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .corp-add-grid {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.6fr) minmax(140px, 1fr) 110px minmax(160px, 1fr) auto;
+    gap: 8px;
+    align-items: end;
+  }
+  .corp-add-grid label {
+    display: grid;
+    gap: 4px;
+    color: rgba(255, 255, 255, 0.54);
+    font-size: 11px;
+  }
+  .corp-add-grid input {
+    min-height: 38px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.42);
+    color: #fff;
+    padding: 7px 8px;
+  }
   .corp-section-title {
     margin: 0 0 8px;
     color: rgba(255, 255, 255, 0.62);
@@ -259,6 +321,51 @@
     padding: 5px 8px;
     font-size: 12px;
   }
+  .corp-fulfill-form {
+    display: grid;
+    gap: 8px;
+    min-width: 220px;
+  }
+  .corp-fulfill-line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 64px;
+    gap: 8px;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.70);
+    font-size: 12px;
+  }
+  .corp-fulfill-line span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .corp-fulfill-line input {
+    width: 64px;
+    min-height: 32px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.42);
+    color: #fff;
+    padding: 5px 6px;
+    text-align: right;
+  }
+  .corp-product-tools {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .corp-danger-button {
+    min-height: 38px;
+    border: 1px solid rgba(232, 80, 80, 0.42);
+    border-radius: 6px;
+    background: rgba(232, 80, 80, 0.14);
+    color: #ff9a86;
+    cursor: pointer;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+  }
   .empty-corp,
   .recent-banner {
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -295,6 +402,10 @@
       align-items: stretch;
       flex-direction: column;
     }
+    .corp-analytics,
+    .corp-add-grid {
+      grid-template-columns: 1fr;
+    }
     .corp-history-link,
     .corp-submit-button {
       width: 100%;
@@ -317,6 +428,41 @@
     {% endfor %}
   {% endif %}
 {% endwith %}
+
+{% if is_admin %}
+<section class="corp-analytics" aria-label="Corporate order analytics">
+  <div class="corp-stat"><span>Total orders</span><strong>{{ analytics.total_orders }}</strong></div>
+  <div class="corp-stat"><span>Units ordered</span><strong>{{ analytics.total_units }}</strong></div>
+  <div class="corp-stat"><span>Units fulfilled</span><strong>{{ analytics.total_fulfilled }}</strong></div>
+  <div class="corp-stat"><span>Open units</span><strong>{{ analytics.total_open }}</strong></div>
+</section>
+
+<section class="corp-admin-add">
+  <h2>Add Catalog Item</h2>
+  <form class="corp-add-grid" method="POST" action="{{ url_for('corporate_order.add_product') }}">
+    <label>
+      Product name
+      <input type="text" name="name" maxlength="100" required>
+    </label>
+    <label>
+      Category
+      <input type="text" name="category" maxlength="100" list="corpCategories" required>
+    </label>
+    <label>
+      In stock
+      <input type="number" min="0" name="in_stock" value="0" required>
+    </label>
+    <label>
+      Image URL
+      <input type="text" name="picture" maxlength="1000">
+    </label>
+    <button class="corp-small-button" type="submit">Add Item</button>
+  </form>
+  <datalist id="corpCategories">
+    {% for c in categories %}<option value="{{ c }}">{% endfor %}
+  </datalist>
+</section>
+{% endif %}
 
 <div class="corp-layout">
   <aside class="corp-sidebar" aria-label="Departments">
@@ -357,12 +503,19 @@
 
           <div class="corp-card-footer">
             {% if is_admin %}
-              <form class="corp-admin-stock" method="POST"
-                    action="{{ url_for('corporate_order.update_stock', product_id=p.id) }}">
-                <label for="stock_{{ p.id }}">Stock</label>
-                <input type="number" min="0" name="in_stock" id="stock_{{ p.id }}" value="{{ p.in_stock }}">
-                <button class="corp-small-button" type="submit">Save</button>
-              </form>
+              <div class="corp-product-tools">
+                <form class="corp-admin-stock" method="POST"
+                      action="{{ url_for('corporate_order.update_stock', product_id=p.id) }}">
+                  <label for="stock_{{ p.id }}">Stock</label>
+                  <input type="number" min="0" name="in_stock" id="stock_{{ p.id }}" value="{{ p.in_stock }}">
+                  <button class="corp-small-button" type="submit">Save</button>
+                </form>
+                <form method="POST"
+                      action="{{ url_for('corporate_order.delete_product', product_id=p.id) }}"
+                      onsubmit="return confirm('Remove this item from the corporate order catalog?');">
+                  <button class="corp-danger-button" type="submit">Remove</button>
+                </form>
+              </div>
             {% else %}
               {% if p.in_stock == 0 %}
                 <button class="corp-small-button secondary" type="button" disabled>Unavailable</button>
@@ -415,11 +568,19 @@
               <td>{{ o.submitted_at.strftime('%a %b %d, %I:%M %p') if o.submitted_at else '-' }}</td>
               <td>
                 {{ o.total_quantity }} unit{{ 's' if o.total_quantity != 1 else '' }}
+                {% if is_admin %}
+                  · {{ o.total_fulfilled }} fulfilled
+                {% endif %}
                 <details>
                   <summary style="cursor:pointer;color:var(--accent-soft);">View lines</summary>
                   <ul style="margin:6px 0 0;padding-left:16px;">
                     {% for line in o.lines %}
-                      <li>{{ line.quantity }}x {{ line.name }}</li>
+                      <li>
+                        {{ line.quantity }}x {{ line.name }}
+                        {% if is_admin %}
+                          · fulfilled {{ line.fulfilled_quantity }}
+                        {% endif %}
+                      </li>
                     {% endfor %}
                   </ul>
                 </details>
@@ -429,13 +590,25 @@
               </td>
               {% if is_admin %}
               <td>
-                <form method="POST" action="{{ url_for('corporate_order.update_status', order_id=o.id) }}">
-                  <select class="corp-status-select" name="status" onchange="this.form.submit()">
+                <form class="corp-fulfill-form" method="POST" action="{{ url_for('corporate_order.update_status', order_id=o.id) }}">
+                  {% for line in o.lines %}
+                    <label class="corp-fulfill-line">
+                      <span title="{{ line.name }}">{{ line.name }} (ordered {{ line.quantity }})</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="{{ line.quantity }}"
+                        name="fulfilled_{{ line.id }}"
+                        value="{{ line.fulfilled_quantity }}">
+                    </label>
+                  {% endfor %}
+                  <select class="corp-status-select" name="status">
                     <option value="Submitted" {% if o.status == 'Submitted' %}selected{% endif %}>Submitted</option>
                     <option value="In Progress" {% if o.status == 'In Progress' %}selected{% endif %}>In Progress</option>
                     <option value="Fulfilled" {% if o.status == 'Fulfilled' %}selected{% endif %}>Fulfilled</option>
                     <option value="Cancelled" {% if o.status == 'Cancelled' %}selected{% endif %}>Cancelled</option>
                   </select>
+                  <button class="corp-small-button" type="submit">Save Fulfillment</button>
                 </form>
               </td>
               {% endif %}

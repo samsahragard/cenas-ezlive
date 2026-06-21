@@ -12,6 +12,8 @@ Per-store permissions auto-derive from g.current_store:
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import os
 import smtplib
@@ -29,6 +31,7 @@ from app.web.dashboard_access import current_role_is, has_dashboard_access
 log = logging.getLogger(__name__)
 
 corp_order = Blueprint("corporate_order", __name__)
+corp_order_public = Blueprint("corporate_order_public", __name__)
 
 # Per-store URL prefix. Mirrors the same slug→location mapping as store_bp
 # (app/web/store_routes.py); kept here so this blueprint is self-contained.
@@ -44,6 +47,142 @@ STORE_LABELS = {
     "dos": "Tomball", "uno": "Copperfield",
     "corporate": "Corporate", "partner": "Partner",
 }
+
+ORDER_PORTAL_PROFILES = {
+    "corporate": {
+        "label": "Corporate",
+        "title": "Admin",
+        "store_slug": "corporate",
+        "store_key": "corporate",
+        "hash": "0225e993a1e6566a7af96340f7329903b625882c7a029611b092ec7d1cd9c9ba",
+    },
+    "tomball": {
+        "label": "Tomball",
+        "title": "Store",
+        "store_slug": "dos",
+        "store_key": "tomball",
+        "hash": "f8a32455c8cf7a9f3bfd25de132490d5569ddd2ed570da35a6f625c245f44ee6",
+    },
+    "copperfield": {
+        "label": "Copperfield",
+        "title": "Store",
+        "store_slug": "uno",
+        "store_key": "copperfield",
+        "hash": "57bff3d61f312f22ff2bb9eb5f69f8547f6bf41f52290a40f6938b262ca538fb",
+    },
+}
+PIN_SCOPE_BY_SLUG = {
+    profile["store_slug"]: scope
+    for scope, profile in ORDER_PORTAL_PROFILES.items()
+}
+
+
+def _pin_digest(scope: str, pin: str) -> str:
+    return hashlib.sha256(f"cenas-corporate-order:{scope}:{pin}".encode()).hexdigest()
+
+
+def _profile_for_slug(slug: str | None) -> dict | None:
+    scope = PIN_SCOPE_BY_SLUG.get(slug or "")
+    return ORDER_PORTAL_PROFILES.get(scope) if scope else None
+
+
+def _corp_order_url_for_scope(scope: str) -> str:
+    profile = ORDER_PORTAL_PROFILES[scope]
+    return url_for("corporate_order.view", store_slug=profile["store_slug"])
+
+
+def _valid_platform_session(slug: str | None) -> bool:
+    profile = _profile_for_slug(slug)
+    if not profile:
+        return False
+    return session.get("corporate_order_scope") == profile["store_slug"]
+
+
+def _platform_login_url(slug: str | None = None) -> str:
+    profile = _profile_for_slug(slug)
+    target = ""
+    if profile:
+        for scope, cand in ORDER_PORTAL_PROFILES.items():
+            if cand is profile:
+                target = scope
+                break
+    return url_for(
+        "corporate_order_public.entry",
+        target=target,
+        next=request.full_path if request.query_string else request.path,
+    )
+
+
+def _order_analytics(orders: list[dict]) -> dict:
+    by_store: dict[str, int] = {}
+    by_status: dict[str, int] = {}
+    total_units = 0
+    total_fulfilled = 0
+    for order in orders or []:
+        store = order.get("store_key") or "unknown"
+        status = order.get("status") or "Unknown"
+        by_store[store] = by_store.get(store, 0) + 1
+        by_status[status] = by_status.get(status, 0) + 1
+        total_units += int(order.get("total_quantity") or 0)
+        total_fulfilled += int(order.get("total_fulfilled") or 0)
+    return {
+        "total_orders": len(orders or []),
+        "total_units": total_units,
+        "total_fulfilled": total_fulfilled,
+        "total_open": max(0, total_units - total_fulfilled),
+        "by_store": sorted(by_store.items()),
+        "by_status": sorted(by_status.items()),
+    }
+
+
+@corp_order_public.route("/corporate-order", methods=["GET"])
+def entry():
+    target = (request.args.get("target") or "").strip().lower()
+    if target not in ORDER_PORTAL_PROFILES:
+        target = ""
+    return render_template(
+        "corporate_order_entry.html",
+        profiles=ORDER_PORTAL_PROFILES,
+        selected=target,
+        error=None,
+        next_url=request.args.get("next") or "",
+    )
+
+
+@corp_order_public.route("/corporate-order/login", methods=["POST"])
+def portal_login():
+    scope = (request.form.get("scope") or "").strip().lower()
+    pin = (request.form.get("pin") or "").strip()
+    nxt = (request.form.get("next") or "").strip()
+    profile = ORDER_PORTAL_PROFILES.get(scope)
+    if (
+        profile is None
+        or len(pin) != 4
+        or not pin.isdigit()
+        or not hmac.compare_digest(_pin_digest(scope, pin), profile["hash"])
+    ):
+        return render_template(
+            "corporate_order_entry.html",
+            profiles=ORDER_PORTAL_PROFILES,
+            selected=scope if scope in ORDER_PORTAL_PROFILES else "",
+            error="That code did not match. Try again.",
+            next_url=nxt,
+        ), 401
+
+    session["corporate_order_scope"] = profile["store_slug"]
+    session.permanent = True
+    if not nxt.startswith("/") or nxt.startswith("//"):
+        nxt = _corp_order_url_for_scope(scope)
+    allowed_path = f"/{profile['store_slug']}/corporate-order"
+    if not nxt.startswith(allowed_path):
+        nxt = allowed_path
+    return redirect(nxt)
+
+
+@corp_order_public.route("/corporate-order/logout", methods=["POST"])
+def portal_logout():
+    session.pop("corporate_order_scope", None)
+    return redirect(url_for("corporate_order_public.entry"))
 
 
 @corp_order.url_value_preprocessor
@@ -71,6 +210,8 @@ def _partner_gate():
     """Mirror store_bp's _partner_gate so /partner/corporate-order requires the
     second password too. /uno/, /dos/, /corporate/ rely solely on the site
     EZLIVE_PASSWORD already enforced by auth.py."""
+    if _valid_platform_session(getattr(g, "current_store", None)):
+        return None
     if getattr(g, "current_store", None) == "partner" and not session.get("partner_auth_ok"):
         return redirect(url_for("auth.partner_login"))
 
@@ -83,6 +224,13 @@ def _dashboard_gate():
     target = getattr(g, "current_store", None)
     if target:
         session["last_store_slug"] = target
+    if target in PIN_SCOPE_BY_SLUG and _valid_platform_session(target):
+        return None
+    if target in PIN_SCOPE_BY_SLUG and not getattr(g, "current_user", None):
+        if _valid_platform_session(target):
+            return None
+        return redirect(_platform_login_url(target))
+
     user = getattr(g, "current_user", None)
     if user is not None and user.permission_level not in ("partner", "corporate"):
         allowed = accessible_store_slugs(user)
@@ -92,6 +240,8 @@ def _dashboard_gate():
             return ("Forbidden — your account isn't assigned to this store.", 403)
 
     if not has_dashboard_access("dash.operations", target):
+        if target in PIN_SCOPE_BY_SLUG:
+            return redirect(_platform_login_url(target))
         abort(403)
     if current_role_is("expo") and request.endpoint not in (
         "corporate_order.view",
@@ -237,6 +387,9 @@ def view():
             is_admin=_is_admin(),
             products=[], categories=[], orders=[],
             recent_submission=None,
+            platform_mode=True,
+            portal_profiles=ORDER_PORTAL_PROFILES,
+            analytics=_order_analytics([]),
         )
 
     try:
@@ -250,9 +403,9 @@ def view():
 
     # Admins (corporate / partner) see all orders; stores see their own.
     if _is_admin():
-        orders = corporate_shop.list_orders(limit=30)
+        orders = corporate_shop.list_orders(limit=None)
     else:
-        orders = corporate_shop.list_orders(limit=10, store_filter=_shop_store_key())
+        orders = corporate_shop.list_orders(limit=25, store_filter=_shop_store_key())
 
     flash_id = request.args.get("submitted")
     return render_template(
@@ -266,6 +419,9 @@ def view():
         selected_category=selected_category,
         orders=orders,
         recent_submission=flash_id,
+        platform_mode=True,
+        portal_profiles=ORDER_PORTAL_PROFILES,
+        analytics=_order_analytics(orders),
     )
 
 
@@ -325,11 +481,13 @@ def reports():
             top_products=[],
             by_store=[],
             by_status=[],
+            analytics=_order_analytics([]),
+            platform_mode=True,
         )
     if _is_admin():
-        orders = corporate_shop.list_orders(limit=200)
+        orders = corporate_shop.list_orders(limit=None)
     else:
-        orders = corporate_shop.list_orders(limit=200, store_filter=_shop_store_key())
+        orders = corporate_shop.list_orders(limit=None, store_filter=_shop_store_key())
 
     # Light aggregates from the in-memory list — cheap for ~200 rows.
     from collections import Counter, defaultdict
@@ -357,6 +515,8 @@ def reports():
         top_products=top_products,
         by_store=by_store_list,
         by_status=by_status_list,
+        analytics=_order_analytics(orders),
+        platform_mode=True,
     )
 
 
@@ -370,11 +530,25 @@ def update_status(order_id):
     if new_status not in ("Submitted", "In Progress", "Fulfilled", "Cancelled"):
         flash(f"Invalid status: {new_status!r}", "error")
         return redirect(url_for("corporate_order.view", store_slug=g.current_store))
-    ok = corporate_shop.update_order_status(order_id, new_status)
+    fulfilled: dict[int, int] = {}
+    for key, raw in request.form.items():
+        if not key.startswith("fulfilled_"):
+            continue
+        try:
+            line_id = int(key.removeprefix("fulfilled_"))
+            qty = int(raw or 0)
+        except ValueError:
+            continue
+        fulfilled[line_id] = qty
+    ok = corporate_shop.update_order_fulfillment(
+        order_id,
+        fulfilled,
+        new_status=new_status,
+    )
     if not ok:
         flash(f"Order #{order_id} not found.", "error")
     else:
-        flash(f"Order #{order_id} → {new_status}.", "success")
+        flash(f"Order #{order_id}: fulfillment saved and status set to {new_status}.", "success")
     return redirect(url_for("corporate_order.view", store_slug=g.current_store))
 
 
@@ -392,6 +566,42 @@ def update_stock(product_id):
     ok = corporate_shop.update_stock(product_id, new_stock)
     if ok:
         flash(f"Product #{product_id}: in_stock set to {new_stock}.", "success")
+    else:
+        flash(f"Product #{product_id} not found.", "error")
+    return redirect(url_for("corporate_order.view", store_slug=g.current_store))
+
+
+@corp_order.route("/corporate-order/admin/product/add", methods=["POST"])
+def add_product():
+    """Admin-only: add a new item to the live corporate order catalog."""
+    if not _is_admin():
+        abort(403)
+    name = request.form.get("name") or ""
+    category = request.form.get("category") or ""
+    picture = request.form.get("picture") or ""
+    try:
+        in_stock = int(request.form.get("in_stock") or "0")
+        product = corporate_shop.add_product(
+            name=name,
+            category=category,
+            in_stock=in_stock,
+            picture=picture,
+        )
+    except Exception as ex:
+        flash(f"Could not add item: {ex}", "error")
+        return redirect(url_for("corporate_order.view", store_slug=g.current_store))
+    flash(f"Added {product['name']} to the corporate catalog.", "success")
+    return redirect(url_for("corporate_order.view", store_slug=g.current_store))
+
+
+@corp_order.route("/corporate-order/admin/product/<int:product_id>/delete", methods=["POST"])
+def delete_product(product_id):
+    """Admin-only: remove an item from the live corporate order catalog."""
+    if not _is_admin():
+        abort(403)
+    ok = corporate_shop.delete_product(product_id)
+    if ok:
+        flash(f"Product #{product_id} removed from the corporate catalog.", "success")
     else:
         flash(f"Product #{product_id} not found.", "error")
     return redirect(url_for("corporate_order.view", store_slug=g.current_store))

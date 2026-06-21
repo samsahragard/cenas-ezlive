@@ -22,7 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, ForeignKey, create_engine
+    Column, Integer, String, Text, DateTime, ForeignKey, create_engine,
+    inspect, text,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -84,11 +85,13 @@ class OrderItem(CorporateBase):
     product_name = Column(String(100), nullable=False)
     product_category = Column(String(100), nullable=False)
     quantity = Column(Integer, nullable=False)
+    fulfilled_quantity = Column(Integer)
 
 
 _engine = None
 _Session = None
 _catalog_checked = False
+_schema_checked = False
 
 _CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "corporate_order_catalog.json"
 
@@ -104,6 +107,7 @@ def is_configured() -> bool:
 def _ensure_engine():
     global _engine, _Session
     if _engine is not None:
+        _ensure_schema()
         return
     url = _get_db_url()
     if not url:
@@ -118,6 +122,23 @@ def _ensure_engine():
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     _engine = create_engine(url, pool_pre_ping=True, pool_recycle=300, future=True)
     _Session = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False, future=True)
+    _ensure_schema()
+
+
+def _ensure_schema() -> None:
+    """Apply small backwards-compatible columns this app needs on cenas_db."""
+    global _schema_checked
+    if _schema_checked or _engine is None:
+        return
+    insp = inspect(_engine)
+    try:
+        order_item_cols = {c["name"] for c in insp.get_columns("order_item")}
+    except Exception:
+        order_item_cols = set()
+    if "fulfilled_quantity" not in order_item_cols:
+        with _engine.begin() as conn:
+            conn.execute(text("ALTER TABLE order_item ADD COLUMN fulfilled_quantity INTEGER"))
+    _schema_checked = True
 
 
 @contextmanager
@@ -258,11 +279,13 @@ def list_categories() -> list[str]:
         return [r[0] for r in rows if r[0]]
 
 
-def list_orders(limit: int = 50, store_filter: str | None = None) -> list[dict]:
+def list_orders(limit: int | None = 50, store_filter: str | None = None) -> list[dict]:
     """Recent orders. store_filter narrows to a store's synthetic Customer."""
     _ensure_engine()
     with session() as s:
-        q = s.query(Order).order_by(Order.submitted_at.desc()).limit(limit)
+        q = s.query(Order).order_by(Order.submitted_at.desc())
+        if limit:
+            q = q.limit(limit)
         if store_filter:
             email = STORE_CUSTOMER_EMAIL.get(store_filter)
             if email:
@@ -289,13 +312,69 @@ def list_orders(limit: int = 50, store_filter: str | None = None) -> list[dict]:
                 # Key name 'lines' (not 'items') to dodge Jinja's dict.items
                 # method-vs-key collision when rendering with `o.items`.
                 "lines": [{
+                    "id": it.id,
                     "name": it.product_name,
                     "category": it.product_category,
                     "quantity": it.quantity,
+                    "fulfilled_quantity": it.fulfilled_quantity or 0,
+                    "remaining_quantity": max(
+                        0, (it.quantity or 0) - (it.fulfilled_quantity or 0)
+                    ),
                 } for it in (o.items or [])],
                 "total_quantity": sum((it.quantity or 0) for it in (o.items or [])),
+                "total_fulfilled": sum(
+                    (it.fulfilled_quantity or 0) for it in (o.items or [])
+                ),
             })
         return out
+
+
+def add_product(
+    *,
+    name: str,
+    category: str,
+    in_stock: int,
+    picture: str = "",
+) -> dict:
+    """Corporate admin: add a catalog item if the name is not already present."""
+    _ensure_engine()
+    clean_name = _clean_product_name(name)
+    clean_category = _clean_product_name(category) or "Supplies"
+    if not clean_name:
+        raise ValueError("product name is required")
+    with session() as s:
+        existing = {
+            _name_key(row[0])
+            for row in s.query(Product.product_name).all()
+        }
+        if _name_key(clean_name) in existing:
+            raise ValueError(f"{clean_name} is already in the corporate catalog")
+        product = Product(
+            product_name=clean_name,
+            in_stock=max(0, int(in_stock or 0)),
+            product_picture=picture or "",
+            category=clean_category,
+        )
+        s.add(product)
+        s.commit()
+        return {
+            "id": product.id,
+            "name": clean_name,
+            "category": clean_category,
+            "in_stock": product.in_stock,
+        }
+
+
+def delete_product(product_id: int) -> bool:
+    """Corporate admin: remove a product from the live ordering catalog."""
+    _ensure_engine()
+    with session() as s:
+        product = s.query(Product).filter_by(id=product_id).one_or_none()
+        if not product:
+            return False
+        s.delete(product)
+        s.commit()
+        return True
 
 
 def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
@@ -375,5 +454,32 @@ def update_order_status(order_id: int, new_status: str) -> bool:
         if not o:
             return False
         o.status = new_status
+        s.commit()
+        return True
+
+
+def update_order_fulfillment(
+    order_id: int,
+    fulfilled_by_line: dict[int, int],
+    *,
+    new_status: str | None = None,
+) -> bool:
+    """Corporate admin: save actual sent counts per line and optional status."""
+    _ensure_engine()
+    with session() as s:
+        order = s.query(Order).filter_by(id=order_id).one_or_none()
+        if not order:
+            return False
+        for line in order.items or []:
+            if line.id not in fulfilled_by_line:
+                continue
+            sent = fulfilled_by_line[line.id]
+            if sent < 0:
+                sent = 0
+            if sent > (line.quantity or 0):
+                sent = line.quantity or 0
+            line.fulfilled_quantity = sent
+        if new_status:
+            order.status = new_status
         s.commit()
         return True

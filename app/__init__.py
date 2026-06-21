@@ -25,7 +25,10 @@ from app.web.developer_chat import dev_chat as dev_chat_bp
 
 from app.web.permissions_admin import permissions_admin as perms_admin_bp  # PERMISSIONS admin page (partner-only, Sam #1676)
 from app.web.interview import interview as interview_bp
-from app.web.corporate_order import corp_order as corp_order_bp
+from app.web.corporate_order import (
+    corp_order as corp_order_bp,
+    corp_order_public as corp_order_public_bp,
+)
 from app.web.ezcater_import_routes import ezc_import as ezc_import_bp
 from app.web.ezcater_live_routes import ezc_live as ezc_live_bp
 from app.web.ezcater_tracking_watch_routes import ezcater_tracking_watch_bp
@@ -218,6 +221,7 @@ def create_app():
     app.register_blueprint(team_reports_bp)
     # Corporate-order Blueprint mounts under <store_slug> just like store_bp;
     # has its own url_value_preprocessor + partner_gate so it's standalone.
+    app.register_blueprint(corp_order_public_bp)
     app.register_blueprint(corp_order_bp, url_prefix="/<store_slug>")
 
     # docck v1 — /docck/* endpoints (Sam #1191 multi-agent reliability monitor)

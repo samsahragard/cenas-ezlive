@@ -1,4 +1,4 @@
-{% extends "base_dashboard.html" %}
+{% extends "corporate_order_shell.html" if platform_mode else "base_dashboard.html" %}
 {% set active = active|default('corporate_order_reports') %}
 {% block title %}Corporate Order — Reports — Cenas Kitchen{% endblock %}
 
@@ -8,8 +8,8 @@
 {% block page_title %}<span class="word-primary">Order</span> <span class="ck-accent">Reports</span>{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
-    {% if is_admin %}All stores · last 200 orders{% else %}{{ g.store_label }} · last 200 orders{% endif %}
-    · <a href="{{ url_for('corporate_order.view') }}" style="color:var(--accent-soft);">← back to Order</a>
+    {% if is_admin %}All stores · full order history{% else %}{{ g.store_label }} · full order history{% endif %}
+    · <a href="{{ url_for('corporate_order.view') }}" style="color:var(--accent-soft);">back to Order</a>
   </p>
 {% endblock %}
 
@@ -22,7 +22,7 @@
     margin-bottom: 18px;
   }
   @media (min-width: 900px) {
-    .reports-grid { grid-template-columns: repeat(3, 1fr); }
+    .reports-grid { grid-template-columns: repeat(4, 1fr); }
   }
   .stat-card {
     background: rgba(0,0,0,0.40);
@@ -64,6 +64,16 @@
 {% else %}
 
 <div class="reports-grid">
+  <div class="stat-card">
+    <h3>Totals</h3>
+    <ul>
+      <li><span>Orders</span><span class="v">{{ analytics.total_orders }}</span></li>
+      <li><span>Units ordered</span><span class="v">{{ analytics.total_units }}</span></li>
+      <li><span>Units fulfilled</span><span class="v">{{ analytics.total_fulfilled }}</span></li>
+      <li><span>Open units</span><span class="v">{{ analytics.total_open }}</span></li>
+    </ul>
+  </div>
+
   <div class="stat-card">
     <h3>By status</h3>
     {% if by_status %}
@@ -131,7 +141,8 @@
               <ul style="margin:6px 0 0 0;padding:0;list-style:none;font-size:12px;">
                 {% for line in o.lines %}
                   <li style="padding:2px 0;color:rgba(255,255,255,0.75);">
-                    {{ line.quantity }}× {{ line.name }} <span style="opacity:0.5;">— {{ line.category }}</span>
+                    ordered {{ line.quantity }} / fulfilled {{ line.fulfilled_quantity }} - {{ line.name }}
+                    <span style="opacity:0.5;">- {{ line.category }}</span>
                   </li>
                 {% endfor %}
               </ul>

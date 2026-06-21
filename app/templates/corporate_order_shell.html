@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}Corporate Order - Cenas Kitchen{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #171008;
+      --bg2: #1d1409;
+      --panel: #241a10;
+      --panel2: #2c2114;
+      --raise: #332715;
+      --line: #3c2d1b;
+      --line2: #54401f;
+      --text: #f4ead7;
+      --text-2: #d8c4a4;
+      --text-3: #8d7556;
+      --accent: #eba43b;
+      --accent-soft: #ffc566;
+      --red: #e2543f;
+      --green: #79bd83;
+      --amber: #f0b454;
+      --font-display: "Big Shoulders Display", sans-serif;
+      --font-body: "Hanken Grotesk", sans-serif;
+      --font-mono: "Spline Sans Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--text);
+      font-family: var(--font-body);
+      background:
+        radial-gradient(900px 460px at 85% -8%, rgba(235, 164, 59, 0.09), transparent 60%),
+        radial-gradient(780px 540px at -10% 110%, rgba(226, 84, 63, 0.07), transparent 55%),
+        linear-gradient(var(--bg), var(--bg2));
+      background-attachment: fixed;
+    }
+    button, input, select { font: inherit; }
+    a { color: inherit; }
+    .corp-shell {
+      width: min(1120px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 18px 0 calc(72px + env(safe-area-inset-bottom));
+    }
+    .corp-topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 4px 0 18px;
+    }
+    .corp-brand {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 0.95;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    .corp-brand span { color: var(--accent-soft); }
+    .corp-subbrand {
+      margin-top: 5px;
+      color: var(--text-3);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .corp-userbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .corp-badge {
+      border: 2px solid var(--red);
+      border-radius: 6px;
+      padding: 7px 13px;
+      color: #ff7a5e;
+      background: rgba(226, 84, 63, 0.07);
+      box-shadow: 0 0 14px rgba(226, 84, 63, 0.22);
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .corp-badge.store {
+      border-color: var(--accent);
+      color: var(--accent-soft);
+      background: rgba(235, 164, 59, 0.07);
+      box-shadow: 0 0 14px rgba(235, 164, 59, 0.18);
+    }
+    .corp-toplink,
+    .corp-logout button {
+      min-height: 36px;
+      border: 1px solid var(--line2);
+      border-radius: 6px;
+      padding: 8px 11px;
+      color: var(--text-2);
+      background: rgba(0, 0, 0, 0.14);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .corp-logout { margin: 0; }
+    .corp-page-head {
+      margin: 6px 0 16px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+    }
+    .corp-page-head h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(34px, 6vw, 58px);
+      font-weight: 800;
+      line-height: 0.96;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    .corp-page-head h1 .ck-accent,
+    .corp-page-head h1 .word-primary + span { color: var(--accent-soft); }
+    .corp-page-head .greeting-sub {
+      margin: 8px 0 0;
+      color: var(--text-3);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .corp-flash {
+      margin-bottom: 14px;
+      border: 1px solid var(--line2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.24);
+      color: var(--text-2);
+    }
+    .corp-flash.success { border-color: rgba(121, 189, 131, 0.45); color: #c8f2ce; }
+    .corp-flash.warning { border-color: rgba(240, 180, 84, 0.45); color: #ffd58a; }
+    .corp-flash.error { border-color: rgba(226, 84, 63, 0.45); color: #ff9a86; }
+    @media (max-width: 720px) {
+      .corp-topbar { flex-direction: column; }
+      .corp-userbar { justify-content: flex-start; }
+    }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <main class="corp-shell">
+    <header class="corp-topbar">
+      <div>
+        <div class="corp-brand">Corporate <span>Order</span></div>
+        <div class="corp-subbrand">Cenas Kitchen</div>
+      </div>
+      <div class="corp-userbar">
+        {% if is_admin is defined %}
+          <span class="corp-badge {{ '' if is_admin else 'store' }}">{{ g.store_label|default('Corporate') }}</span>
+          <a class="corp-toplink" href="{{ url_for('corporate_order_public.entry') }}">Switch</a>
+          <a class="corp-toplink" href="{{ url_for('corporate_order.reports') }}">Reports</a>
+          <form class="corp-logout" method="POST" action="{{ url_for('corporate_order_public.portal_logout') }}">
+            <button type="submit">Logout</button>
+          </form>
+        {% endif %}
+      </div>
+    </header>
+
+    <section class="corp-page-head">
+      <h1>{% block page_title %}<span class="word-primary">Corporate</span> <span class="ck-accent">Order</span>{% endblock %}</h1>
+      {% block page_subtitle %}{% endblock %}
+    </section>
+
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

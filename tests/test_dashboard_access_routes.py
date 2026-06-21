@@ -243,6 +243,144 @@ def test_corporate_order_submit_maps_dos_to_tomball(dashboard_app, monkeypatch):
     assert submitted == {"store_key": "tomball", "items": [(42, 2)]}
 
 
+def test_corporate_order_public_pin_gate_opens_store_portal(dashboard_app, monkeypatch):
+    flask_app, _db = dashboard_app
+    client = flask_app.test_client()
+
+    resp = client.get("/dos/corporate-order", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/corporate-order?target=tomball" in resp.headers["Location"]
+
+    bad = client.post(
+        "/corporate-order/login",
+        data={"scope": "tomball", "pin": "0000"},
+    )
+    assert bad.status_code == 401
+
+    from app.services import corporate_shop
+
+    monkeypatch.setattr(corporate_shop, "is_configured", lambda: True)
+    monkeypatch.setattr(corporate_shop, "ensure_catalog_seeded", lambda: {"added": 0})
+    monkeypatch.setattr(
+        corporate_shop,
+        "list_products",
+        lambda category=None: [{
+            "id": 42,
+            "name": "Bleach (6/case)",
+            "in_stock": 15,
+            "picture": "",
+            "category": "Cleaning Supplies",
+            "date_added": None,
+        }],
+    )
+    monkeypatch.setattr(corporate_shop, "list_categories", lambda: ["Cleaning Supplies"])
+    monkeypatch.setattr(corporate_shop, "list_orders", lambda *args, **kwargs: [])
+
+    ok = client.post(
+        "/corporate-order/login",
+        data={"scope": "tomball", "pin": "8804"},
+        follow_redirects=False,
+    )
+    assert ok.status_code == 302
+    assert ok.headers["Location"].endswith("/dos/corporate-order")
+
+    page = client.get("/dos/corporate-order")
+    html = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert "Bleach (6/case)" in html
+    assert 'name="qty_42"' in html
+
+
+def test_corporate_fulfillment_update_saves_actual_sent_counts(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    corp = _seed_actor(db, uid=123, role="corporate", position="GM")
+    client = _client_as(flask_app, corp)
+
+    from app.services import corporate_shop
+
+    saved = {}
+
+    def _update(order_id, fulfilled_by_line, *, new_status=None):
+        saved["order_id"] = order_id
+        saved["fulfilled_by_line"] = fulfilled_by_line
+        saved["new_status"] = new_status
+        return True
+
+    monkeypatch.setattr(corporate_shop, "update_order_fulfillment", _update)
+
+    resp = client.post(
+        "/corporate/corporate-order/admin/order/501/status",
+        data={
+            "status": "In Progress",
+            "fulfilled_10": "4",
+            "fulfilled_11": "0",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert saved == {
+        "order_id": 501,
+        "fulfilled_by_line": {10: 4, 11: 0},
+        "new_status": "In Progress",
+    }
+
+
+def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    corp = _seed_actor(db, uid=124, role="corporate", position="GM")
+    client = _client_as(flask_app, corp)
+
+    from app.services import corporate_shop
+
+    monkeypatch.setattr(corporate_shop, "is_configured", lambda: True)
+    monkeypatch.setattr(corporate_shop, "ensure_catalog_seeded", lambda: {"added": 0})
+    monkeypatch.setattr(
+        corporate_shop,
+        "list_products",
+        lambda category=None: [{
+            "id": 42,
+            "name": "Bleach (6/case)",
+            "in_stock": 15,
+            "picture": "",
+            "category": "Cleaning Supplies",
+            "date_added": None,
+        }],
+    )
+    monkeypatch.setattr(corporate_shop, "list_categories", lambda: ["Cleaning Supplies"])
+    monkeypatch.setattr(
+        corporate_shop,
+        "list_orders",
+        lambda *args, **kwargs: [{
+            "id": 501,
+            "submitted_at": None,
+            "status": "Submitted",
+            "customer_email": "store-tomball@cenaskitchen.com",
+            "customer_username": "Tomball Kitchen",
+            "store_key": "tomball",
+            "lines": [{
+                "id": 10,
+                "name": "Bleach (6/case)",
+                "category": "Cleaning Supplies",
+                "quantity": 12,
+                "fulfilled_quantity": 4,
+                "remaining_quantity": 8,
+            }],
+            "total_quantity": 12,
+            "total_fulfilled": 4,
+        }],
+    )
+
+    resp = client.get("/corporate/corporate-order")
+    html = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "Add Catalog Item" in html
+    assert 'action="/corporate/corporate-order/admin/product/add"' in html
+    assert 'action="/corporate/corporate-order/admin/product/42/delete"' in html
+    assert 'name="fulfilled_10"' in html
+    assert 'value="4"' in html
+    assert "ordered 12" in html
+
+
 def test_km_gets_manager_and_full_operations_tabs(dashboard_app):
     flask_app, db = dashboard_app
     km = _seed_actor(db, uid=102, role="km", position="KM")

@@ -284,8 +284,6 @@ def list_orders(limit: int | None = 50, store_filter: str | None = None) -> list
     _ensure_engine()
     with session() as s:
         q = s.query(Order).order_by(Order.submitted_at.desc())
-        if limit:
-            q = q.limit(limit)
         if store_filter:
             email = STORE_CUSTOMER_EMAIL.get(store_filter)
             if email:
@@ -294,6 +292,8 @@ def list_orders(limit: int | None = 50, store_filter: str | None = None) -> list
                     q = q.filter(Order.customer_link == cust.id)
                 else:
                     return []
+        if limit:
+            q = q.limit(limit)
         out = []
         for o in q.all():
             cust = o.customer

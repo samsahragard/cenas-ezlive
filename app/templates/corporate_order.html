@@ -1,49 +1,480 @@
 {% extends "base_dashboard.html" %}
 {% set active = active|default('corporate_order') %}
-{% block title %}Corporate Order — Cenas Kitchen{% endblock %}
+{% block title %}Corporate Order - Cenas Kitchen{% endblock %}
 
-{# Page Title Library: module CATERING accent, two-word title "Corporate Order". #}
 {% block page_module %}CATERING{% endblock %}
 {% block page_module_class %}mod-catering{% endblock %}
 {% block page_title %}<span class="word-primary">Corporate</span> <span class="ck-accent">Order</span>{% endblock %}
-{% block page_subtitle %}{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">
+    {% if is_admin %}
+      {{ products|length }} catalog item{{ 's' if products|length != 1 else '' }} · all stores
+    {% else %}
+      {{ g.store_label }} · {{ products|length }} catalog item{{ 's' if products|length != 1 else '' }}
+    {% endif %}
+  </p>
+{% endblock %}
 
 {% block head_extra %}
 <style>
-  .corp-embed-note{
-    font-family:'Spline Sans Mono', ui-monospace, monospace;
-    font-size:11px; letter-spacing:.04em; color:var(--text-3,#8d7556);
-    margin:0 2px 10px;
+  .corp-layout {
+    display: grid;
+    grid-template-columns: minmax(168px, 220px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
   }
-  /* Full-bleed embed that fills the tab content area, under the ribbon + beside
-     the sidebar. The iframe isolates the prototype's self-contained CSS so it
-     renders exactly like the reference mockup and nothing leaks either way. */
-  .corp-embed-frame{
-    display:block; width:100%; border:0; border-radius:12px; background:#171008;
-    height:calc(var(--ck-page-available-height, 100vh) - 150px);
-    min-height:640px;
+  @media (max-width: 860px) {
+    .corp-layout { grid-template-columns: 1fr; }
+  }
+  .corp-sidebar {
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    padding: 8px;
+    position: sticky;
+    top: 12px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+  .corp-sidebar-title {
+    margin: 0;
+    padding: 4px 8px 8px;
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+  }
+  .corp-cat-pill {
+    display: block;
+    margin: 1px 0;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--text-2);
+    font-size: 13px;
+    line-height: 1.2;
+    text-decoration: none;
+  }
+  .corp-cat-pill:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+  }
+  .corp-cat-pill.is-active {
+    background: rgba(232, 122, 62, 0.18);
+    border-color: rgba(232, 122, 62, 0.45);
+    color: #fff;
+    font-weight: 700;
+  }
+  .corp-main {
+    min-width: 0;
+  }
+  .corp-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .corp-search {
+    width: min(360px, 100%);
+    min-height: 40px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.34);
+    color: #fff;
+    padding: 9px 12px;
+    font-size: 14px;
+  }
+  .corp-history-link {
+    color: var(--accent-soft);
+    font-size: 13px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .corp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    padding-bottom: 88px;
+  }
+  .corp-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 188px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.30);
+    padding: 12px;
+  }
+  .corp-name {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  .corp-cat {
+    margin-top: 5px;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .corp-stock {
+    margin-top: 12px;
+    color: rgba(255, 255, 255, 0.64);
+    font-size: 12px;
+  }
+  .corp-stock.low { color: #f0c060; }
+  .corp-stock.out { color: #f08080; }
+  .corp-card-footer {
+    margin-top: auto;
+    padding-top: 12px;
+  }
+  .corp-qty-row,
+  .corp-admin-stock {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .corp-qty-row label,
+  .corp-admin-stock label {
+    color: rgba(255, 255, 255, 0.54);
+    font-size: 12px;
+  }
+  .corp-qty-row input,
+  .corp-admin-stock input {
+    width: 74px;
+    min-height: 38px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.42);
+    color: #fff;
+    padding: 7px 8px;
+    text-align: right;
+  }
+  .corp-small-button,
+  .corp-submit-button {
+    border: 0;
+    border-radius: 6px;
+    background: var(--accent, #e87a3e);
+    color: #fff;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .corp-small-button {
+    min-height: 38px;
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+  .corp-small-button.secondary {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .corp-submit-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 18px -2px 0;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: rgba(10, 6, 4, 0.94);
+    backdrop-filter: blur(12px);
+  }
+  .corp-submit-count {
+    color: rgba(255, 255, 255, 0.64);
+    font-size: 13px;
+  }
+  .corp-submit-button {
+    min-height: 42px;
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+  .corp-submit-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.46;
+  }
+  .corp-orders {
+    margin-top: 28px;
+  }
+  .corp-section-title {
+    margin: 0 0 8px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .corp-table-wrap {
+    overflow-x: auto;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.30);
+  }
+  .corp-orders-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+  }
+  .corp-orders-table th,
+  .corp-orders-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    text-align: left;
+    vertical-align: top;
+    font-size: 13px;
+  }
+  .corp-orders-table th {
+    color: rgba(255, 255, 255, 0.50);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+  }
+  .corp-orders-table tr:last-child td { border-bottom: 0; }
+  .corp-status {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .corp-status.s-Submitted { background: rgba(64, 128, 232, 0.20); color: #9fc1ff; }
+  .corp-status.s-In-Progress { background: rgba(232, 122, 62, 0.20); color: #f0a36e; }
+  .corp-status.s-Fulfilled { background: rgba(122, 210, 122, 0.20); color: #9be09b; }
+  .corp-status.s-Cancelled { background: rgba(232, 80, 80, 0.20); color: #f08080; }
+  .corp-status-select {
+    min-height: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.42);
+    color: #fff;
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+  .empty-corp,
+  .recent-banner {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.30);
+    color: rgba(255, 255, 255, 0.68);
+  }
+  .empty-corp {
+    padding: 28px;
+    text-align: center;
+  }
+  .recent-banner {
+    margin-bottom: 14px;
+    padding: 10px 12px;
+  }
+  .recent-banner.success {
+    border-color: rgba(122, 210, 122, 0.40);
+    background: rgba(122, 210, 122, 0.10);
+    color: #fff;
+  }
+  .recent-banner.warning {
+    border-color: rgba(240, 192, 96, 0.40);
+    background: rgba(240, 192, 96, 0.10);
+    color: #fff;
+  }
+  .recent-banner.error {
+    border-color: rgba(232, 80, 80, 0.40);
+    background: rgba(232, 80, 80, 0.10);
+    color: #fff;
+  }
+  @media (max-width: 720px) {
+    .corp-toolbar,
+    .corp-submit-bar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .corp-history-link,
+    .corp-submit-button {
+      width: 100%;
+    }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-{#
-  Corporate Order module UI — ported from Sam's reference prototype
-  (corporate_order_prototype.html, copied to static/corporate_order_demo.html).
-  Embedded via <iframe> so the prototype's self-contained styling is fully
-  isolated from the platform shell (no CSS leakage either direction) and it
-  renders EXACTLY like the mockup, inside the Operations -> Corporate Order tab.
+{% if not configured %}
+  <div class="empty-corp">
+    <p style="margin:0;color:#fff;">Corporate Order is not connected.</p>
+  </div>
+{% else %}
 
-  DATA: currently the prototype's own client-side demo seed. To go live with real
-  data, the backend lane (codex = CK-box corp DB; aick = Render read/sync +
-  corporder.* render-gating; Sam = CORPORATE_DB_URL) should serve a route that
-  injects  window.CORP_DATA = {{ data|tojson }}  matching the prototype's seed
-  shape (products P[], CATS{}, STORES{}, USERS[], AVG{store:{pid:val}}, ORDERS[],
-  RECEIPTS[], FEED[]) and point this iframe at that route (or inline it). The
-  prototype's seed objects ARE the data-hook contract.
-#}
-<iframe class="corp-embed-frame"
-        src="{{ url_for('static', filename='corporate_order_demo.html') }}"
-        title="Corporate Order module"
-        loading="lazy"></iframe>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, msg in messages %}
+      <div class="recent-banner {{ category }}">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="corp-layout">
+  <aside class="corp-sidebar" aria-label="Departments">
+    <h3 class="corp-sidebar-title">Departments</h3>
+    <a class="corp-cat-pill {% if not selected_category %}is-active{% endif %}"
+       href="{{ url_for('corporate_order.view') }}">All</a>
+    {% for c in categories %}
+      <a class="corp-cat-pill {% if selected_category == c %}is-active{% endif %}"
+         href="{{ url_for('corporate_order.view', category=c) }}">{{ c }}</a>
+    {% endfor %}
+  </aside>
+
+  <div class="corp-main">
+    <div class="corp-toolbar">
+      <input class="corp-search" id="corpSearch" type="search" placeholder="Search catalog" autocomplete="off">
+      <a class="corp-history-link" href="{{ url_for('corporate_order.reports') }}">Order history</a>
+    </div>
+
+    {% if products %}
+      {% if not is_admin %}
+      <form method="POST" action="{{ url_for('corporate_order.submit') }}" id="corpOrderForm">
+      {% endif %}
+
+      <div class="corp-grid" id="corpProductGrid">
+        {% for p in products %}
+        <section class="corp-card" data-product-card data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}">
+          <div class="corp-name">{{ p.name }}</div>
+          <div class="corp-cat">{{ p.category }}</div>
+          <div class="corp-stock {% if p.in_stock == 0 %}out{% elif p.in_stock <= 5 %}low{% endif %}">
+            {% if p.in_stock == 0 %}
+              Out of stock
+            {% elif p.in_stock <= 5 %}
+              Low stock ({{ p.in_stock }})
+            {% else %}
+              In stock ({{ p.in_stock }})
+            {% endif %}
+          </div>
+
+          <div class="corp-card-footer">
+            {% if is_admin %}
+              <form class="corp-admin-stock" method="POST"
+                    action="{{ url_for('corporate_order.update_stock', product_id=p.id) }}">
+                <label for="stock_{{ p.id }}">Stock</label>
+                <input type="number" min="0" name="in_stock" id="stock_{{ p.id }}" value="{{ p.in_stock }}">
+                <button class="corp-small-button" type="submit">Save</button>
+              </form>
+            {% else %}
+              {% if p.in_stock == 0 %}
+                <button class="corp-small-button secondary" type="button" disabled>Unavailable</button>
+              {% else %}
+                <div class="corp-qty-row">
+                  <label for="qty_{{ p.id }}">Qty</label>
+                  <input class="corp-qty-input" type="number" name="qty_{{ p.id }}" id="qty_{{ p.id }}"
+                         min="0" max="{{ p.in_stock }}" value="0" inputmode="numeric">
+                </div>
+              {% endif %}
+            {% endif %}
+          </div>
+        </section>
+        {% endfor %}
+      </div>
+
+      {% if not is_admin %}
+        <div class="corp-submit-bar">
+          <span class="corp-submit-count" id="corpSubmitCount">No items selected</span>
+          <button class="corp-submit-button" id="corpSubmitButton" type="submit" disabled>Submit Order</button>
+        </div>
+      </form>
+      {% endif %}
+    {% else %}
+      <div class="empty-corp">No products in this category.</div>
+    {% endif %}
+
+    <section class="corp-orders">
+      <h2 class="corp-section-title">
+        {% if is_admin %}Recent Orders{% else %}{{ g.store_label }} Recent Orders{% endif %}
+      </h2>
+      {% if orders %}
+      <div class="corp-table-wrap">
+        <table class="corp-orders-table">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Store</th>
+              <th>Submitted</th>
+              <th>Items</th>
+              <th>Status</th>
+              {% if is_admin %}<th>Update</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for o in orders %}
+            <tr>
+              <td>#{{ o.id }}</td>
+              <td>{{ o.customer_username or o.customer_email or (o.store_key|title) }}</td>
+              <td>{{ o.submitted_at.strftime('%a %b %d, %I:%M %p') if o.submitted_at else '-' }}</td>
+              <td>
+                {{ o.total_quantity }} unit{{ 's' if o.total_quantity != 1 else '' }}
+                <details>
+                  <summary style="cursor:pointer;color:var(--accent-soft);">View lines</summary>
+                  <ul style="margin:6px 0 0;padding-left:16px;">
+                    {% for line in o.lines %}
+                      <li>{{ line.quantity }}x {{ line.name }}</li>
+                    {% endfor %}
+                  </ul>
+                </details>
+              </td>
+              <td>
+                <span class="corp-status s-{{ o.status|replace(' ', '-') }}">{{ o.status }}</span>
+              </td>
+              {% if is_admin %}
+              <td>
+                <form method="POST" action="{{ url_for('corporate_order.update_status', order_id=o.id) }}">
+                  <select class="corp-status-select" name="status" onchange="this.form.submit()">
+                    <option value="Submitted" {% if o.status == 'Submitted' %}selected{% endif %}>Submitted</option>
+                    <option value="In Progress" {% if o.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                    <option value="Fulfilled" {% if o.status == 'Fulfilled' %}selected{% endif %}>Fulfilled</option>
+                    <option value="Cancelled" {% if o.status == 'Cancelled' %}selected{% endif %}>Cancelled</option>
+                  </select>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="empty-corp" style="padding:18px;">No orders yet.</div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const search = document.getElementById('corpSearch');
+  const cards = Array.from(document.querySelectorAll('[data-product-card]'));
+  if (search) {
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      cards.forEach((card) => {
+        card.hidden = q && !card.dataset.search.includes(q);
+      });
+    });
+  }
+
+  const inputs = Array.from(document.querySelectorAll('.corp-qty-input'));
+  const count = document.getElementById('corpSubmitCount');
+  const button = document.getElementById('corpSubmitButton');
+  function updateCount() {
+    const picked = inputs.reduce((n, input) => n + (parseInt(input.value, 10) > 0 ? 1 : 0), 0);
+    if (count) count.textContent = picked ? `${picked} item${picked === 1 ? '' : 's'} selected` : 'No items selected';
+    if (button) button.disabled = picked === 0;
+  }
+  inputs.forEach((input) => input.addEventListener('input', updateCount));
+  updateCount();
+})();
+</script>
+{% endif %}
 {% endblock %}

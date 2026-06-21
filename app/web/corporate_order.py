@@ -128,6 +128,16 @@ def _is_admin() -> bool:
     return getattr(g, "current_store", None) in ("corporate", "partner")
 
 
+def _shop_store_key() -> str:
+    """Translate URL slugs to the synthetic Customer keys in corporate_shop."""
+    slug = getattr(g, "current_store", None)
+    if slug == "dos":
+        return "tomball"
+    if slug == "uno":
+        return "copperfield"
+    return slug or "corporate"
+
+
 def _send_corporate_order_email(order: dict) -> tuple[bool, str]:
     """Email Sam + any additional recipients about a newly-placed corporate order.
     Returns (sent_ok, error_or_blank)."""
@@ -229,6 +239,11 @@ def view():
             recent_submission=None,
         )
 
+    try:
+        corporate_shop.ensure_catalog_seeded()
+    except Exception:
+        log.exception("corporate_order: catalog seed check failed")
+
     selected_category = (request.args.get("category") or "").strip()
     products = corporate_shop.list_products(category=selected_category or None)
     categories = corporate_shop.list_categories()
@@ -237,7 +252,7 @@ def view():
     if _is_admin():
         orders = corporate_shop.list_orders(limit=30)
     else:
-        orders = corporate_shop.list_orders(limit=10, store_filter=g.current_store)
+        orders = corporate_shop.list_orders(limit=10, store_filter=_shop_store_key())
 
     flash_id = request.args.get("submitted")
     return render_template(
@@ -278,7 +293,7 @@ def submit():
         return redirect(url_for("corporate_order.view", store_slug=g.current_store))
 
     try:
-        order = corporate_shop.place_order(g.current_store, items)
+        order = corporate_shop.place_order(_shop_store_key(), items)
     except Exception as ex:
         log.exception("corporate_order: place_order failed")
         flash(f"Could not place order: {ex}", "error")
@@ -314,7 +329,7 @@ def reports():
     if _is_admin():
         orders = corporate_shop.list_orders(limit=200)
     else:
-        orders = corporate_shop.list_orders(limit=200, store_filter=g.current_store)
+        orders = corporate_shop.list_orders(limit=200, store_filter=_shop_store_key())
 
     # Light aggregates from the in-memory list — cheap for ~200 rows.
     from collections import Counter, defaultdict

@@ -13,11 +13,13 @@ valid. The store-customers are created lazily on first call.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Iterable
+from pathlib import Path
 
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, ForeignKey, create_engine
@@ -86,6 +88,9 @@ class OrderItem(CorporateBase):
 
 _engine = None
 _Session = None
+_catalog_checked = False
+
+_CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "corporate_order_catalog.json"
 
 
 def _get_db_url() -> str | None:
@@ -126,6 +131,89 @@ def session():
         s.close()
 
 
+def _clean_product_name(name: str | None) -> str:
+    """Normalize legacy product display whitespace without changing IDs."""
+    return re.sub(r"\s+", " ", name or "").strip()
+
+
+def _name_key(name: str | None) -> str:
+    return _clean_product_name(name).casefold()
+
+
+def load_catalog_seed() -> dict:
+    with _CATALOG_PATH.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def sync_catalog_from_seed(
+    *,
+    update_existing_stock: bool = False,
+    normalize_existing_names: bool = False,
+) -> dict:
+    """Insert missing corporate-order products from the repo catalog.
+
+    The live product table predates this app and a few names carry cosmetic
+    whitespace. Matching is therefore on normalized display name; by default
+    existing rows keep their stock count and raw product_name.
+    """
+    _ensure_engine()
+    seed = load_catalog_seed()
+    items = seed.get("items") or []
+    added = updated_stock = normalized_names = updated_category = 0
+    with session() as s:
+        existing = {
+            _name_key(p.product_name): p
+            for p in s.query(Product).all()
+        }
+        for item in items:
+            name = _clean_product_name(item.get("name"))
+            if not name:
+                continue
+            category = item.get("category") or item.get("category_label") or "Supplies"
+            stock = int(item.get("in_stock") or 0)
+            product = existing.get(_name_key(name))
+            if product is None:
+                product = Product(
+                    product_name=name,
+                    in_stock=max(0, stock),
+                    product_picture=item.get("picture") or "",
+                    category=category,
+                )
+                s.add(product)
+                s.flush()
+                existing[_name_key(name)] = product
+                added += 1
+                continue
+            if normalize_existing_names and product.product_name != name:
+                product.product_name = name
+                normalized_names += 1
+            if product.category != category:
+                product.category = category
+                updated_category += 1
+            if update_existing_stock and product.in_stock != stock:
+                product.in_stock = max(0, stock)
+                updated_stock += 1
+        if added or updated_stock or normalized_names or updated_category:
+            s.commit()
+    return {
+        "seed_items": len(items),
+        "added": added,
+        "updated_stock": updated_stock,
+        "normalized_names": normalized_names,
+        "updated_category": updated_category,
+    }
+
+
+def ensure_catalog_seeded() -> dict:
+    """Best-effort boot/request guard: insert missing rows once per process."""
+    global _catalog_checked
+    if _catalog_checked:
+        return {"already_checked": True}
+    result = sync_catalog_from_seed()
+    _catalog_checked = True
+    return result
+
+
 def _ensure_store_customer(s, store_key: str) -> Customer:
     """Find-or-create the synthetic Customer row representing a store."""
     email = STORE_CUSTOMER_EMAIL[store_key]
@@ -154,7 +242,7 @@ def list_products(category: str | None = None) -> list[dict]:
         rows = q.all()
         return [{
             "id": p.id,
-            "name": p.product_name,
+            "name": _clean_product_name(p.product_name),
             "in_stock": p.in_stock,
             "picture": p.product_picture,
             "category": p.category,
@@ -231,9 +319,16 @@ def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
             p = s.query(Product).filter_by(id=pid).one_or_none()
             if not p:
                 continue
+            if (p.in_stock or 0) <= 0:
+                continue
+            if qty > (p.in_stock or 0):
+                raise ValueError(
+                    f"{_clean_product_name(p.product_name)} only has {p.in_stock} available"
+                )
+            clean_name = _clean_product_name(p.product_name)
             oi = OrderItem(
                 order_link=order.id,
-                product_name=p.product_name,
+                product_name=clean_name,
                 product_category=p.category,
                 quantity=qty,
             )
@@ -241,7 +336,7 @@ def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
             # Decrement stock — clamp at 0 so we never go negative.
             p.in_stock = max(0, (p.in_stock or 0) - qty)
             line_dicts.append({
-                "name": p.product_name,
+                "name": clean_name,
                 "category": p.category,
                 "quantity": qty,
                 "remaining_stock": p.in_stock,

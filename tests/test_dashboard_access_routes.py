@@ -180,6 +180,69 @@ def test_expo_today_and_operations_are_limited_to_allowed_tabs(dashboard_app):
     assert client.get("/dos/performance").status_code == 403
 
 
+def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=121, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    from app.services import corporate_shop
+
+    monkeypatch.setattr(corporate_shop, "is_configured", lambda: True)
+    monkeypatch.setattr(corporate_shop, "ensure_catalog_seeded", lambda: {"added": 0})
+    monkeypatch.setattr(
+        corporate_shop,
+        "list_products",
+        lambda category=None: [{
+            "id": 42,
+            "name": "Bleach (6/case)",
+            "in_stock": 15,
+            "picture": "",
+            "category": "Cleaning Supplies",
+            "date_added": None,
+        }],
+    )
+    monkeypatch.setattr(corporate_shop, "list_categories", lambda: ["Cleaning Supplies"])
+    monkeypatch.setattr(corporate_shop, "list_orders", lambda *args, **kwargs: [])
+
+    resp = client.get("/dos/corporate-order")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Bleach (6/case)" in html
+    assert 'name="qty_42"' in html
+    assert "corporate_order_demo.html" not in html
+
+
+def test_corporate_order_submit_maps_dos_to_tomball(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=122, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    from app.services import corporate_shop
+    from app.web import corporate_order as corporate_order_mod
+
+    submitted = {}
+
+    monkeypatch.setattr(corporate_shop, "is_configured", lambda: True)
+
+    def _place_order(store_key, items):
+        submitted["store_key"] = store_key
+        submitted["items"] = items
+        return {
+            "order_id": 9001,
+            "submitted_at": None,
+            "store_key": store_key,
+            "store_label": "Tomball Kitchen",
+            "items": [],
+        }
+
+    monkeypatch.setattr(corporate_shop, "place_order", _place_order)
+    monkeypatch.setattr(corporate_order_mod, "_send_corporate_order_email", lambda order: (True, ""))
+
+    resp = client.post("/dos/corporate-order/submit", data={"qty_42": "2"}, follow_redirects=False)
+    assert resp.status_code == 302
+    assert submitted == {"store_key": "tomball", "items": [(42, 2)]}
+
+
 def test_km_gets_manager_and_full_operations_tabs(dashboard_app):
     flask_app, db = dashboard_app
     km = _seed_actor(db, uid=102, role="km", position="KM")

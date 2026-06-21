@@ -434,11 +434,17 @@
     .corp-submit-button {
       width: 100%;
     }
+    html.is-framed #corpOrderForm {
+      display: flex;
+      flex-direction: column;
+    }
     html.is-framed .corp-grid {
-      padding-bottom: 168px;
+      padding-bottom: 24px;
     }
     html.is-framed .corp-submit-bar {
-      bottom: calc(92px + env(safe-area-inset-bottom));
+      order: -1;
+      position: static;
+      margin: 0 0 12px;
     }
     html.is-framed .corp-orders {
       margin-bottom: 96px;

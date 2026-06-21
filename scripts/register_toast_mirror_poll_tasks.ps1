@@ -35,7 +35,8 @@ function Register-CenasMinuteTask {
         [string]$End
     )
 
-    schtasks.exe /Create /TN $TaskName /TR $Command /SC MINUTE /MO 5 /ST $Start /ET $End /F /RL LIMITED | Out-Null
+    $duration = Get-CenasDuration -Start $Start -End $End
+    schtasks.exe /Create /TN $TaskName /TR $Command /SC DAILY /ST $Start /RI 5 /DU $duration /F /RL LIMITED | Out-Null
 }
 
 function Register-CenasHourlyTask {
@@ -46,7 +47,23 @@ function Register-CenasHourlyTask {
         [string]$End
     )
 
-    schtasks.exe /Create /TN $TaskName /TR $Command /SC HOURLY /MO 1 /ST $Start /ET $End /F /RL LIMITED | Out-Null
+    $duration = Get-CenasDuration -Start $Start -End $End
+    schtasks.exe /Create /TN $TaskName /TR $Command /SC DAILY /ST $Start /RI 60 /DU $duration /F /RL LIMITED | Out-Null
+}
+
+function Get-CenasDuration {
+    param(
+        [string]$Start,
+        [string]$End
+    )
+
+    $startTime = [datetime]::ParseExact($Start, "HH:mm", $null)
+    $endTime = [datetime]::ParseExact($End, "HH:mm", $null)
+    if ($endTime -le $startTime) {
+        $endTime = $endTime.AddDays(1)
+    }
+    $span = $endTime - $startTime
+    return "{0:D2}:{1:D2}" -f [int]$span.TotalHours, $span.Minutes
 }
 
 $fastOutLog = Join-Path $logs "toast_mirror_fast_poll.out.log"

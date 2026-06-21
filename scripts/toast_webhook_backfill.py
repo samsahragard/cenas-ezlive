@@ -147,6 +147,9 @@ def backfill_orders(store: ToastWebhookStore, days: int, refresh: bool) -> dict[
         written = 0
         started_at = _utc_now()
         dates = business_dates_for_backfill(days)
+        date_window = sorted(dates)
+        scope_start = date_window[0] if date_window else None
+        scope_end = date_window[-1] if date_window else None
         try:
             for business_date in dates:
                 orders = client.fetch_orders_for_date(store_key, restaurant_guid, business_date, refresh=refresh)
@@ -181,7 +184,7 @@ def backfill_orders(store: ToastWebhookStore, days: int, refresh: bool) -> dict[
                 domain="order",
                 store_key=store_key,
                 key="last_business_date",
-                value=(dates[-1] if dates else None),
+                value=scope_end,
             )
             store.set_watermark(
                 domain="order",
@@ -192,8 +195,8 @@ def backfill_orders(store: ToastWebhookStore, days: int, refresh: bool) -> dict[
             store.record_pull_log(
                 domain="order",
                 store_key=store_key,
-                scope_start=(dates[0] if dates else None),
-                scope_end=(dates[-1] if dates else None),
+                scope_start=scope_start,
+                scope_end=scope_end,
                 started_at=started_at,
                 ok=True,
                 row_count=written,
@@ -203,8 +206,8 @@ def backfill_orders(store: ToastWebhookStore, days: int, refresh: bool) -> dict[
             store.record_pull_log(
                 domain="order",
                 store_key=store_key,
-                scope_start=(dates[0] if dates else None),
-                scope_end=(dates[-1] if dates else None),
+                scope_start=scope_start,
+                scope_end=scope_end,
                 started_at=started_at,
                 ok=False,
                 row_count=written,

@@ -7,6 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    try {
+      if (window.self !== window.top) document.documentElement.classList.add("is-framed");
+    } catch (err) {
+      document.documentElement.classList.add("is-framed");
+    }
+  </script>
   <style>
     :root {
       --bg: #171008;
@@ -46,6 +53,9 @@
       width: min(1120px, calc(100% - 28px));
       margin: 0 auto;
       padding: 18px 0 calc(72px + env(safe-area-inset-bottom));
+    }
+    html.is-framed .corp-shell {
+      padding-bottom: calc(128px + env(safe-area-inset-bottom));
     }
     .corp-topbar {
       display: flex;
@@ -162,7 +172,7 @@
       <div class="corp-userbar">
         {% if is_admin is defined %}
           <span class="corp-badge {{ '' if is_admin else 'store' }}">{{ g.store_label|default('Corporate') }}</span>
-          <a class="corp-toplink" href="{{ url_for('corporate_order_public.entry') }}">Switch</a>
+          <a class="corp-toplink" href="{{ url_for('corporate_order_public.entry', switch=1) }}">Switch</a>
           <a class="corp-toplink" href="{{ url_for('corporate_order.reports') }}">Reports</a>
           <form class="corp-logout" method="POST" action="{{ url_for('corporate_order_public.portal_logout') }}">
             <button type="submit">Logout</button>

@@ -140,6 +140,11 @@ def entry():
     target = (request.args.get("target") or "").strip().lower()
     if target not in ORDER_PORTAL_PROFILES:
         target = ""
+    if not target and request.args.get("switch") != "1":
+        active_slug = session.get("corporate_order_scope")
+        for scope, profile in ORDER_PORTAL_PROFILES.items():
+            if profile["store_slug"] == active_slug:
+                return redirect(_corp_order_url_for_scope(scope))
     return render_template(
         "corporate_order_entry.html",
         profiles=ORDER_PORTAL_PROFILES,

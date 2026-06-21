@@ -293,6 +293,12 @@ def test_corporate_order_public_pin_gate_opens_store_portal(dashboard_app, monke
     )
     assert ok.status_code == 302
     assert ok.headers["Location"].endswith("/dos/corporate-order")
+    repeat = client.get("/corporate-order", follow_redirects=False)
+    assert repeat.status_code == 302
+    assert repeat.headers["Location"].endswith("/dos/corporate-order")
+    switch = client.get("/corporate-order?switch=1")
+    assert switch.status_code == 200
+    assert "Corporate order login choices" in switch.get_data(as_text=True)
 
     page = client.get("/dos/corporate-order")
     html = page.get_data(as_text=True)

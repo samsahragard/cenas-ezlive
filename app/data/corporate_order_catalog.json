@@ -6,8 +6,8 @@
       "label": "Take-out & Catering"
     },
     {
-      "key": "clean",
-      "label": "Cleaning Supplies"
+      "key": "boh",
+      "label": "BOH"
     },
     {
       "key": "cups_lids",
@@ -24,10 +24,6 @@
     {
       "key": "foh",
       "label": "FOH"
-    },
-    {
-      "key": "spices",
-      "label": "Spices"
     },
     {
       "key": "corp",
@@ -268,8 +264,8 @@
     },
     {
       "name": "Bleach (6/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 15,
       "par_level": 5,
@@ -279,8 +275,8 @@
     },
     {
       "name": "Blue Windex Glass Cleaner (4/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 15,
       "par_level": 5,
@@ -290,8 +286,8 @@
     },
     {
       "name": "Brown Paper Towels (6/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 20,
       "par_level": 5,
@@ -301,8 +297,8 @@
     },
     {
       "name": "Degreasers (4/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 25,
       "par_level": 5,
@@ -312,8 +308,8 @@
     },
     {
       "name": "Extra Large Gloves (10/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 16,
       "par_level": 5,
@@ -323,8 +319,8 @@
     },
     {
       "name": "Fabuloso (Glamoroso) (4/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,
@@ -334,8 +330,8 @@
     },
     {
       "name": "Hairnet Cap (100 Pack)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 1,
       "par_level": 5,
@@ -345,8 +341,8 @@
     },
     {
       "name": "Medium Gloves (10/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 18,
       "par_level": 5,
@@ -356,8 +352,8 @@
     },
     {
       "name": "Pink Hand Soap (4 Gallon/Case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 16,
       "par_level": 5,
@@ -367,8 +363,8 @@
     },
     {
       "name": "Pots and Pans Dish Soap (4/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 24,
       "par_level": 5,
@@ -378,8 +374,8 @@
     },
     {
       "name": "Sanitizer Tablets Bottle (6 bottles/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 2,
       "par_level": 5,
@@ -389,8 +385,8 @@
     },
     {
       "name": "Scouring Pads (60/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 3,
       "par_level": 5,
@@ -400,8 +396,8 @@
     },
     {
       "name": "Toilet Paper Rolls (12/case)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 11,
       "par_level": 5,
@@ -411,8 +407,8 @@
     },
     {
       "name": "Urinal Screens Men's Bathroom (12/pack)",
-      "category": "Cleaning Supplies",
-      "category_key": "clean",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 3,
       "par_level": 5,
@@ -796,8 +792,8 @@
     },
     {
       "name": "Bar Chili Salt (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 1,
       "par_level": 5,
@@ -807,8 +803,8 @@
     },
     {
       "name": "Beef Fajita Spices (20/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 5,
       "par_level": 5,
@@ -818,8 +814,8 @@
     },
     {
       "name": "Black Pepper (5 Lb Box)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 4,
       "par_level": 5,
@@ -829,8 +825,8 @@
     },
     {
       "name": "Cancun Spices (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 3,
       "par_level": 5,
@@ -840,8 +836,8 @@
     },
     {
       "name": "Cayenne Pepper (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 4,
       "par_level": 5,
@@ -851,8 +847,8 @@
     },
     {
       "name": "Charro Spices (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 1,
       "par_level": 5,
@@ -862,8 +858,8 @@
     },
     {
       "name": "Chicken Fajita Spices (20/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 4,
       "par_level": 5,
@@ -873,8 +869,8 @@
     },
     {
       "name": "Chili Gravy Spices (20/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 5,
       "par_level": 5,
@@ -884,8 +880,8 @@
     },
     {
       "name": "Chili Powder (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 4,
       "par_level": 5,
@@ -895,8 +891,8 @@
     },
     {
       "name": "Cumin (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 10,
       "par_level": 5,
@@ -906,8 +902,8 @@
     },
     {
       "name": "Garlic Powder (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 36,
       "par_level": 5,
@@ -917,8 +913,8 @@
     },
     {
       "name": "Ranchera (20/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 2,
       "par_level": 5,
@@ -928,8 +924,8 @@
     },
     {
       "name": "Ribs Spices (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 2,
       "par_level": 5,
@@ -939,8 +935,8 @@
     },
     {
       "name": "Rice Spices (20/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 5,
       "par_level": 5,
@@ -950,8 +946,8 @@
     },
     {
       "name": "Taco Meat Spices (20/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 4,
       "par_level": 5,
@@ -961,8 +957,8 @@
     },
     {
       "name": "Veggie Season (5 Lb/bag)",
-      "category": "Spices",
-      "category_key": "spices",
+      "category": "BOH",
+      "category_key": "boh",
       "unit": "each",
       "in_stock": 500,
       "par_level": 5,

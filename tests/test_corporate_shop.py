@@ -82,6 +82,25 @@ def test_corporate_catalog_merges_office_and_uniforms():
     assert all(item["category"] not in legacy for item in seed["items"])
 
 
+def test_corporate_catalog_merges_cleaning_and_spices_into_boh():
+    seed = corporate_shop.load_catalog_seed()
+    legacy = {
+        "Cleaning Supplies",
+        "Spices",
+    }
+    category_labels = {row["label"] for row in seed["categories"]}
+    merged_items = [
+        item for item in seed["items"]
+        if item["category"] == "BOH"
+    ]
+
+    assert "BOH" in category_labels
+    assert category_labels.isdisjoint(legacy)
+    assert len(merged_items) == 30
+    assert {item["category_key"] for item in merged_items} == {"boh"}
+    assert all(item["category"] not in legacy for item in seed["items"])
+
+
 def test_list_orders_filters_store_before_limit(monkeypatch):
     engine = create_engine("sqlite:///:memory:", future=True)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)

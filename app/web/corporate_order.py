@@ -79,6 +79,7 @@ TAKEOUT_CATERING_CATEGORY = "Take-out & Catering"
 CUPS_LIDS_CATEGORY = "Cups & Lids"
 FOH_CATEGORY = "FOH"
 OFFICE_UNIFORMS_CATEGORY = "Office & Uniforms"
+BOH_CATEGORY = "BOH"
 LEGACY_CATEGORY_ALIASES = {
     "1-3 Compartment Containers": TAKEOUT_CATERING_CATEGORY,
     "Aluminum Foil Pans & Containers": TAKEOUT_CATERING_CATEGORY,
@@ -90,6 +91,8 @@ LEGACY_CATEGORY_ALIASES = {
     "Bar": FOH_CATEGORY,
     "Office": OFFICE_UNIFORMS_CATEGORY,
     "Uniforms": OFFICE_UNIFORMS_CATEGORY,
+    "Cleaning Supplies": BOH_CATEGORY,
+    "Spices": BOH_CATEGORY,
 }
 
 

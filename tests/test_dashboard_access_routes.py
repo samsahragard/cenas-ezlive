@@ -215,6 +215,8 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
     html = resp.get_data(as_text=True)
     assert "Bleach (6/case)" in html
     assert 'name="qty_42"' in html
+    assert "Departments" not in html
+    assert "corp-cat-pill" not in html
     assert 'class="corp-cat"' not in html
     assert "corporate_order_demo.html" not in html
 

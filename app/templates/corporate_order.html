@@ -18,77 +18,7 @@
 {% block head_extra %}
 <style>
   .corp-layout {
-    display: grid;
-    grid-template-columns: minmax(168px, 220px) minmax(0, 1fr);
-    gap: 16px;
-    align-items: start;
-  }
-  .corp-sidebar {
-    background: rgba(0, 0, 0, 0.32);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 8px;
-    padding: 8px;
-    position: sticky;
-    top: 12px;
-    max-height: calc(100vh - 24px);
-    overflow-y: auto;
-  }
-  .corp-sidebar-title {
-    margin: 0;
-    padding: 4px 8px 8px;
-    color: rgba(255, 255, 255, 0.56);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 1.1px;
-    text-transform: uppercase;
-  }
-  .corp-cat-pill {
     display: block;
-    margin: 1px 0;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    color: var(--text-2);
-    font-size: 13px;
-    line-height: 1.2;
-    text-decoration: none;
-  }
-  .corp-cat-pill:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: #fff;
-  }
-  .corp-cat-pill.is-active {
-    background: rgba(232, 122, 62, 0.18);
-    border-color: rgba(232, 122, 62, 0.45);
-    color: #fff;
-    font-weight: 700;
-  }
-  @media (max-width: 860px) {
-    .corp-layout {
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
-    .corp-sidebar {
-      position: static;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      max-height: none;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding: 8px;
-      scrollbar-width: none;
-    }
-    .corp-sidebar::-webkit-scrollbar { display: none; }
-    .corp-sidebar-title {
-      flex: 0 0 auto;
-      padding: 4px 8px;
-    }
-    .corp-cat-pill {
-      flex: 0 0 auto;
-      margin: 0;
-      white-space: nowrap;
-    }
   }
   .corp-main {
     min-width: 0;
@@ -455,7 +385,6 @@
     }
   }
   @media (max-width: 520px) {
-    .corp-sidebar-title { display: none; }
     .corp-grid { grid-template-columns: minmax(0, 1fr); }
     .corp-card { min-height: 164px; }
   }
@@ -513,16 +442,6 @@
 {% endif %}
 
 <div class="corp-layout">
-  <aside class="corp-sidebar" aria-label="Departments">
-    <h3 class="corp-sidebar-title">Departments</h3>
-    <a class="corp-cat-pill {% if not selected_category %}is-active{% endif %}"
-       href="{{ url_for('corporate_order.view') }}">All</a>
-    {% for c in categories %}
-      <a class="corp-cat-pill {% if selected_category == c %}is-active{% endif %}"
-         href="{{ url_for('corporate_order.view', category=c) }}">{{ c }}</a>
-    {% endfor %}
-  </aside>
-
   <div class="corp-main">
     <div class="corp-toolbar">
       <input class="corp-search" id="corpSearch" type="search" placeholder="Search catalog" autocomplete="off">

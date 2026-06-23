@@ -1297,6 +1297,7 @@ _MANAGER_PAGE_LABELS = {
     "close-of-day-audit":   "Close-of-day Audit",
     "recipe-page":          "Recipe Page",
     "attendance":           "Attendance Tracking",
+    "uniform":              "Uniform Tracking",
     "interview":            "Interview Surface",
     "training":             "Training Records",
     "maintenance":          "Maintenance Requests",
@@ -3113,6 +3114,161 @@ def _attendance_v3_post(db, store_scope, user):
     db.commit()
 
 
+_UNIFORM_ITEMS = (
+    ("hat", "Hat"),
+    ("kitchen_apron", "Kitchen Apron"),
+    ("waiter_apron", "Waiter Apron"),
+    ("shirt", "Shirt"),
+    ("chef_shirt", "Chef Shirt"),
+    ("hot_pad", "Hot Pad"),
+)
+_UNIFORM_ITEM_LABELS = dict(_UNIFORM_ITEMS)
+
+
+def _uniform_actor_name(user):
+    if user is not None:
+        return (
+            getattr(user, "full_name", None)
+            or getattr(user, "name", None)
+            or getattr(user, "email", None)
+            or getattr(user, "phone", None)
+        )
+    return session.get("employee_name") or session.get("user_name") or "Unknown"
+
+
+def _uniform_datetime_label(dt):
+    local = _central_dt(dt)
+    if not local:
+        return ""
+    return f"{local:%b} {local.day}, {local.year} {_attn_fmt(local)}"
+
+
+def _render_uniform_v1(db, label, active_key):
+    """Uniform Tracking - active roster with issue history per employee."""
+    from app.models import UniformIssue
+
+    loc = g.current_location
+
+    def _scoped(q):
+        if loc in ("tomball", "copperfield"):
+            return q.filter((UniformIssue.store_scope == loc) |
+                            (UniformIssue.store_scope.is_(None)))
+        return q
+
+    entries = _scoped(
+        db.query(UniformIssue)
+    ).order_by(UniformIssue.created_at.desc()).limit(2000).all()
+
+    history_by_name = {}
+    for issue in entries:
+        nm = (issue.employee_name or "").strip()
+        if nm:
+            history_by_name.setdefault(nm, []).append(issue)
+
+    today = _local_today()
+    toast_by_name = {}
+    uniform_notice = None
+    try:
+        from app.services.toast_reports import attendance_clock_status
+        tloc = loc if loc in ("tomball", "copperfield") else None
+        for rec in attendance_clock_status(today, location_filter=tloc):
+            toast_by_name.setdefault(rec["name"], rec)
+    except Exception as ex:
+        logging.getLogger(__name__).warning(
+            "uniform: Toast clock status unavailable: %s", ex)
+        uniform_notice = ("Live Toast clock data is unavailable right now "
+                          "- showing the active roster with Off badges.")
+
+    active = _active_manager_roster(db, loc)
+    role_by_name = {}
+    if active:
+        for emp in active:
+            name = emp.get("name")
+            toast_name = emp.get("toast_name")
+            if not name:
+                continue
+            if emp.get("role"):
+                role_by_name[name] = emp["role"]
+            if toast_name and toast_name != name:
+                if toast_name in toast_by_name:
+                    toast_by_name.setdefault(name, toast_by_name[toast_name])
+                if toast_name in history_by_name:
+                    history_by_name.setdefault(name, history_by_name[toast_name])
+        names = sorted({emp["name"] for emp in active if emp.get("name")},
+                       key=lambda n: n.lower())
+    else:
+        names = sorted(set(toast_by_name) | set(history_by_name),
+                       key=lambda n: n.lower())
+
+    rows = []
+    for rid, name in enumerate(names):
+        tz = toast_by_name.get(name)
+        toast_status = (tz.get("status") if tz else None) or "off"
+        on_clock = toast_status in ("clocked-in", "late", "break")
+        role = (role_by_name.get(name)
+                or (tz.get("job_title") if tz else None)
+                or "Team member")
+        records = []
+        for issue in history_by_name.get(name, [])[:80]:
+            records.append({
+                "id": issue.id,
+                "item_key": issue.item_key,
+                "item_label": issue.item_label,
+                "issued_at": _uniform_datetime_label(issue.created_at),
+                "manager_name": issue.manager_name or "Unknown",
+            })
+        rows.append({
+            "rid": rid,
+            "name": name,
+            "initials": _attn_initials(name),
+            "role": role,
+            "status": "clocked-in" if on_clock else "off",
+            "on_clock": on_clock,
+            "clock_in": _attn_fmt(tz.get("clock_in")) if tz else "",
+            "issue_count": len(records),
+            "records": records,
+        })
+
+    return render_template(
+        "uniform_tracking.html",
+        page_slug="uniform",
+        page_label=label,
+        rows=rows,
+        uniform_items=[{"key": key, "label": item_label}
+                       for key, item_label in _UNIFORM_ITEMS],
+        uniform_notice=uniform_notice,
+        active=active_key,
+    )
+
+
+def _uniform_v1_post(db, store_scope, user):
+    """POST on the Uniform page. Hidden form_action selects the op."""
+    from app.models import UniformIssue
+
+    action = (request.form.get("form_action") or "").strip()
+    if action != "issue_item":
+        return
+
+    name = (request.form.get("employee_name")
+            or request.form.get("name") or "").strip()[:120]
+    item_key = (request.form.get("item_key") or "").strip().lower()
+    if not name or item_key not in _UNIFORM_ITEM_LABELS:
+        return
+
+    role = (request.form.get("employee_role") or "").strip()[:80] or None
+    manager_name = (_uniform_actor_name(user) or "Unknown")[:120]
+    db.add(UniformIssue(
+        store_scope=store_scope,
+        employee_name=name,
+        employee_role=role,
+        item_key=item_key,
+        item_label=_UNIFORM_ITEM_LABELS[item_key],
+        author_id=(user.id if user else None),
+        manager_name=manager_name,
+    ))
+    db.commit()
+
+
 # ============================================================
 # Prep List v3 — kitchen's daily prep board (dck, Sam build).
 # Master PrepItem list left-joined to today's PrepEntry rows,
@@ -4180,6 +4336,7 @@ def _prep_list_v3_post(db, store_scope, user):
 _MANAGER_DASH_TABS = [
     ("log",         "Daily Log"),
     ("attendance",  "Attendance"),
+    ("uniform",     "Uniform"),
     ("counseling",  "Counseling"),
     ("incidents",   "Incidents"),
     ("interview",   "Interview"),
@@ -4196,7 +4353,7 @@ _MANAGER_DASH_GROUPS = [
         "key": "daily",
         "label": "Daily",
         "icon": "log",
-        "tabs": ("log", "attendance"),
+        "tabs": ("log", "attendance", "uniform"),
     },
     {
         "key": "hr",
@@ -4231,6 +4388,7 @@ def _manager_dash_full_url(tab_key):
       log         -> /<store>/manager/daily-log         (store.manager_page_list)
       incidents   -> /<store>/manager/incident-reports  (store.manager_page_list)
       attendance  -> /<store>/manager/attendance        (store.manager_page_list)
+      uniform     -> /<store>/manager/uniform           (store.manager_page_list)
       training    -> /<store>/manager/training          (store.manager_page_list)
       maintenance -> /<store>/manager/maintenance       (store.manager_page_list)
       counseling  -> /<store>/manager/counseling        (store.manager_page_list)
@@ -4245,6 +4403,8 @@ def _manager_dash_full_url(tab_key):
         return url_for("store.manager_page_list", page="incident-reports")
     if tab_key == "attendance":
         return url_for("store.manager_page_list", page="attendance")
+    if tab_key == "uniform":
+        return url_for("store.manager_page_list", page="uniform")
     if tab_key == "training":
         return url_for("store.manager_page_list", page="training")
     if tab_key == "maintenance":
@@ -4358,9 +4518,8 @@ def manager_page_list(page: str):
     manager_log.html template with rows newest first, store-scoped.
     Special-case: daily-log uses the v3 windowed day-grouped view
     (dck build-order #2 2026-05-19)."""
-    Model = _manager_model_for_slug(page)
     label = _MANAGER_PAGE_LABELS.get(page)
-    if Model is None or label is None:
+    if label is None:
         abort(404)
     if not _manager_dashboard_ok():
         abort(403)
@@ -4375,10 +4534,15 @@ def manager_page_list(page: str):
             return _render_employee_counseling_v3(db, label, active_key)
         if page == "attendance":
             return _render_attendance_v3(db, label, active_key)
+        if page == "uniform":
+            return _render_uniform_v1(db, label, active_key)
         if page == "maintenance":
             return _render_maintenance_v3(db, label, active_key)
         if page == "training":
             return _render_training_v3(db, label, active_key)
+        Model = _manager_model_for_slug(page)
+        if Model is None:
+            abort(404)
         q = db.query(Model)
         if g.current_location in ("tomball", "copperfield"):
             q = q.filter(
@@ -4402,12 +4566,16 @@ def manager_page_list(page: str):
 @store_bp.route("/manager/<page>/new", methods=["GET"])
 def manager_page_new(page: str):
     """Render the create form for a manager-section page."""
-    Model = _manager_model_for_slug(page)
     label = _MANAGER_PAGE_LABELS.get(page)
-    if Model is None or label is None:
+    if label is None:
         abort(404)
     if not _manager_dashboard_ok():
         abort(403)
+    if page == "uniform":
+        abort(404)
+    Model = _manager_model_for_slug(page)
+    if Model is None:
+        abort(404)
     active_key = "manager_" + page.replace("-", "_")
     if page == "incident-reports":
         db = next(get_db())
@@ -4429,8 +4597,8 @@ def manager_page_new(page: str):
 @store_bp.route("/manager/<page>", methods=["POST"])
 def manager_page_create(page: str):
     """Create a new entry on a manager-section page."""
-    Model = _manager_model_for_slug(page)
-    if Model is None:
+    label = _MANAGER_PAGE_LABELS.get(page)
+    if label is None:
         abort(404)
     if not _manager_dashboard_ok():
         abort(403)
@@ -4463,6 +4631,12 @@ def manager_page_create(page: str):
                 "store.manager_page_list", page=page,
                 date=(request.form.get("view_date")
                       or request.form.get("entry_date") or None)))
+        if page == "uniform":
+            _uniform_v1_post(db, store_scope, user)
+            return redirect(url_for("store.manager_page_list", page=page))
+        Model = _manager_model_for_slug(page)
+        if Model is None:
+            abort(404)
         row = Model(
             title=(request.form.get("title") or "").strip()[:300] or None,
             body=(request.form.get("body") or "").strip() or None,

@@ -2870,6 +2870,29 @@ class AttendanceEvent(Base):
     shift: Mapped["AttendanceShift"] = relationship(back_populates="events")
 
 
+class UniformIssue(Base):
+    """One uniform item issued to one employee, logged by a manager."""
+    __tablename__ = "manager_uniform_issue"
+    __table_args__ = (
+        Index("ix_uniform_issue_emp_store", "employee_name", "store_scope"),
+        Index("ix_uniform_issue_created", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    store_scope: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+
+    employee_name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    employee_role: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    item_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    item_label: Mapped[str] = mapped_column(String(80), nullable=False)
+
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    manager_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+
 # ============================================================
 # PREP LIST v3 — kitchen's daily prep board (Sam, dck build).
 # PrepItem = the stable master list (hot/cold/chop × item/sauce).

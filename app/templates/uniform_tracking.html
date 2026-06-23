@@ -1,0 +1,433 @@
+{# ============================================================
+   uniform_tracking.html - Uniform Tracking
+
+   ROUTE CONTRACT (store_routes.py _render_uniform_v1):
+     rows -> list[teammate], one entry per active employee:
+       rid, name, initials, role, status ('clocked-in'|'off'),
+       on_clock, clock_in, issue_count,
+       records -> list[{item_label, issued_at, manager_name}]
+     uniform_items -> list[{key,label}]
+     uniform_notice -> str or None
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'manager_uniform' %}
+
+{% block title %}Uniform Tracking - Cenas Kitchen{% endblock %}
+{% block page_module %}UNIFORM{% endblock %}
+{% block page_module_class %}mod-attendance{% endblock %}
+{% block page_title %}<span class="word-primary">Uniform</span> <span class="ck-accent">Tracker</span>{% endblock %}
+{% block page_subtitle %}{{ page_label }}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  .unf-page {
+    --red: #C73B36; --red-deep: #9B2A26; --red-bright: #E85852;
+    --gold: #E4B340; --gold-bright: #FFD970;
+    --teal: #2EA39F; --teal-bright: #5BCAC5;
+    --cream: #FAF6EC;
+    --cream-dim: rgba(250,246,236,0.82);
+    --cream-faint: rgba(250,246,236,0.52);
+    --cream-meta: rgba(250,246,236,0.40);
+    --bg-deep: #1a0d08; --bg-warm: #28160e;
+    --surface: #241409; --surface-2: #2e1a0d; --surface-hover: #34200f;
+    --border: rgba(217,164,54,0.18); --border-active: rgba(228,179,64,0.5);
+    --st-on: #5BCAC5; --st-off: rgba(250,246,236,0.45);
+    --radius: 12px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--cream);
+    background: #1f1308;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 20px 30px;
+    margin-bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 220px);
+  }
+  .unf-page * { box-sizing: border-box; }
+  .unf-note {
+    font-size: 12px; color: #E8A33C;
+    background: rgba(232,163,60,0.10);
+    border: 0.5px solid rgba(232,163,60,0.22);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+  }
+  .unf-roster { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; }
+  .unf-row {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 42px 1fr auto;
+    gap: 13px;
+    align-items: center;
+    transition: background .14s, border-color .14s;
+    border-left: 3px solid var(--rc, var(--st-off));
+  }
+  .unf-row:hover { background: var(--surface-hover); border-color: var(--border-active); }
+  .unf-row.r-on { --rc: var(--st-on); }
+  .unf-row.r-off { --rc: var(--st-off); }
+  .unf-av {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--bg-warm), var(--bg-deep));
+    border: 1px solid var(--border);
+    color: var(--gold-bright);
+    display: grid;
+    place-items: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .unf-who { min-width: 0; }
+  .unf-nm {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--cream);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .unf-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    background: rgba(228,179,64,0.16);
+    color: var(--gold-bright);
+    padding: 1px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+  }
+  .unf-role {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--cream-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+  }
+  .unf-meta {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .unf-pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .unf-pill.p-on { background: rgba(91,202,197,0.16); color: var(--st-on); }
+  .unf-pill.p-off { background: rgba(250,246,236,0.10); color: var(--st-off); }
+  .unf-times {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--cream-faint);
+  }
+  .unf-empty {
+    text-align: center;
+    padding: 44px 20px;
+    color: var(--cream-faint);
+    font-size: 14px;
+  }
+
+  .unf-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,4,2,0.66);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s;
+    z-index: 1400;
+  }
+  .unf-scrim.show { opacity: 1; pointer-events: auto; }
+  .unf-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 420px;
+    max-width: 92vw;
+    background: #2e1a0d;
+    border-left: 0.5px solid rgba(228,179,64,0.5);
+    z-index: 1410;
+    transform: translateX(102%);
+    transition: transform .22s ease;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -20px 0 50px rgba(0,0,0,0.5);
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: #FAF6EC;
+  }
+  .unf-panel.show { transform: translateX(0); }
+  .unf-panel .ph {
+    padding: 18px;
+    border-bottom: 0.5px solid rgba(217,164,54,0.18);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .unf-panel .ph .unf-av { width: 48px; height: 48px; font-size: 17px; }
+  .unf-panel .pnm { font-size: 17px; font-weight: 700; }
+  .unf-panel .prole {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(250,246,236,0.52);
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .unf-x {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.3);
+    border: 0.5px solid rgba(217,164,54,0.18);
+    color: rgba(250,246,236,0.82);
+    cursor: pointer;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .unf-panel .pb { padding: 16px 18px; overflow-y: auto; flex: 1; }
+  .unf-seclbl {
+    font-size: 9px;
+    font-weight: 700;
+    color: rgba(250,246,236,0.40);
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    margin: 14px 0 8px;
+  }
+  .unf-seclbl:first-child { margin-top: 0; }
+  .unf-info {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 13px;
+    padding: 6px 0;
+    border-bottom: 0.5px solid rgba(250,246,236,0.06);
+  }
+  .unf-info .k { color: rgba(250,246,236,0.52); }
+  .unf-info .v {
+    color: #FAF6EC;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    text-align: right;
+  }
+  .unf-itemgrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .unf-itembtn {
+    min-height: 44px;
+    padding: 11px 10px;
+    background: #241409;
+    border-radius: 9px;
+    border: 0.5px solid rgba(217,164,54,0.18);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .14s, background .14s, color .14s;
+    color: rgba(250,246,236,0.82);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .unf-itembtn:hover {
+    border-color: var(--gold-bright);
+    background: #34200f;
+    color: #FAF6EC;
+  }
+  .unf-tl { display: flex; flex-direction: column; gap: 7px; }
+  .unf-tlitem {
+    font-size: 12px;
+    padding: 9px 10px;
+    background: #241409;
+    border-radius: 8px;
+    border-left: 2px solid var(--gold);
+  }
+  .unf-tlitem .itm {
+    color: #FAF6EC;
+    font-weight: 800;
+    margin-bottom: 3px;
+  }
+  .unf-tlitem .meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(250,246,236,0.52);
+  }
+
+  @media (max-width: 720px) {
+    .unf-page { padding: 14px 13px 24px; }
+    .unf-row { grid-template-columns: 38px 1fr; }
+    .unf-meta {
+      grid-column: 1 / -1;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 8px;
+      margin-top: 4px;
+      border-top: 0.5px solid rgba(250,246,236,0.06);
+    }
+    .unf-av { width: 38px; height: 38px; }
+  }
+</style>
+
+<div class="unf-page" id="unfPage">
+  {% if uniform_notice %}<div class="unf-note">{{ uniform_notice }}</div>{% endif %}
+  <div class="unf-roster" id="unfRoster"></div>
+</div>
+
+<div class="unf-scrim" id="unfScrim"></div>
+<aside class="unf-panel" id="unfPanel">
+  <div class="ph">
+    <div class="unf-av" id="pAv">--</div>
+    <div><div class="pnm" id="pNm">--</div><div class="prole" id="pRole">--</div></div>
+    <button type="button" class="unf-x" id="pClose" style="margin-left:auto;">&times;</button>
+  </div>
+  <div class="pb">
+    <div class="unf-seclbl">Today</div>
+    <div class="unf-info"><span class="k">Status</span><span class="v" id="pStatus">--</span></div>
+    <div class="unf-info"><span class="k">Clock in</span><span class="v" id="pClock">--</span></div>
+    <div class="unf-seclbl">Issue uniform item</div>
+    <div class="unf-itemgrid" id="pItems"></div>
+    <div class="unf-seclbl">Uniform history</div>
+    <div class="unf-tl" id="pHistory"></div>
+  </div>
+</aside>
+
+<form method="POST" action="" id="unfIssueForm" style="display:none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+  <input type="hidden" name="form_action" value="issue_item">
+  <input type="hidden" name="employee_name" id="issueName">
+  <input type="hidden" name="employee_role" id="issueRole">
+  <input type="hidden" name="item_key" id="issueItemKey">
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+
+  var PEOPLE = {{ rows | tojson }};
+  var ITEMS = {{ uniform_items | tojson }};
+  var roster = document.getElementById("unfRoster");
+  var panel = document.getElementById("unfPanel");
+  var scrim = document.getElementById("unfScrim");
+  var selected = null;
+
+  function esc(t){
+    var d = document.createElement("div");
+    d.textContent = (t == null ? "" : t);
+    return d.innerHTML;
+  }
+  function isClockedIn(p){ return !!p.on_clock || p.status === "clocked-in"; }
+  function rosterSort(a, b){
+    var ga = isClockedIn(a) ? 0 : 1;
+    var gb = isClockedIn(b) ? 0 : 1;
+    if (ga !== gb) return ga - gb;
+    return (a.name || "").localeCompare((b.name || ""), undefined, {sensitivity: "base"});
+  }
+  function meta(p){
+    return isClockedIn(p)
+      ? {pill: "On the Clock", row: "r-on", pc: "p-on"}
+      : {pill: "Off", row: "r-off", pc: "p-off"};
+  }
+
+  function renderRoster(){
+    var list = PEOPLE.slice().sort(rosterSort);
+    if (!list.length){
+      roster.innerHTML = '<div class="unf-empty">No teammates found.</div>';
+      return;
+    }
+    roster.innerHTML = list.map(function(p){
+      var m = meta(p);
+      var t = isClockedIn(p) && p.clock_in ? "in " + esc(p.clock_in) : "";
+      var count = p.issue_count ? '<span class="unf-count">'+p.issue_count+' issued</span>' : "";
+      return '<div class="unf-row '+m.row+'" data-id="'+p.rid+'">'
+        + '<div class="unf-av">'+esc(p.initials)+'</div>'
+        + '<div class="unf-who"><div class="unf-nm">'+esc(p.name)+count+'</div>'
+        + '<div class="unf-role">'+esc(p.role)+'</div></div>'
+        + '<div class="unf-meta"><span class="unf-pill '+m.pc+'">'+m.pill+'</span>'
+        + '<span class="unf-times">'+t+'</span></div></div>';
+    }).join("");
+  }
+
+  function renderItems(){
+    document.getElementById("pItems").innerHTML = ITEMS.map(function(item){
+      return '<button type="button" class="unf-itembtn" data-item="'+esc(item.key)+'">'
+        + esc(item.label) + '</button>';
+    }).join("");
+  }
+
+  function renderHistory(p){
+    var records = p.records || [];
+    if (!records.length){
+      document.getElementById("pHistory").innerHTML =
+        '<div class="unf-tlitem"><div class="meta">No uniform items logged.</div></div>';
+      return;
+    }
+    document.getElementById("pHistory").innerHTML = records.map(function(r){
+      return '<div class="unf-tlitem">'
+        + '<div class="itm">'+esc(r.item_label)+'</div>'
+        + '<div class="meta">'+esc(r.issued_at)+' &middot; '+esc(r.manager_name)+'</div>'
+        + '</div>';
+    }).join("");
+  }
+
+  function openPanel(p){
+    if (!p) return;
+    selected = p;
+    document.getElementById("pAv").textContent = p.initials;
+    document.getElementById("pNm").textContent = p.name;
+    document.getElementById("pRole").textContent = p.role;
+    document.getElementById("pStatus").textContent = meta(p).pill;
+    document.getElementById("pClock").textContent =
+      isClockedIn(p) && p.clock_in ? p.clock_in : "Off";
+    renderItems();
+    renderHistory(p);
+    scrim.classList.add("show");
+    panel.classList.add("show");
+  }
+  function closePanel(){
+    scrim.classList.remove("show");
+    panel.classList.remove("show");
+  }
+
+  roster.addEventListener("click", function(e){
+    var row = e.target.closest(".unf-row");
+    if (!row) return;
+    openPanel(PEOPLE.filter(function(p){ return p.rid === +row.dataset.id; })[0]);
+  });
+  document.getElementById("pClose").addEventListener("click", closePanel);
+  scrim.addEventListener("click", closePanel);
+  document.getElementById("pItems").addEventListener("click", function(e){
+    var btn = e.target.closest(".unf-itembtn");
+    if (!btn || !selected) return;
+    document.getElementById("issueName").value = selected.name;
+    document.getElementById("issueRole").value = selected.role || "";
+    document.getElementById("issueItemKey").value = btn.dataset.item || "";
+    btn.disabled = true;
+    document.getElementById("unfIssueForm").submit();
+  });
+
+  renderRoster();
+})();
+</script>
+{% endblock %}

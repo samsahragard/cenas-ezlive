@@ -516,7 +516,10 @@
   }
   @media (max-width: 560px) {
     .prep-page { padding: 14px; }
-    .prep-kpi-strip { grid-template-columns: 1fr; }
+    .prep-kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .prep-kpi-box { min-height: 84px; padding: 10px 9px; }
+    .prep-kpi-label { font-size: 8px; letter-spacing: 0.08em; }
+    .prep-kpi-value { font-size: 26px; }
     .prep-inline-panel { padding: 12px 10px 16px; }
     .prep-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .prep-status-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
@@ -687,17 +690,14 @@
     <div class="prep-kpi-box assigned">
       <div class="prep-kpi-label">Assigned</div>
       <div class="prep-kpi-value">{{ kpis.assigned }}</div>
-      <div class="prep-kpi-sub">{{ kpis.unassigned }} unassigned</div>
     </div>
     <div class="prep-kpi-box progress">
       <div class="prep-kpi-label">In progress</div>
       <div class="prep-kpi-value">{{ kpis.in_progress }}</div>
-      <div class="prep-kpi-sub">on the line</div>
     </div>
     <div class="prep-kpi-box done">
       <div class="prep-kpi-label">Completed</div>
       <div class="prep-kpi-value">{{ kpis.done }}</div>
-      <div class="prep-kpi-sub">of {{ kpis.selected }}</div>
     </div>
   </div>
 

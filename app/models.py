@@ -2956,6 +2956,31 @@ class PrepAuditLog(Base):
     details_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class PrepTeamMember(Base):
+    """Saved prep roster for the Kitchen Prep Team tab.
+
+    Assignments already store names, so the roster is name-based too. The
+    active employee table remains the source of available names.
+    """
+    __tablename__ = "kitchen_prep_team_member"
+    __table_args__ = (
+        UniqueConstraint("store_scope", "name",
+                         name="uq_kitchen_prep_team_member_scope_name"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    store_scope: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="both", index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False)
+
+
 # ============================================================
 # INTERVIEW TRACKER — candidate hiring pipeline (Sam #5:48, dck
 # render + aick build). NEW feature, not the older text-shell

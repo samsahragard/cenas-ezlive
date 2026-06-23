@@ -1303,12 +1303,12 @@ def create_app():
         from app.db import engine as _eng_pl, SessionLocal as _SL_pl
         from app.models import (
             Base as _Base_pl, PrepItem as _PI_pl, PrepEntry as _PE_pl,
-            PrepAuditLog as _PAL_pl,
+            PrepAuditLog as _PAL_pl, PrepTeamMember as _PTM_pl,
         )
         if _eng_pl is not None:
             insp_pl = _sa_insp_pl(_eng_pl)
             existing = set(insp_pl.get_table_names())
-            to_create = [m.__table__ for m in (_PI_pl, _PE_pl, _PAL_pl)
+            to_create = [m.__table__ for m in (_PI_pl, _PE_pl, _PAL_pl, _PTM_pl)
                          if m.__tablename__ not in existing]
             if to_create:
                 _Base_pl.metadata.create_all(bind=_eng_pl, tables=to_create)

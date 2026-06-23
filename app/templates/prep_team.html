@@ -1,0 +1,322 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'kitchen_prep_team' %}
+
+{% block title %}Prep Team - Cenas Kitchen{% endblock %}
+{% block page_module %}PREP{% endblock %}
+{% block page_module_class %}mod-prep{% endblock %}
+{% block page_title %}<span class="word-primary">Prep</span> <span class="ck-accent">Team</span>{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+  .pt-page {
+    --pt-red: #C73B36;
+    --pt-gold: #E4B340;
+    --pt-gold-bright: #FFD970;
+    --pt-teal: #2EA39F;
+    --pt-cream: #FAF6EC;
+    --pt-cream-dim: rgba(250,246,236,0.68);
+    --pt-cream-faint: rgba(250,246,236,0.42);
+    --pt-bg-deep: #1a0d08;
+    --pt-bg-card: rgba(40,22,14,0.72);
+    --pt-bg-input: rgba(0,0,0,0.28);
+    --pt-border-subtle: rgba(217,164,54,0.18);
+    --pt-border-active: rgba(228,179,64,0.56);
+    color: var(--pt-cream);
+    font-family: 'Manrope', system-ui, sans-serif;
+    background: linear-gradient(180deg, #1a0d08 0%, #0d0604 100%);
+    border: 0.5px solid var(--pt-border-subtle);
+    border-radius: 16px;
+    padding: 20px;
+    margin: 0 0 48px;
+    min-height: max(620px, calc(var(--ck-page-available-height, 100vh) - 60px));
+  }
+  .pt-page *, .pt-page *::before, .pt-page *::after { box-sizing: border-box; }
+  .pt-page button, .pt-page input { font-family: inherit; }
+  .pt-form { display: grid; gap: 14px; }
+  .pt-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    background: var(--pt-bg-card);
+    border: 0.5px solid var(--pt-border-subtle);
+    border-radius: 12px;
+  }
+  .pt-heading { flex: 1; min-width: 0; }
+  .pt-kicker, .pt-meta, .pt-search-label, .pt-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .pt-kicker { color: var(--pt-gold-bright); margin-bottom: 4px; }
+  .pt-title {
+    color: var(--pt-cream);
+    font-family: 'Instrument Serif', serif;
+    font-size: 34px;
+    font-style: italic;
+    line-height: 1;
+  }
+  .pt-meta { color: var(--pt-cream-faint); margin-top: 6px; }
+  .pt-save {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 18px;
+    color: var(--pt-bg-deep);
+    background: linear-gradient(135deg, var(--pt-gold), var(--pt-gold-bright));
+    border: 0.5px solid var(--pt-gold);
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .pt-save:hover { filter: brightness(1.06); }
+  .pt-alert {
+    color: var(--pt-gold-bright);
+    background: rgba(228,179,64,0.12);
+    border: 0.5px solid var(--pt-border-active);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .pt-toolbar {
+    display: flex;
+    align-items: end;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .pt-search {
+    flex: 1 1 260px;
+    display: grid;
+    gap: 6px;
+  }
+  .pt-search-label { color: var(--pt-gold); font-weight: 900; }
+  .pt-search-input {
+    width: 100%;
+    min-height: 42px;
+    color: var(--pt-cream);
+    background: var(--pt-bg-input);
+    border: 0.5px solid var(--pt-border-subtle);
+    border-radius: 10px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+  .pt-search-input:focus {
+    outline: none;
+    border-color: var(--pt-gold);
+  }
+  .pt-count {
+    color: var(--pt-cream-faint);
+    padding: 12px 0;
+  }
+  .pt-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 8px;
+  }
+  .pt-card {
+    min-height: 58px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    color: var(--pt-cream-dim);
+    background: var(--pt-bg-card);
+    border: 0.5px solid var(--pt-border-subtle);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .pt-card:hover {
+    color: var(--pt-cream);
+    border-color: var(--pt-border-active);
+  }
+  .pt-card.selected {
+    color: var(--pt-cream);
+    background: rgba(46,163,159,0.13);
+    border-color: rgba(91,202,197,0.58);
+  }
+  .pt-card input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .pt-check {
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 18px;
+    border: 1px solid var(--pt-border-active);
+    border-radius: 4px;
+    background: var(--pt-bg-input);
+  }
+  .pt-card.selected .pt-check {
+    color: #0d0604;
+    background: var(--pt-teal);
+    border-color: var(--pt-teal);
+  }
+  .pt-card.selected .pt-check::after {
+    content: '';
+    width: 8px;
+    height: 5px;
+    border-left: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg) translateY(-1px);
+  }
+  .pt-avatar {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 32px;
+    color: var(--pt-gold-bright);
+    background: rgba(228,179,64,0.1);
+    border: 0.5px solid var(--pt-border-subtle);
+    border-radius: 50%;
+    font-family: 'Instrument Serif', serif;
+    font-weight: 800;
+  }
+  .pt-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+  .pt-empty {
+    grid-column: 1 / -1;
+    color: var(--pt-cream-faint);
+    background: var(--pt-bg-card);
+    border: 0.5px solid var(--pt-border-subtle);
+    border-radius: 10px;
+    padding: 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .pt-footer {
+    position: sticky;
+    bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    background: rgba(26,13,8,0.92);
+    border: 0.5px solid var(--pt-border-subtle);
+    border-radius: 12px;
+    box-shadow: 0 -10px 22px rgba(0,0,0,0.22);
+  }
+  @media (max-width: 640px) {
+    .pt-page { padding: 14px; border-radius: 12px; }
+    .pt-header { align-items: stretch; flex-direction: column; }
+    .pt-save { width: 100%; }
+    .pt-title { font-size: 30px; }
+    .pt-grid { grid-template-columns: 1fr; }
+    .pt-footer { flex-direction: column; align-items: stretch; }
+  }
+</style>
+
+<div class="pt-page">
+  <form class="pt-form" method="POST" action="{{ url_for('store.kitchen_prep_team', store_slug=store_slug) }}" data-prep-team-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+
+    <section class="pt-header">
+      <div class="pt-heading">
+        <div class="pt-kicker">{{ store_label }} - {{ scope_label }}</div>
+        <div class="pt-title">Prep Team</div>
+        <div class="pt-meta"><span data-selected-count>{{ selected_count }}</span> selected</div>
+      </div>
+      <button class="pt-save" type="submit">Save team</button>
+    </section>
+
+    {% if saved %}
+    <div class="pt-alert">Prep team saved.</div>
+    {% endif %}
+
+    <section class="pt-toolbar">
+      <label class="pt-search">
+        <span class="pt-search-label">Search staff</span>
+        <input class="pt-search-input" type="search" autocomplete="off" placeholder="Name" data-prep-team-search>
+      </label>
+      <div class="pt-count">{{ staff|length }} staff</div>
+    </section>
+
+    <section class="pt-grid" data-prep-team-grid>
+      {% for person in staff %}
+      <label class="pt-card{{ ' selected' if person.selected else '' }}"
+             data-member-card
+             data-name="{{ person.name|lower|e }}">
+        <input type="checkbox"
+               name="prep_team"
+               value="{{ person.name }}"
+               {{ 'checked' if person.selected else '' }}>
+        <span class="pt-check" aria-hidden="true"></span>
+        <span class="pt-avatar">{{ person.initials }}</span>
+        <span class="pt-name">{{ person.name }}</span>
+      </label>
+      {% else %}
+      <div class="pt-empty">No active staff found.</div>
+      {% endfor %}
+    </section>
+
+    <section class="pt-footer">
+      <div class="pt-meta"><span data-selected-count>{{ selected_count }}</span> selected</div>
+      <button class="pt-save" type="submit">Save team</button>
+    </section>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  var form = document.querySelector('[data-prep-team-form]');
+  if (!form) return;
+  var search = form.querySelector('[data-prep-team-search]');
+  var cards = Array.prototype.slice.call(form.querySelectorAll('[data-member-card]'));
+  var counts = Array.prototype.slice.call(form.querySelectorAll('[data-selected-count]'));
+
+  function syncCount() {
+    var selected = cards.filter(function (card) {
+      var input = card.querySelector('input[type="checkbox"]');
+      return input && input.checked;
+    }).length;
+    counts.forEach(function (node) { node.textContent = String(selected); });
+  }
+
+  cards.forEach(function (card) {
+    var input = card.querySelector('input[type="checkbox"]');
+    if (!input) return;
+    input.addEventListener('change', function () {
+      card.classList.toggle('selected', input.checked);
+      syncCount();
+    });
+  });
+
+  if (search) {
+    search.addEventListener('input', function () {
+      var q = (search.value || '').trim().toLowerCase();
+      cards.forEach(function (card) {
+        var name = card.getAttribute('data-name') || '';
+        card.style.display = !q || name.indexOf(q) !== -1 ? '' : 'none';
+      });
+    });
+  }
+
+  syncCount();
+})();
+</script>
+{% endblock %}

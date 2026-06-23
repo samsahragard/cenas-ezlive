@@ -385,7 +385,7 @@
        moved off the Operations tab (below) so they light Kitchen, not Ops. #}
     {% if has_dashboard_access('dash.kitchen', store_slug) %}
     <a href="/{{ store_slug }}/kitchen"
-       class="ck-bnav-tab ck-bnav-kitchen-tab{% if _bn_active in ['kitchen_dashboard', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes'] %} active{% endif %}">
+       class="ck-bnav-tab ck-bnav-kitchen-tab{% if _bn_active in ['kitchen_dashboard', 'kitchen_fresh_food', 'kitchen_prep_list', 'kitchen_recipes', 'kitchen_prep_team'] %} active{% endif %}">
       <i class="ti ti-tools-kitchen-2 bn-ico" aria-hidden="true"></i>
       <span class="bn-lbl">Kitchen</span>
     </a>

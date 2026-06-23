@@ -3452,6 +3452,85 @@ def _prep_total_ingredients(sel_views):
     return out
 
 
+def _prep_roster_scope() -> str:
+    loc = getattr(g, "current_location", None)
+    return loc if loc in ("tomball", "copperfield") else "both"
+
+
+def _prep_active_staff_names(db) -> list[str]:
+    try:
+        from app.models import Employee
+        rows = (
+            db.query(Employee.full_name)
+            .filter(Employee.active.is_(True))
+            .order_by(Employee.full_name.asc())
+            .all()
+        )
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "prep active staff lookup failed (non-fatal)")
+        return []
+
+    names = []
+    seen = set()
+    for (raw_name,) in rows:
+        name = (raw_name or "").strip()
+        key = name.lower()
+        if not name or key in seen:
+            continue
+        names.append(name)
+        seen.add(key)
+    return names
+
+
+def _prep_selected_team_names(db) -> list[str]:
+    try:
+        from app.models import PrepTeamMember
+        rows = (
+            db.query(PrepTeamMember.name)
+            .filter(
+                PrepTeamMember.store_scope == _prep_roster_scope(),
+                PrepTeamMember.active.is_(True),
+            )
+            .order_by(PrepTeamMember.sort_order.asc(),
+                      PrepTeamMember.name.asc())
+            .all()
+        )
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "prep team roster lookup failed (non-fatal)")
+        return []
+
+    names = []
+    seen = set()
+    for (raw_name,) in rows:
+        name = (raw_name or "").strip()
+        key = name.lower()
+        if not name or key in seen:
+            continue
+        names.append(name)
+        seen.add(key)
+    return names
+
+
+def _prep_clean_selected_names(raw_names, available_names) -> list[str]:
+    available = {
+        (name or "").strip().lower(): (name or "").strip()
+        for name in available_names
+        if (name or "").strip()
+    }
+    selected = []
+    seen = set()
+    for raw in raw_names or []:
+        key = (raw or "").strip().lower()
+        name = available.get(key)
+        if not name or key in seen:
+            continue
+        selected.append(name)
+        seen.add(key)
+    return selected
+
+
 def _render_prep_list_v3(db, label, active_key):
     """Prep List v3 board. ?date=<iso> picks the day (default today)."""
     from app.models import PrepItem, PrepEntry, PrepAuditLog
@@ -3488,18 +3567,12 @@ def _render_prep_list_v3(db, label, active_key):
 
     # Auto-link prep items to recipes by name (samai #9b).
     recipe_by_name = _prep_recipe_name_map(db)
-    # Full active-staff names for the assignee typeahead (#6) — names only,
-    # no phone/email/ids (roster-privacy rule).
-    all_staff = []
-    try:
-        from app.models import Employee
-        all_staff = [
-            n for (n,) in db.query(Employee.full_name)
-            .filter(Employee.active.is_(True))
-            .order_by(Employee.full_name.asc()).all() if n
-        ]
-    except Exception:
-        all_staff = []
+    # Prep Team roster names only, no phone/email/ids (roster-privacy rule).
+    # Until a manager saves a Prep Team, keep the old all-active-staff fallback
+    # so the board stays usable.
+    full_staff = _prep_active_staff_names(db)
+    prep_team_staff = _prep_selected_team_names(db)
+    all_staff = prep_team_staff or full_staff
 
     _legacy_status = {"done": "completed", "in-progress": "partly"}
 
@@ -3622,6 +3695,19 @@ def _render_prep_list_v3(db, label, active_key):
         logging.getLogger(__name__).exception(
             "prep scheduled team rows failed (non-fatal)")
         team_map = {}
+
+    if prep_team_staff:
+        for name in prep_team_staff:
+            assigned = assignment_map.get(name, {})
+            team_map.setdefault(name, {
+                "name": name,
+                "initials": _prep_initials(name),
+                "done": assigned.get("done", 0),
+                "in_progress": assigned.get("in_progress", 0),
+                "assigned": assigned.get("assigned", 0),
+                "shift_labels": ["Prep team"],
+                "position": "Prep Team",
+            })
 
     team = []
     for row in team_map.values():
@@ -5431,6 +5517,7 @@ _KITCHEN_PAGE_LABELS = {
     "fresh-food":  "Fresh Food",
     "prep-list":   "Prep List",
     "recipes":     "Recipes",
+    "prep-team":   "Prep Team",
 }
 
 
@@ -5468,6 +5555,59 @@ def kitchen_prep_list_post():
     if open_item and tab == "board":
         redirect_args["open"] = open_item
     return redirect(url_for("store.kitchen_prep_list", **redirect_args))
+
+
+@store_bp.route("/kitchen/prep-team", methods=["GET", "POST"])
+def kitchen_prep_team():
+    """Kitchen Prep Team roster. Saved names drive Prep List assignment menus."""
+    require_dashboard_access("dash.kitchen")
+    db = next(get_db())
+    try:
+        from app.models import PrepTeamMember
+
+        staff_names = _prep_active_staff_names(db)
+        scope = _prep_roster_scope()
+
+        if request.method == "POST":
+            selected = _prep_clean_selected_names(
+                request.form.getlist("prep_team"), staff_names)
+            (
+                db.query(PrepTeamMember)
+                .filter(PrepTeamMember.store_scope == scope)
+                .delete(synchronize_session=False)
+            )
+            for idx, name in enumerate(selected):
+                db.add(PrepTeamMember(
+                    store_scope=scope,
+                    name=name,
+                    sort_order=idx,
+                    active=True,
+                ))
+            db.commit()
+            return redirect(url_for("store.kitchen_prep_team", saved="1"))
+
+        selected_names = set(_prep_selected_team_names(db))
+        staff_rows = [
+            {
+                "name": name,
+                "initials": _prep_initials(name),
+                "selected": name in selected_names,
+            }
+            for name in staff_names
+        ]
+        return render_template(
+            "prep_team.html",
+            active="kitchen_prep_team",
+            page_label="Prep Team",
+            store_label=g.store_label or "Cenas Kitchen",
+            store_slug=g.current_store,
+            scope_label="Both stores" if scope == "both" else scope.title(),
+            staff=staff_rows,
+            selected_count=sum(1 for row in staff_rows if row["selected"]),
+            saved=(request.args.get("saved") == "1"),
+        )
+    finally:
+        db.close()
 
 
 @store_bp.route("/kitchen/<page>", methods=["GET"])
@@ -6314,6 +6454,7 @@ _KITCHEN_DASH_TABS = [
     ("fresh-food", "Fresh Food", False),
     ("prep-list",  "Prep List",  False),
     ("recipes",    "Recipes",    False),
+    ("prep-team",  "Prep Team",  False),
 ]
 
 
@@ -6322,6 +6463,7 @@ def _kitchen_dash_full_url(tab_key):
       fresh-food → /<store>/fresh-food/place-order
       prep-list  → /<store>/kitchen/prep-list
       recipes    → /<store>/recipes
+      prep-team  → /<store>/kitchen/prep-team
     Falls back to '' on an unknown key."""
     if tab_key == "fresh-food":
         return url_for("store.fresh_food_place_order")
@@ -6329,6 +6471,8 @@ def _kitchen_dash_full_url(tab_key):
         return url_for("store.kitchen_prep_list")
     if tab_key == "recipes":
         return url_for("store.recipes_index")
+    if tab_key == "prep-team":
+        return url_for("store.kitchen_prep_team")
     return ""
 
 

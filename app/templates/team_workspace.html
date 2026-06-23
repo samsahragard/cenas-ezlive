@@ -39,7 +39,18 @@
   .tws *, .tws *::before, .tws *::after { box-sizing: border-box; }
   .tws h1, .tws h2, .tws h3, .tws p { margin: 0; }
 
+  .tws-stickybar {
+    position: sticky; top: 0; z-index: 35; flex: 0 0 auto;
+    margin: -18px -18px 14px; padding: 16px 18px 10px;
+    border-radius: 18px 18px 0 0;
+    border-bottom: 1px solid var(--tws-border);
+    background:
+      linear-gradient(180deg, rgba(30,15,8,.98), rgba(26,13,8,.96)),
+      radial-gradient(ellipse 90% 70% at 20% 0%, rgba(199,59,54,.12), transparent);
+    box-shadow: 0 10px 24px rgba(0,0,0,.38);
+  }
   .tws-head { margin-bottom: 14px; }
+  .tws-stickybar .tws-head { margin-bottom: 12px; }
   .tws-title { font-family: 'Instrument Serif', serif; font-size: 30px; line-height: 1.05; color: var(--tws-cream); }
   .tws-sub { font-size: 13px; color: var(--tws-cream-dim); margin-top: 4px; }
 
@@ -54,6 +65,9 @@
   .tws-tab:hover { color: #FAF6EC; }
   .tws-tab.active { color: #FAF6EC; border-color: var(--tws-gold-bright); background: transparent; }
   .tws-tab .ti { font-size: 16px; }
+  .tws-stickybar .tws-tabs { margin: 0 0 16px; }
+  .tws-team-controls { display: none; }
+  .tws.team-active .tws-team-controls { display: block; }
 
   .tws-panel { display: none; }
   .tws-panel.active { display: block; }
@@ -106,7 +120,7 @@
   #tws-pos-btn { cursor: pointer; text-align: left; white-space: nowrap; }
   #tws-pos-btn::after { content: "\25BE"; margin-left: 8px; opacity: .6; font-size: 11px; }
   .tws-pos-pop {
-    position: absolute; top: calc(100% + 4px); right: 0; z-index: 40;
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 80;
     min-width: 200px; max-height: 300px; overflow-y: auto;
     background: var(--tws-card); border: 1px solid var(--tws-border);
     border-radius: var(--tws-radius-sm); padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
@@ -130,6 +144,10 @@
   .tws-store-tab.active { color: var(--tws-gold-bright); border-bottom-color: var(--tws-gold-bright); }
   .tws-store-tab-meta { font-size: 11px; font-weight: 700; color: var(--tws-cream-meta); background: var(--tws-border-soft); border-radius: 999px; padding: 1px 8px; }
   .tws-store-tab.active .tws-store-tab-meta { color: var(--tws-gold-bright); background: rgba(228,179,64,.12); }
+  .tws-team-storemeta {
+    min-height: 18px; padding: 0 2px 2px; color: var(--tws-cream-meta);
+    font-size: 11.5px; border-bottom: 1px solid var(--tws-border-soft);
+  }
   /* Section label inside the per-store position picker (Management / Tipped-Hourly). */
   .tws-assign-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tws-cream-meta); margin: 8px 0 4px; }
   .tws-store-name { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--tws-gold); }
@@ -331,22 +349,41 @@
   }
 </style>
 
-<div class="tws" id="tws-root"
+<div class="tws team-active" id="tws-root"
      data-roster-url="/{{ store_slug }}/schedules-v2/team-roster"
      data-schedule-url="/{{ store_slug }}/schedules-v2/?embed=1">
 
-  <div class="tws-head">
-    <h1 class="tws-title">Team Roster</h1>
-  </div>
+  <div class="tws-stickybar" id="tws-stickybar">
+    <div class="tws-head">
+      <h1 class="tws-title">Team Roster</h1>
+    </div>
 
-  {# sub-tabs: real anchors (?sub=KEY) so it works without JS; JS swaps in place #}
-  <div class="tws-tabs" role="tablist">
-    <a class="tws-tab active" href="?sub=team"     data-sub="team"     role="tab"><i class="ti ti-users"></i>Team</a>
-    <a class="tws-tab"        href="?sub=schedule" data-sub="schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
-    <a class="tws-tab"        href="?sub=market"   data-sub="market"   role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
-    <a class="tws-tab"        href="?sub=link"     data-sub="link"     role="tab"><i class="ti ti-link"></i>Link</a>
-    <a class="tws-tab"        href="?sub=schedule-reports" data-sub="schedule-reports" role="tab"><i class="ti ti-report-analytics"></i>Schedule Reports</a>
-    <a class="tws-tab"        href="?sub=settings" data-sub="settings" role="tab"><i class="ti ti-settings"></i>Settings</a>
+    {# sub-tabs: real anchors (?sub=KEY) so it works without JS; JS swaps in place #}
+    <div class="tws-tabs" role="tablist">
+      <a class="tws-tab active" href="?sub=team"     data-sub="team"     role="tab"><i class="ti ti-users"></i>Team</a>
+      <a class="tws-tab"        href="?sub=schedule" data-sub="schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
+      <a class="tws-tab"        href="?sub=market"   data-sub="market"   role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
+      <a class="tws-tab"        href="?sub=link"     data-sub="link"     role="tab"><i class="ti ti-link"></i>Link</a>
+      <a class="tws-tab"        href="?sub=schedule-reports" data-sub="schedule-reports" role="tab"><i class="ti ti-report-analytics"></i>Schedule Reports</a>
+      <a class="tws-tab"        href="?sub=settings" data-sub="settings" role="tab"><i class="ti ti-settings"></i>Settings</a>
+    </div>
+
+    <div class="tws-team-controls" id="tws-team-controls">
+      <div class="tws-filterbar">
+        <div class="tws-pills" id="tws-pills">
+          <button class="tws-pill active" data-filter="all">All<span class="ct" data-ct="all">--</span></button>
+          <button class="tws-pill" data-filter="boh">BOH<span class="ct" data-ct="boh">--</span></button>
+          <button class="tws-pill" data-filter="foh">FOH<span class="ct" data-ct="foh">--</span></button>
+        </div>
+        <div class="tws-posfilter" id="tws-pos-wrap">
+          <button type="button" class="tws-select" id="tws-pos-btn" aria-haspopup="true" aria-expanded="false" aria-label="Filter by position">All positions</button>
+          <div class="tws-pos-pop hidden" id="tws-pos-pop" role="group" aria-label="Filter by position"></div>
+        </div>
+        <label class="tws-chk"><input type="checkbox" id="tws-inactive"> Include inactive</label>
+      </div>
+      <div id="tws-team-storetabs"></div>
+      <div class="tws-team-storemeta" id="tws-team-storemeta"></div>
+    </div>
   </div>
 
   {# ---- TEAM panel (the new roster; binds to aick's contract) ----
@@ -357,19 +394,6 @@
      Hourly). The pill/position/inactive filters stay global (apply to both
      blocks). #}
   <div class="tws-panel active" id="tws-panel-team" data-sub-panel="team" role="tabpanel">
-    <div class="tws-filterbar">
-      <div class="tws-pills" id="tws-pills">
-        <button class="tws-pill active" data-filter="all">All<span class="ct" data-ct="all">--</span></button>
-        <button class="tws-pill" data-filter="boh">BOH<span class="ct" data-ct="boh">--</span></button>
-        <button class="tws-pill" data-filter="foh">FOH<span class="ct" data-ct="foh">--</span></button>
-      </div>
-      <div class="tws-posfilter" id="tws-pos-wrap">
-        <button type="button" class="tws-select" id="tws-pos-btn" aria-haspopup="true" aria-expanded="false" aria-label="Filter by position">All positions</button>
-        <div class="tws-pos-pop hidden" id="tws-pos-pop" role="group" aria-label="Filter by position"></div>
-      </div>
-      <label class="tws-chk"><input type="checkbox" id="tws-inactive"> Include inactive</label>
-    </div>
-
     <div id="tws-roster"><div class="tws-empty">Loading roster...</div></div>
   </div>
 
@@ -665,6 +689,7 @@
   function show(sub) {
     tabs.forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-sub") === sub); });
     panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-sub-panel") === sub); });
+    root.classList.toggle("team-active", sub === "team");
     if (sub === "schedule") loadSchedFrame(activeSub2);   // load the active Schedule sub-tab's iframe(s)
     else if (sub === "market") loadMarketFrames();        // S7: both stores' marketplace iframes
     else if (sub === "link") loadLink();             // Sam #2629
@@ -729,8 +754,10 @@
   /* ---------------- Team roster: fetch + render against the contract ---------------- */
   // position is the MULTI-SELECT filter (Sam #2585): an ARRAY of selected
   // canonical names; empty array = "All positions" (no filter).
-  var state = { filter: "all", location: "all", position: [], include_inactive: false, board: null, activeStore: "" };
+  var state = { filter: "all", location: "all", position: [], include_inactive: false, board: null, activeStore: "", storeMeta: {} };
   var elRoster = document.getElementById("tws-roster");
+  var elStoreTabs = document.getElementById("tws-team-storetabs");
+  var elStoreMeta = document.getElementById("tws-team-storemeta");
 
   // Placeholder matching aick's #2296 shape, so the FE renders before ckai's
   // endpoint is live (aick: "placeholder data fine"). Swapped for the live fetch.
@@ -831,10 +858,13 @@
     // only the active store's panel is shown.
     var stores = b.stores || [];
     var tabsHtml = '<div class="tws-store-tabs" role="tablist">';
+    var metaByStore = {};
     stores.forEach(function (s) {
+      var totalShown = (s.shown != null) ? s.shown : (s.employees || []).length;
+      metaByStore[s.store_key] = { shown: totalShown, active: (s.active != null ? s.active : "") };
       tabsHtml += '<button class="tws-store-tab" type="button" role="tab" data-store-tab="' + esc(s.store_key) + '">' +
                   esc(s.label) + '<span class="tws-store-tab-meta">' +
-                  ((s.shown != null) ? s.shown : (s.employees || []).length) + '</span></button>';
+                  totalShown + '</span></button>';
     });
     tabsHtml += '</div>';
     var panelsHtml = "";
@@ -842,39 +872,49 @@
       var emps = s.employees || [];
       var mgmt = s.management || emps.filter(function (e) { return e.section === "management"; });
       var hrly = s.hourly || emps.filter(function (e) { return e.section === "hourly"; });
-      var totalShown = (s.shown != null) ? s.shown : emps.length;
-      panelsHtml += '<div class="tws-store" data-store-panel="' + esc(s.store_key) + '">' +
-              '<div class="tws-store-head"><span class="tws-store-meta">' + totalShown +
-              ' shown &middot; ' + (s.active != null ? s.active : "") + ' active</span></div>';
+      panelsHtml += '<div class="tws-store" data-store-panel="' + esc(s.store_key) + '">';
       panelsHtml += renderSection(s.store_key, "Management", "management", mgmt);
       panelsHtml += renderSection(s.store_key, "Tipped / Hourly", "hourly", hrly);
       panelsHtml += '</div>';
     });
-    elRoster.innerHTML = stores.length ? (tabsHtml + panelsHtml) : '<div class="tws-empty">No team members match these filters.</div>';
+    state.storeMeta = metaByStore;
+    if (elStoreTabs) elStoreTabs.innerHTML = stores.length ? tabsHtml : "";
+    elRoster.innerHTML = stores.length ? panelsHtml : '<div class="tws-empty">No team members match these filters.</div>';
     // Keep the previously-active store if it still exists, else default to the first.
     var keys = stores.map(function (s) { return s.store_key; });
     if (keys.indexOf(state.activeStore) === -1) state.activeStore = keys[0] || "";
     setActiveStore(state.activeStore);
   }
 
+  function renderActiveStoreMeta() {
+    if (!elStoreMeta) return;
+    var meta = state.storeMeta && state.storeMeta[state.activeStore];
+    elStoreMeta.innerHTML = meta
+      ? '<span class="tws-store-meta">' + esc(meta.shown) + ' shown &middot; ' + esc(meta.active) + ' active</span>'
+      : "";
+  }
+
   // Show one store's panel (and mark its tab active); hide the others.
   function setActiveStore(key) {
     state.activeStore = key;
-    elRoster.querySelectorAll("[data-store-tab]").forEach(function (t) {
+    if (elStoreTabs) elStoreTabs.querySelectorAll("[data-store-tab]").forEach(function (t) {
       t.classList.toggle("active", t.getAttribute("data-store-tab") === key);
     });
     elRoster.querySelectorAll("[data-store-panel]").forEach(function (p) {
       p.style.display = (p.getAttribute("data-store-panel") === key) ? "" : "none";
     });
+    renderActiveStoreMeta();
   }
 
   // Delegated: clicking a store tab switches which store's panel is shown.
-  elRoster.addEventListener("click", function (ev) {
-    var tab = ev.target.closest("[data-store-tab]");
-    if (!tab) return;
-    ev.stopPropagation();
-    setActiveStore(tab.getAttribute("data-store-tab"));
-  });
+  if (elStoreTabs) {
+    elStoreTabs.addEventListener("click", function (ev) {
+      var tab = ev.target.closest("[data-store-tab]");
+      if (!tab) return;
+      ev.stopPropagation();
+      setActiveStore(tab.getAttribute("data-store-tab"));
+    });
+  }
 
   function load() {
     // Multi-select position: send the selected NAMES joined by commas; empty
@@ -893,6 +933,8 @@
         if (/^(127\.0\.0\.1|localhost|0\.0\.0\.0)$/.test(location.hostname)) {
           renderBoard(PLACEHOLDER);
         } else if (elRoster) {
+          if (elStoreTabs) elStoreTabs.innerHTML = "";
+          if (elStoreMeta) elStoreMeta.innerHTML = "";
           elRoster.innerHTML = '<div class="tws-empty">Couldn\'t load the team roster right now -- pull to refresh, or try again in a moment.</div>';
         }
       });

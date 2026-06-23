@@ -93,6 +93,41 @@ def test_schedule_controls_and_bulk_actions_are_inside_stickybar():
     assert "function updateStickyOffset()" in template
 
 
+def test_team_roster_controls_are_inside_stickybar():
+    template = _read("team_workspace.html")
+
+    sticky = template[
+        template.index('<div class="tws-stickybar"'):
+        template.index("{# ---- TEAM panel")
+    ]
+    team_panel = template[
+        template.index('<div class="tws-panel active" id="tws-panel-team"'):
+        template.index("{# ---- SCHEDULE panel")
+    ]
+
+    assert 'id="tws-stickybar"' in sticky
+    assert "Team Roster" in sticky
+    assert 'data-sub="team"' in sticky
+    assert 'data-sub="schedule"' in sticky
+    assert 'data-sub="market"' in sticky
+    assert 'data-sub="link"' in sticky
+    assert 'data-sub="schedule-reports"' in sticky
+    assert 'data-sub="settings"' in sticky
+    assert 'id="tws-pills"' in sticky
+    assert 'id="tws-pos-btn"' in sticky
+    assert 'id="tws-inactive"' in sticky
+    assert 'id="tws-team-storetabs"' in sticky
+    assert 'id="tws-team-storemeta"' in sticky
+    assert 'id="tws-roster"' in team_panel
+    assert 'id="tws-pos-btn"' not in team_panel
+    assert 'id="tws-team-storetabs"' not in team_panel
+    assert "position: sticky; top: 0;" in template
+    assert 'root.classList.toggle("team-active", sub === "team");' in template
+    assert "function renderActiveStoreMeta()" in template
+    assert "var elStoreTabs = document.getElementById(\"tws-team-storetabs\");" in template
+    assert "state.storeMeta = metaByStore;" in template
+
+
 def test_schedule_template_has_view_options_for_empty_unpublished_hours_and_conflicts():
     template = _read("schedules_v2_week.html")
 

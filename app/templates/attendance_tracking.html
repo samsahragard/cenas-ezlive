@@ -482,16 +482,23 @@
   };
   function meta(s){ return ST[s] || ST["scheduled"]; }
   function esc(t){ var d=document.createElement("div"); d.textContent=(t==null?"":t); return d.innerHTML; }
+  function isClockedIn(p){ return !!p.on_clock || p.status === "clocked-in"; }
+  function rosterMeta(p){ return isClockedIn(p) ? ST["clocked-in"] : ST["off"]; }
+  function rosterSort(a, b){
+    var ga = isClockedIn(a) ? 0 : 1;
+    var gb = isClockedIn(b) ? 0 : 1;
+    if (ga !== gb) return ga - gb;
+    return (a.name || "").localeCompare((b.name || ""), undefined, {sensitivity: "base"});
+  }
 
   var roster = document.getElementById("atrRoster");
 
   function renderRoster(){
-    var list = PEOPLE;
+    var list = PEOPLE.slice().sort(rosterSort);
     if (!list.length){ roster.innerHTML = '<div class="atr-empty">No teammates found.</div>'; return; }
     roster.innerHTML = list.map(function(p){
-      var m = meta(p.status);
-      var t = p.sched || "";
-      if (p.clock_in) t += (t?"  &middot; ":"") + "in " + esc(p.clock_in);
+      var m = rosterMeta(p);
+      var t = isClockedIn(p) && p.clock_in ? "in " + esc(p.clock_in) : "";
       return '<div class="atr-row '+m.rc+'" data-id="'+p.rid+'">'
         + '<div class="atr-av">'+esc(p.initials)+'</div>'
         + '<div class="atr-who"><div class="atr-nm">'+esc(p.name)

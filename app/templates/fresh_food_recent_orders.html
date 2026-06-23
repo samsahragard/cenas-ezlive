@@ -430,6 +430,16 @@
     text-align: right;
     font-family: inherit;
   }
+  table.ffro-fulfill input.qty.is-changed {
+    background: rgba(229,107,107,0.18);
+    border-color: #E56B6B;
+    color: #FFECEC;
+  }
+  table.ffro-fulfill input.qty.is-changed:focus {
+    outline: none;
+    background: rgba(229,107,107,0.26);
+    border-color: #FFB0B0;
+  }
 
   /* ===== Mobile collapsed-row + animated dropdown (Sam #1:37, dck spec
      #1:53). Active orders + history rows on phone: date · time + order
@@ -830,6 +840,32 @@
   var ffSubmit = document.getElementById('ffro-ff-submit');
   var currentOrderId = null;
 
+  function formatQtyValue(v){
+    if(v == null) return '';
+    var n = parseFloat(v);
+    return isNaN(n) ? '' : String(v);
+  }
+
+  function syncSentQtyState(input){
+    var expectedRaw = input.getAttribute('data-expected');
+    if(expectedRaw === ''){
+      input.classList.remove('is-changed');
+      return;
+    }
+    var expected = parseFloat(expectedRaw);
+    var raw = input.value.trim();
+    var current = parseFloat(raw);
+    var changed = raw === '' || isNaN(current) || Math.abs(current - expected) > 0.0001;
+    input.classList.toggle('is-changed', changed);
+  }
+
+  function bindSentQtyState(){
+    ffLines.querySelectorAll('input.qty').forEach(function(input){
+      syncSentQtyState(input);
+      input.addEventListener('input', function(){ syncSentQtyState(input); });
+    });
+  }
+
   function openFulfill(oid){
     currentOrderId = oid;
     ffIdEl.textContent = '#' + oid;
@@ -840,15 +876,18 @@
     var html = '';
     for(var i=0; i<lines.length; i++){
       var ln = lines[i];
+      var expectedQty = (ln.or_qty != null) ? ln.or_qty : null;
+      var sentQty = (ln.sent_qty != null) ? ln.sent_qty : expectedQty;
       html += '<tr>';
       html += '<td>' + (ln.item_slug || '').replace(/-/g, ' ').replace(/\b\w/g, function(c){return c.toUpperCase();}) + '</td>';
       html += '<td>' + (ln.inv_qty != null ? ln.inv_qty : '—') + '</td>';
       html += '<td>' + (ln.or_qty  != null ? ln.or_qty  : '—') + '</td>';
-      html += '<td><input type="number" step="0.1" min="0" class="qty" data-line-id="' + ln.id + '" value="' + (ln.sent_qty != null ? ln.sent_qty : '') + '"></td>';
+      html += '<td><input type="number" step="0.1" min="0" class="qty" data-line-id="' + ln.id + '" data-expected="' + formatQtyValue(expectedQty) + '" value="' + formatQtyValue(sentQty) + '"></td>';
       html += '</tr>';
     }
     if(!html) html = '<tr><td colspan="4" style="color:rgba(255,255,255,0.40);text-align:center;padding:14px;">No line items found for this order.</td></tr>';
     ffLines.innerHTML = html;
+    bindSentQtyState();
     ffBg.classList.add('is-open');
   }
 

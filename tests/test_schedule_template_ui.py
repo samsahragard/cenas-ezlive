@@ -191,6 +191,19 @@ def test_market_iframe_skips_auto_height_feedback_loop():
     assert "#tws-panel-market, #tws-panel-market .tws-store-shell, #tws-panel-market .tws-embed-wrap { max-width: 100%; overflow-x: hidden; }" in template
 
 
+def test_team_workspace_market_panel_omits_repeated_store_headings():
+    template = _read("team_workspace.html")
+
+    market_panel = template[
+        template.index('<div class="tws-panel" id="tws-panel-market"'):
+        template.index("{# ---- LINK panel")
+    ]
+
+    assert 'data-embed-frame="market-uno"' in market_panel
+    assert 'data-embed-frame="market-dos"' in market_panel
+    assert "tws-sched-storehead" not in market_panel
+
+
 def test_schedule_iframes_skip_body_scrollheight_feedback_loop():
     template = _read("team_workspace.html")
 

@@ -27,15 +27,6 @@
     box-shadow:0 14px 40px rgba(0,0,0,.35);
   }
   .sv2-mk *{box-sizing:border-box}
-  .sv2-mk .mk-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}
-  .sv2-mk .mk-stat{background:linear-gradient(180deg,var(--mk-panel2),var(--mk-panel));border:1px solid var(--mk-line-soft);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden;min-height:78px}
-  .sv2-mk .mk-stat:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--mk-gold)}
-  .sv2-mk .mk-stat.warn:before{background:var(--mk-amber)}
-  .sv2-mk .mk-stat.go:before{background:var(--mk-green)}
-  .sv2-mk .mk-stat.no:before{background:var(--mk-red)}
-  .sv2-mk .mk-stat .n{font-family:'Instrument Serif',Georgia,serif;font-size:28px;font-weight:800;line-height:1;color:var(--mk-cream)}
-  .sv2-mk .mk-stat .l{font-size:10.5px;letter-spacing:.12em;color:var(--mk-muted);text-transform:uppercase;margin-top:8px;font-weight:700}
-
   .sv2-mk .mk-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
   .sv2-mk .mk-chip{background:#15100a;border:1px solid var(--mk-line-soft);color:var(--mk-muted);font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;display:inline-flex;align-items:center;gap:7px}
   .sv2-mk .mk-chip.active{background:var(--mk-gold);color:#1a1006;border-color:var(--mk-gold)}
@@ -94,7 +85,6 @@
   @media (max-width: 780px){
     .sv2-mk{padding:16px}
     .sv2-mk,.sv2-mk .mk-surface,.sv2-mk .mk-pad{max-width:100%;overflow-x:clip}
-    .sv2-mk .mk-stats{grid-template-columns:1fr 1fr}
     .sv2-mk .mk-chips{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;max-width:100%;padding-bottom:4px;margin-right:0;scrollbar-width:none}
     .sv2-mk .mk-chips::-webkit-scrollbar{display:none}
     .sv2-mk .mk-chip{flex:0 0 auto}
@@ -119,10 +109,6 @@
   }
   @media (max-width: 430px){
     .sv2-mk{padding:12px;border-radius:10px;box-shadow:none}
-    .sv2-mk .mk-stats{gap:8px;margin-bottom:12px}
-    .sv2-mk .mk-stat{min-height:82px;padding:12px 11px}
-    .sv2-mk .mk-stat .n{font-size:26px}
-    .sv2-mk .mk-stat .l{font-size:10px;line-height:1.35;letter-spacing:.1em}
     .sv2-mk .mk-filters{grid-template-columns:1fr}
     .sv2-mk .mk-surface{border-radius:10px}
   }
@@ -135,7 +121,6 @@
     <div class="sub2" style="margin-top:6px;color:var(--mk-muted)">You can only review marketplace activity for your own store.</div>
   </div>
   <div id="mk-body" hidden>
-    <div class="mk-stats" id="mk-stats"></div>
     <div class="mk-chips" id="mk-chips"></div>
     <div class="mk-filters" id="mk-filters"></div>
     <div id="mk-content"></div>
@@ -204,13 +189,6 @@
       history: O.length + S.length,
       ledger: O.filter(function(o){return o.incentive;}).length
     };
-  }
-  function renderStats(){
-    var c=counts();
-    $("mk-stats").innerHTML = [
-      ["warn",c.pending,"Pending Approval"],["",c.available,"Available Shifts"],["",c.swapsOpen,"Swap Requests"],
-      ["warn",c.moneyPending,"Money Offers Pending"],["go",c.approved,"Approved This Week"],["no",c.denied,"Denied This Week"]
-    ].map(function(x){ return '<div class="mk-stat '+x[0]+'"><div class="n">'+x[1]+'</div><div class="l">'+x[2]+'</div></div>'; }).join("");
   }
   function renderChips(){
     var c=counts();
@@ -329,7 +307,7 @@
     }
     $("mk-content").innerHTML = html;
   }
-  function render(){ renderStats(); renderChips(); renderFilters(); renderContent(); }
+  function render(){ renderChips(); renderFilters(); renderContent(); }
   function toast(msg,isErr){ var t=$("mk-toast"); t.textContent=msg; t.classList.toggle("err",!!isErr); t.classList.add("show"); clearTimeout(toast._timer); toast._timer=setTimeout(function(){t.classList.remove("show");},3400); }
   function review(kind, id, act, row){
     if(state.busy) return; state.busy=true;

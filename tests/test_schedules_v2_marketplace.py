@@ -161,6 +161,15 @@ def test_marketplace_has_mobile_card_table_layout():
     assert "@media (max-width: 430px)" in template
 
 
+def test_manager_marketplace_omits_summary_stat_cards():
+    template = open("app/templates/schedules_v2_marketplace.html", encoding="utf-8").read()
+
+    assert 'id="mk-stats"' not in template
+    assert "mk-stat" not in template
+    assert "function renderStats()" not in template
+    assert "function render(){ renderChips(); renderFilters(); renderContent(); }" in template
+
+
 def test_offer_eligibility_requires_active_linked_store_and_position(db_session):
     db = db_session
     server = Position(name="Server", store_key=None)

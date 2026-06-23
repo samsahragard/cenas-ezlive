@@ -80,7 +80,7 @@
   }
   .prep-kpi-strip {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
     margin-bottom: 16px;
   }
@@ -683,23 +683,7 @@
 {% endmacro %}
 
 <div class="prep-page">
-  <div class="prep-topstrip">
-    <span class="prep-store-badge">{{ store_slug|upper }}{% if (store_label|upper) != (store_slug|upper) %} - {{ store_label|upper }}{% endif %}</span>
-    <span class="prep-spacer"></span>
-    <span class="prep-runner"><span class="dot"></span>Prep board open</span>
-  </div>
-
   <div class="prep-kpi-strip">
-    <div class="prep-kpi-box total">
-      <div class="prep-kpi-label">Total items</div>
-      <div class="prep-kpi-value">{{ kpis.total }}</div>
-      <div class="prep-kpi-sub">in master list</div>
-    </div>
-    <div class="prep-kpi-box selected">
-      <div class="prep-kpi-label">Selected today</div>
-      <div class="prep-kpi-value">{{ kpis.selected }}</div>
-      <div class="prep-kpi-sub">need prep</div>
-    </div>
     <div class="prep-kpi-box assigned">
       <div class="prep-kpi-label">Assigned</div>
       <div class="prep-kpi-value">{{ kpis.assigned }}</div>
@@ -718,15 +702,6 @@
   </div>
 
   <div class="prep-control-bar">
-    <form class="prep-ctrl-form" method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
-      <input type="hidden" name="form_action" value="copy_yesterday">
-      <input type="hidden" name="view_date" value="{{ selected_date }}">
-      <input type="hidden" name="active_tab" value="{{ active_prep_tab }}">
-      <button class="prep-ctrl-btn primary" type="submit" {{ 'disabled' if locked else '' }}>
-        {{ prep_icon('copy') }} Copy yesterday's prep
-      </button>
-    </form>
     <div class="prep-date-nav">
       <a class="prep-date-nav-btn" href="?date={{ prev_date }}&tab={{ active_prep_tab }}" aria-label="Previous day">{{ prep_icon('chev-l') }}</a>
       <div class="prep-date-display">

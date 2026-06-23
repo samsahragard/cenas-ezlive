@@ -273,28 +273,6 @@
     font-weight: 700;
   }
 
-  /* === Big Add Entry button — under today === */
-  .mdl-page .add-today-btn {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
-    border: 0.5px solid var(--ck-red-bright);
-    border-radius: var(--radius-md);
-    color: var(--ck-cream);
-    cursor: pointer;
-    font-family: 'Manrope', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    box-shadow: 0 4px 14px rgba(199, 59, 54, 0.3);
-    letter-spacing: 0.03em;
-  }
-
-  .mdl-page .add-today-btn svg { width: 18px; height: 18px; fill: currentColor; }
-
   /* === DAYS LIST === */
   .mdl-page .label {
     font-family: 'JetBrains Mono', monospace;
@@ -873,31 +851,6 @@
 
   .mdl-page .form-submit svg { width: 14px; height: 14px; fill: currentColor; }
 
-  /* Add-entry FAB (also on day detail) */
-  .mdl-page .fab {
-    position: fixed;
-    bottom: 80px;
-    right: 16px;
-    height: 52px;
-    padding: 0 22px 0 18px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, var(--ck-red), var(--ck-red-deep));
-    border: 0.5px solid var(--ck-red-bright);
-    color: var(--ck-cream);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    box-shadow: 0 6px 18px rgba(199, 59, 54, 0.45);
-    z-index: 50;
-    font-family: 'Manrope', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-  }
-
-  .mdl-page .fab svg { width: 20px; height: 20px; fill: currentColor; }
-
   /* Toast */
   .mdl-page .toast {
     position: fixed;
@@ -925,11 +878,6 @@
 
   .mdl-page .hidden { display: none !important; }
 
-  /* Desktop polish — the .frame stays a centered 440px column inside
-     base_dashboard's wider .main; nudge the FAB in from the edge. */
-  @media (min-width: 901px) {
-    .mdl-page .fab { right: calc(50% - 220px + 8px); }
-  }
 </style>
 
 <div class="mdl-page">
@@ -954,16 +902,8 @@
           {% if latest.local_created %}{{ latest.local_created.strftime('%I:%M %p') }} · {% endif %}
           <strong>{% if latest.author and latest.author.full_name %}{{ latest.author.full_name }}{% else %}Unknown{% endif %}</strong>
         </div>
-        {% else %}
-        <div class="today-latest muted">No entries logged for this day yet — tap to add the first.</div>
         {% endif %}
       </div>
-
-      {# BIG ADD ENTRY BUTTON, right under today #}
-      <button class="add-today-btn" onclick="openNewEntry('{{ today.iso }}')">
-        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
-        Add entry for today
-      </button>
     </div>
 
     {# Recent days — days[1:] #}
@@ -1137,13 +1077,6 @@
   </div>
 
 
-  {# FAB visible on dashboard + day detail #}
-  <button class="fab" id="fab" onclick="fabClick()">
-    <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
-    New entry
-  </button>
-
-
   {# Toast #}
   <div class="toast" id="toast">
     <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -1169,10 +1102,15 @@
   var currentDate = null;
   var currentContext = 'dashboard'; // 'dashboard' | 'newEntry'
 
+  function setFabHidden(hidden) {
+    var fab = document.getElementById('fab');
+    if (fab) fab.classList.toggle('hidden', hidden);
+  }
+
   function showDashboard() {
     document.getElementById('dashboardView').classList.remove('hidden');
     document.getElementById('newEntryView').classList.add('hidden');
-    document.getElementById('fab').classList.remove('hidden');
+    setFabHidden(false);
     currentContext = 'dashboard';
     window.scrollTo({ top: 0 });
   }
@@ -1208,7 +1146,7 @@
 
     document.getElementById('dashboardView').classList.add('hidden');
     document.getElementById('newEntryView').classList.remove('hidden');
-    document.getElementById('fab').classList.add('hidden');
+    setFabHidden(true);
     currentContext = 'newEntry';
     window.scrollTo({ top: 0 });
     setTimeout(function() { document.getElementById('entryText').focus(); }, 100);

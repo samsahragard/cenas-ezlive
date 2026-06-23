@@ -105,9 +105,19 @@
   .sv2-sched h1, .sv2-sched h2, .sv2-sched h3, .sv2-sched p { margin: 0; }
 
   /* ---- controls bar ---- */
+  .sv2-stickybar {
+    position: sticky; top: 0; z-index: 35;
+    margin: -18px -18px 14px; padding: 14px 18px 10px;
+    border-radius: var(--sk-radius-lg) var(--sk-radius-lg) 0 0;
+    border-bottom: 1px solid var(--sk-border-subtle);
+    background:
+      linear-gradient(180deg, rgba(30,15,8,.98), rgba(26,13,8,.96)),
+      radial-gradient(ellipse 90% 70% at 20% 0%, rgba(199,59,54,.14), transparent);
+    box-shadow: 0 10px 24px rgba(0,0,0,.38);
+  }
   .sv2-controls {
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
-    margin-bottom: 16px;
+    margin-bottom: 0;
   }
   .sv2-weeknav { display: flex; align-items: center; gap: 8px; }
   .sv2-arrow {
@@ -153,7 +163,7 @@
   #sv2-posfilter-btn, #sv2-tagfilter-btn, #sv2-viewfilter-btn { cursor: pointer; text-align: left; }
   #sv2-posfilter-btn::after, #sv2-tagfilter-btn::after, #sv2-viewfilter-btn::after { content: "\25BE"; margin-left: 8px; opacity: .6; font-size: 11px; }
   .sv2-posfilter-pop {
-    position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 80;
     min-width: 200px; max-height: 300px; overflow-y: auto;
     background: var(--sk-bg-card); border: 1px solid var(--sk-border-subtle);
     border-radius: var(--sk-radius-sm); padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
@@ -214,7 +224,7 @@
     vertical-align: top;
   }
   .sv2-grid thead th {
-    position: sticky; top: 0; z-index: 3;
+    position: sticky; top: var(--sv2-sticky-offset, 0px); z-index: 3;
     background: #241309; padding: 9px 8px; text-align: center;
     font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--sk-cream-dim);
     font-weight: 600;
@@ -328,6 +338,11 @@
     margin: 0 0 8px; padding: 8px 12px; border-radius: 10px;
     background: linear-gradient(180deg, rgba(40,22,14,.98), rgba(28,16,9,.98));
     border: 1px solid rgba(228,179,64,.45); box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  }
+  .sv2-stickybar .sv2-seltoolbar,
+  .sv2-stickybar .sv2-copypanel,
+  .sv2-stickybar .sv2-editpanel {
+    position: relative; top: auto; z-index: 1; margin: 10px 0 0;
   }
   .sv2-seltoolbar.sv2-hidden { display: none; }
   .sv2-selcount { font-size: 12.5px; font-weight: 800; color: var(--sk-cream); }
@@ -465,67 +480,42 @@
 <div class="sv2-sched">
 
   <!-- controls -->
-  <div class="sv2-controls">
-    <div class="sv2-weeknav">
-      <button class="sv2-arrow" id="sv2-prev" title="Previous week" aria-label="Previous week">&lsaquo;</button>
-      <div class="sv2-weeklabel"><small>Week of</small><span id="sv2-weeklabel">&hellip;</span></div>
-      <button class="sv2-arrow" id="sv2-next" title="Next week" aria-label="Next week">&rsaquo;</button>
-    </div>
-    <button class="sv2-btn warn sv2-hidden" id="sv2-declined" title="Show only declined shifts that need reassigning" aria-pressed="false"></button>
-    <div class="sv2-posfilter" id="sv2-posfilter-wrap">
-      <button type="button" class="sv2-filter" id="sv2-posfilter-btn" aria-haspopup="true" aria-expanded="false">All positions</button>
-      <div class="sv2-posfilter-pop sv2-hidden" id="sv2-posfilter-pop" role="group" aria-label="Filter by position"></div>
-    </div>
-    <div class="sv2-tagfilter" id="sv2-tagfilter-wrap">
-      <button type="button" class="sv2-filter" id="sv2-tagfilter-btn" aria-haspopup="true" aria-expanded="false">All tags</button>
-      <div class="sv2-posfilter-pop sv2-hidden" id="sv2-tagfilter-pop" role="group" aria-label="Filter by tag"></div>
-    </div>
-    <div class="sv2-viewfilter" id="sv2-viewfilter-wrap">
-      <button type="button" class="sv2-filter" id="sv2-viewfilter-btn" aria-haspopup="true" aria-expanded="false">View options</button>
-      <div class="sv2-posfilter-pop sv2-hidden" id="sv2-viewfilter-pop" role="group" aria-label="Schedule view options">
-        <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="emptyRows" checked> Empty rows</label>
-        <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="unpublished" checked> Unpublished shifts</label>
-        <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="hours" checked> Count of hours</label>
-        <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="conflicts" checked> Conflicts</label>
+  <div class="sv2-stickybar" id="sv2-stickybar">
+    <div class="sv2-controls">
+      <div class="sv2-weeknav">
+        <button class="sv2-arrow" id="sv2-prev" title="Previous week" aria-label="Previous week">&lsaquo;</button>
+        <div class="sv2-weeklabel"><small>Week of</small><span id="sv2-weeklabel">&hellip;</span></div>
+        <button class="sv2-arrow" id="sv2-next" title="Next week" aria-label="Next week">&rsaquo;</button>
       </div>
+      <button class="sv2-btn warn sv2-hidden" id="sv2-declined" title="Show only declined shifts that need reassigning" aria-pressed="false"></button>
+      <div class="sv2-posfilter" id="sv2-posfilter-wrap">
+        <button type="button" class="sv2-filter" id="sv2-posfilter-btn" aria-haspopup="true" aria-expanded="false">All positions</button>
+        <div class="sv2-posfilter-pop sv2-hidden" id="sv2-posfilter-pop" role="group" aria-label="Filter by position"></div>
+      </div>
+      <div class="sv2-tagfilter" id="sv2-tagfilter-wrap">
+        <button type="button" class="sv2-filter" id="sv2-tagfilter-btn" aria-haspopup="true" aria-expanded="false">All tags</button>
+        <div class="sv2-posfilter-pop sv2-hidden" id="sv2-tagfilter-pop" role="group" aria-label="Filter by tag"></div>
+      </div>
+      <div class="sv2-viewfilter" id="sv2-viewfilter-wrap">
+        <button type="button" class="sv2-filter" id="sv2-viewfilter-btn" aria-haspopup="true" aria-expanded="false">View options</button>
+        <div class="sv2-posfilter-pop sv2-hidden" id="sv2-viewfilter-pop" role="group" aria-label="Schedule view options">
+          <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="emptyRows" checked> Empty rows</label>
+          <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="unpublished" checked> Unpublished shifts</label>
+          <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="hours" checked> Count of hours</label>
+          <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="conflicts" checked> Conflicts</label>
+        </div>
+      </div>
+      <button class="sv2-btn" id="sv2-today">This week</button>
+      <label class="sv2-select-visible" title="Select every shift currently visible after filters">
+        <input type="checkbox" id="sv2-select-visible">
+        <span>Select visible shifts</span>
+      </label>
+      <div class="sv2-spacer"></div>
+      <span class="sv2-pill none" id="sv2-status">No schedule</span>
+      <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
+      <button class="sv2-btn primary sv2-hidden" id="sv2-publish">Publish</button>
     </div>
-    <button class="sv2-btn" id="sv2-today">This week</button>
-    <label class="sv2-select-visible" title="Select every shift currently visible after filters">
-      <input type="checkbox" id="sv2-select-visible">
-      <span>Select visible shifts</span>
-    </label>
-    <div class="sv2-spacer"></div>
-    <span class="sv2-pill none" id="sv2-status">No schedule</span>
-    <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
-    <button class="sv2-btn primary sv2-hidden" id="sv2-publish">Publish</button>
-  </div>
 
-  <!-- position-filter people hint (Sam #2589: who can work the selected role) -->
-  <div id="sv2-pos-hint" class="sv2-pos-hint sv2-hidden" role="status" aria-live="polite"></div>
-
-  <!-- People who can work the filtered position(s) (Sam #2589): everyone who
-       HOLDS the role, surfaced so they can be scheduled. Visible whenever a
-       position filter is on -- including the "no draft yet" state. -->
-  <div id="sv2-pospeople" class="sv2-pospeople sv2-hidden">
-    <div class="sv2-pospeople-head" id="sv2-pospeople-head">Can work this position</div>
-    <div class="sv2-pospeople-list" id="sv2-pospeople-list"></div>
-  </div>
-
-  <!-- grid / states -->
-  <div id="sv2-loading" class="sv2-state">Loading week&hellip;</div>
-
-  <div id="sv2-nodraft" class="sv2-state sv2-hidden">
-    <h3>No draft for this week</h3>
-    <p>Create a draft schedule to start adding shifts. Drafts stay private to managers until you publish.</p>
-    <button class="sv2-btn primary" id="sv2-createdraft2">+ Create draft schedule</button>
-  </div>
-
-  <div id="sv2-access" class="sv2-state sv2-hidden">
-    <h3>Not available here</h3>
-    <p id="sv2-access-msg">This schedule belongs to another store.</p>
-  </div>
-
-  <div id="sv2-gridwrap" class="sv2-gridwrap sv2-hidden">
     <div id="sv2-seltoolbar" class="sv2-seltoolbar sv2-hidden">
       <span class="sv2-selcount" id="sv2-selcount">0 selected</span>
       <button class="sv2-selbtn" id="sv2-sel-edit" title="Edit selected shifts">Edit</button>
@@ -577,6 +567,34 @@
         <button class="sv2-selbtn" id="sv2-be-apply">Apply to all</button>
       </div>
     </div>
+  </div>
+
+  <!-- position-filter people hint (Sam #2589: who can work the selected role) -->
+  <div id="sv2-pos-hint" class="sv2-pos-hint sv2-hidden" role="status" aria-live="polite"></div>
+
+  <!-- People who can work the filtered position(s) (Sam #2589): everyone who
+       HOLDS the role, surfaced so they can be scheduled. Visible whenever a
+       position filter is on -- including the "no draft yet" state. -->
+  <div id="sv2-pospeople" class="sv2-pospeople sv2-hidden">
+    <div class="sv2-pospeople-head" id="sv2-pospeople-head">Can work this position</div>
+    <div class="sv2-pospeople-list" id="sv2-pospeople-list"></div>
+  </div>
+
+  <!-- grid / states -->
+  <div id="sv2-loading" class="sv2-state">Loading week&hellip;</div>
+
+  <div id="sv2-nodraft" class="sv2-state sv2-hidden">
+    <h3>No draft for this week</h3>
+    <p>Create a draft schedule to start adding shifts. Drafts stay private to managers until you publish.</p>
+    <button class="sv2-btn primary" id="sv2-createdraft2">+ Create draft schedule</button>
+  </div>
+
+  <div id="sv2-access" class="sv2-state sv2-hidden">
+    <h3>Not available here</h3>
+    <p id="sv2-access-msg">This schedule belongs to another store.</p>
+  </div>
+
+  <div id="sv2-gridwrap" class="sv2-gridwrap sv2-hidden">
     <table class="sv2-grid">
       <thead><tr id="sv2-head"></tr></thead>
       <tbody id="sv2-body"></tbody>
@@ -726,11 +744,26 @@
       elTagBtn = $("sv2-tagfilter-btn"), elTagPop = $("sv2-tagfilter-pop"),
       elViewBtn = $("sv2-viewfilter-btn"), elViewPop = $("sv2-viewfilter-pop"),
       elPublish = $("sv2-publish"), elDeclined = $("sv2-declined"), elToast = $("sv2-toast"),
-      elSelectVisible = $("sv2-select-visible");
+      elSelectVisible = $("sv2-select-visible"),
+      elStickyBar = $("sv2-stickybar"),
+      elSched = document.querySelector(".sv2-sched");
+
+  function updateStickyOffset() {
+    if (!elStickyBar || !elSched) return;
+    elSched.style.setProperty("--sv2-sticky-offset", Math.ceil(elStickyBar.getBoundingClientRect().height) + "px");
+  }
+  if (elStickyBar && "ResizeObserver" in window) {
+    new ResizeObserver(updateStickyOffset).observe(elStickyBar);
+  }
+  window.addEventListener("resize", updateStickyOffset);
+  setTimeout(updateStickyOffset, 0);
 
   // ---- weekly board load ----
-  function show(el) { el.classList.remove("sv2-hidden"); }
-  function hide(el) { el.classList.add("sv2-hidden"); }
+  function touchSticky(el) {
+    if (el && el.closest && el.closest("#sv2-stickybar")) setTimeout(updateStickyOffset, 0);
+  }
+  function show(el) { el.classList.remove("sv2-hidden"); touchSticky(el); }
+  function hide(el) { el.classList.add("sv2-hidden"); touchSticky(el); }
 
   function setStatus() {
     var sch = state.board && state.board.schedule;

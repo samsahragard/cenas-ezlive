@@ -65,6 +65,34 @@ def test_schedule_template_has_visible_shift_bulk_select_and_inline_position_tag
     assert template.index('id="sv2-selcount"') < template.index('id="sv2-sel-edit"')
 
 
+def test_schedule_controls_and_bulk_actions_are_inside_stickybar():
+    template = _read("schedules_v2_week.html")
+
+    sticky = template[
+        template.index('<div class="sv2-stickybar"'):
+        template.index("<!-- position-filter people hint")
+    ]
+    grid_prefix = template[
+        template.index('<div id="sv2-gridwrap"'):
+        template.index('<table class="sv2-grid">')
+    ]
+
+    assert 'id="sv2-stickybar"' in sticky
+    assert 'id="sv2-weeklabel"' in sticky
+    assert 'id="sv2-posfilter-btn"' in sticky
+    assert 'id="sv2-tagfilter-btn"' in sticky
+    assert 'id="sv2-viewfilter-btn"' in sticky
+    assert 'id="sv2-select-visible"' in sticky
+    assert 'id="sv2-status"' in sticky
+    assert 'id="sv2-seltoolbar"' in sticky
+    assert 'id="sv2-sel-edit"' in sticky
+    assert 'id="sv2-sel-copy"' in sticky
+    assert 'id="sv2-sel-delete"' in sticky
+    assert 'id="sv2-seltoolbar"' not in grid_prefix
+    assert "top: var(--sv2-sticky-offset, 0px)" in template
+    assert "function updateStickyOffset()" in template
+
+
 def test_schedule_template_has_view_options_for_empty_unpublished_hours_and_conflicts():
     template = _read("schedules_v2_week.html")
 

@@ -106,53 +106,10 @@
     letter-spacing: 0.08em;
   }
 
-  .atr-page .atr-kpis {
-    display: grid; grid-template-columns: repeat(5,1fr); gap: 10px;
-    margin-bottom: 16px;
-  }
-  .atr-page .atr-kpi {
-    background: var(--surface); border: 0.5px solid var(--border);
-    border-radius: var(--radius); padding: 12px 13px;
-    position: relative; overflow: hidden;
-  }
-  .atr-page .atr-kpi::before {
-    content:''; position: absolute; left:0; top:0; bottom:0; width:3px;
-    background: var(--kc, var(--gold));
-  }
-  .atr-page .atr-kpi.k-sched { --kc: var(--st-scheduled); }
-  .atr-page .atr-kpi.k-clock { --kc: var(--st-ontime); }
-  .atr-page .atr-kpi.k-late  { --kc: var(--st-late); }
-  .atr-page .atr-kpi.k-no    { --kc: var(--st-noshow); }
-  .atr-page .atr-kpi.k-call  { --kc: var(--st-callout); }
-  .atr-page .atr-kpi .lbl {
-    font-size: 9px; font-weight: 700; color: var(--cream-meta);
-    text-transform: uppercase; letter-spacing: 0.12em;
-  }
-  .atr-page .atr-kpi .val {
-    font-family: 'Instrument Serif', serif; font-style: italic;
-    font-size: 30px; line-height: 1; color: var(--kc, var(--gold)); margin-top: 3px;
-  }
-
   .atr-page .atr-toolbar {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
   }
-  .atr-page .atr-tabs { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-  .atr-page .atr-tab {
-    padding: 9px 15px; background: var(--surface);
-    border: 0.5px solid var(--border); border-radius: 5px;
-    color: var(--cream-dim); font-family: 'Manrope', sans-serif;
-    font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s;
-    letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 7px;
-  }
-  .atr-page .atr-tab:hover { border-color: var(--border-active); color: var(--cream); }
-  .atr-page .atr-tab .ct {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
-    background: rgba(0,0,0,0.35); color: var(--cream-faint);
-    padding: 1px 6px; border-radius: 5px;
-  }
-  .atr-page .atr-tab.active { background: var(--gold); border-color: var(--gold); color: #2a1607; }
-  .atr-page .atr-tab.active .ct { background: rgba(0,0,0,0.22); color: #2a1607; }
   .atr-page .atr-add {
     height: 38px; padding: 0 16px;
     background: linear-gradient(135deg, var(--red), var(--red-deep));
@@ -384,10 +341,7 @@
 
   @media (max-width: 720px) {
     .atr-page { padding: 14px 13px 24px; }
-    .atr-page .atr-kpis { grid-template-columns: repeat(3,1fr); }
     .atr-page .atr-add { margin-left: 0; width: 100%; justify-content: center; margin-top: 4px; }
-    .atr-page .atr-tabs { width: 100%; }
-    .atr-page .atr-tab { flex: 1; justify-content: center; }
     .atr-page .atr-row { grid-template-columns: 38px 1fr; }
     .atr-page .atr-meta {
       grid-column: 1 / -1; flex-direction: row; align-items: center;
@@ -396,10 +350,9 @@
     }
     .atr-page .atr-av { width: 38px; height: 38px; }
   }
-  @media (max-width: 460px) { .atr-page .atr-kpis { grid-template-columns: repeat(2,1fr); } }
 </style>
 
-<div class="atr-page" id="atrPage" data-view="all">
+<div class="atr-page" id="atrPage">
 
   <div class="atr-topstrip">
     <div class="atr-datenav">
@@ -409,24 +362,10 @@
     </div>
   </div>
 
-  <div class="atr-kpis">
-    <div class="atr-kpi k-sched"><div class="lbl">Scheduled</div><div class="val">{{ kpis.scheduled }}</div></div>
-    <div class="atr-kpi k-clock"><div class="lbl">On the Clock</div><div class="val">{{ kpis.clocked_in }}</div></div>
-    <div class="atr-kpi k-late"><div class="lbl">Late</div><div class="val">{{ kpis.late }}</div></div>
-    <div class="atr-kpi k-no"><div class="lbl">No-Show</div><div class="val">{{ kpis.no_show }}</div></div>
-    <div class="atr-kpi k-call"><div class="lbl">Callouts</div><div class="val">{{ kpis.callouts }}</div></div>
-  </div>
-
   {% if attendance_notice %}<div class="atr-note">{{ attendance_notice }}</div>{% endif %}
 
   <div class="atr-toolbar">
     <button type="button" class="atr-add" id="atrAddBtn"><span class="pl">+</span> Add Entry</button>
-    <div class="atr-tabs" id="atrTabs">
-      <button type="button" class="atr-tab active" data-view="all">All <span class="ct" id="cAll">0</span></button>
-      <button type="button" class="atr-tab" data-view="clock">On the Clock <span class="ct" id="cClock">0</span></button>
-      <button type="button" class="atr-tab" data-view="off">Off <span class="ct" id="cOff">0</span></button>
-      <button type="button" class="atr-tab" data-view="issues">Issues <span class="ct" id="cIss">0</span></button>
-    </div>
   </div>
 
   <div class="atr-roster" id="atrRoster"></div>
@@ -544,32 +483,11 @@
   function meta(s){ return ST[s] || ST["scheduled"]; }
   function esc(t){ var d=document.createElement("div"); d.textContent=(t==null?"":t); return d.innerHTML; }
 
-  function inView(p, v){
-    if (v==="all")    return true;
-    if (v==="clock")  return !!p.on_clock;
-    if (v==="off")    return !!p.is_off;
-    if (v==="issues") return !!p.has_prior_issue;
-    return true;
-  }
-  var HINT = {
-    all:    "The full team roster from Toast - everyone, working or off.",
-    clock:  "Teammates Toast shows currently clocked in (or late / on break).",
-    off:    "Teammates not on the clock right now - off, no-show, callout, or clocked out.",
-    issues: "Teammates with a documented attendance issue on file."
-  };
-  var page = document.getElementById("atrPage");
   var roster = document.getElementById("atrRoster");
-  var curView = "all";
 
-  function renderCounts(){
-    document.getElementById("cAll").textContent    = PEOPLE.filter(function(p){return inView(p,"all");}).length;
-    document.getElementById("cClock").textContent  = PEOPLE.filter(function(p){return inView(p,"clock");}).length;
-    document.getElementById("cOff").textContent    = PEOPLE.filter(function(p){return inView(p,"off");}).length;
-    document.getElementById("cIss").textContent    = PEOPLE.filter(function(p){return inView(p,"issues");}).length;
-  }
   function renderRoster(){
-    var list = PEOPLE.filter(function(p){ return inView(p, curView); });
-    if (!list.length){ roster.innerHTML = '<div class="atr-empty">No teammates in this view.</div>'; return; }
+    var list = PEOPLE;
+    if (!list.length){ roster.innerHTML = '<div class="atr-empty">No teammates found.</div>'; return; }
     roster.innerHTML = list.map(function(p){
       var m = meta(p.status);
       var t = p.sched || "";
@@ -583,15 +501,6 @@
         + '<span class="atr-times">'+t+'</span></div></div>';
     }).join("");
   }
-
-  document.getElementById("atrTabs").addEventListener("click", function(e){
-    var t = e.target.closest(".atr-tab"); if(!t) return;
-    document.querySelectorAll(".atr-tab").forEach(function(x){ x.classList.remove("active"); });
-    t.classList.add("active");
-    curView = t.dataset.view;
-    page.setAttribute("data-view", curView);
-    renderRoster();
-  });
 
   /* ---- person panel ---- */
   var panel = document.getElementById("atrPanel"), scrim = document.getElementById("atrScrim");
@@ -712,7 +621,7 @@
     document.getElementById("atrAddForm").submit();
   });
 
-  renderCounts(); renderRoster();
+  renderRoster();
 })();
 </script>
 {% endblock %}

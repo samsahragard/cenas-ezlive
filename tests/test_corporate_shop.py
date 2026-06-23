@@ -4,6 +4,21 @@ from sqlalchemy.orm import sessionmaker
 from app.services import corporate_shop
 
 
+def test_corporate_picture_url_handles_legacy_media_filenames():
+    assert (
+        corporate_shop._picture_url("Amareto_Torani_Syrup.jpg")
+        == "https://cenaskitchen.com/media/Amareto_Torani_Syrup.jpg"
+    )
+    assert (
+        corporate_shop._picture_url("/media/Amareto_Torani_Syrup.jpg")
+        == "https://cenaskitchen.com/media/Amareto_Torani_Syrup.jpg"
+    )
+    assert (
+        corporate_shop._picture_url("https://example.com/pic.webp")
+        == "https://example.com/pic.webp"
+    )
+
+
 def test_corporate_catalog_merges_takeout_departments():
     seed = corporate_shop.load_catalog_seed()
     legacy = {

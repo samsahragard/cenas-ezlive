@@ -20,6 +20,7 @@ import re
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, ForeignKey, create_engine,
@@ -94,6 +95,7 @@ _catalog_checked = False
 _schema_checked = False
 
 _CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "corporate_order_catalog.json"
+_MEDIA_BASE_URL = (os.environ.get("CORPORATE_MEDIA_BASE_URL") or "https://cenaskitchen.com/media").rstrip("/")
 
 
 def _get_db_url() -> str | None:
@@ -159,6 +161,19 @@ def _clean_product_name(name: str | None) -> str:
 
 def _name_key(name: str | None) -> str:
     return _clean_product_name(name).casefold()
+
+
+def _picture_url(picture: str | None) -> str:
+    raw = (picture or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith(("http://", "https://", "data:")):
+        return raw
+    if raw.startswith("/media/"):
+        return "https://cenaskitchen.com" + quote(raw, safe="/:%?=&%")
+    if raw.startswith("/"):
+        return "https://cenaskitchen.com" + quote(raw, safe="/:%?=&%")
+    return f"{_MEDIA_BASE_URL}/{quote(raw, safe='-_.~%')}"
 
 
 def load_catalog_seed() -> dict:
@@ -266,6 +281,7 @@ def list_products(category: str | None = None) -> list[dict]:
             "name": _clean_product_name(p.product_name),
             "in_stock": p.in_stock,
             "picture": p.product_picture,
+            "picture_url": _picture_url(p.product_picture),
             "category": p.category,
             "date_added": p.date_added,
         } for p in rows]

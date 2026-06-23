@@ -203,6 +203,7 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
             "name": "Bleach (6/case)",
             "in_stock": 15,
             "picture": "",
+            "picture_url": "https://cenaskitchen.com/media/Bleach.webp",
             "category": "Cleaning Supplies",
             "date_added": None,
         }],
@@ -214,6 +215,7 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "Bleach (6/case)" in html
+    assert 'src="https://cenaskitchen.com/media/Bleach.webp"' in html
     assert 'name="qty_42"' in html
     assert "Departments" not in html
     assert "corp-cat-pill" not in html

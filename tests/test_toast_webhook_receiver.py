@@ -1,7 +1,10 @@
 import json
 
+import pytest
+
 from app.services.toast_webhook_security import compute_toast_signature
 from app.services.toast_webhook_store import ToastWebhookStore
+from scripts import toast_webhook_receiver as receiver_mod
 from scripts.toast_webhook_receiver import create_receiver_app
 
 
@@ -74,3 +77,33 @@ def test_receiver_healthz_reports_store_counts(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.get_json()["ok"] is True
+
+
+def test_receiver_retries_bind_when_network_address_is_late(monkeypatch):
+    class Done(Exception):
+        pass
+
+    class FakeServer:
+        def serve_forever(self):
+            raise Done
+
+    attempts = []
+    sleeps = []
+
+    def fake_make_server(host, port, app, threaded):
+        attempts.append((host, port, threaded))
+        if len(attempts) == 1:
+            raise OSError("requested address is not valid in its context")
+        return FakeServer()
+
+    monkeypatch.setattr(receiver_mod, "make_server", fake_make_server)
+    monkeypatch.setattr(receiver_mod.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    with pytest.raises(Done):
+        receiver_mod._serve_one(object(), "100.73.38.82", 8784)
+
+    assert attempts == [
+        ("100.73.38.82", 8784, True),
+        ("100.73.38.82", 8784, True),
+    ]
+    assert sleeps == [15]

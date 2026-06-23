@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import threading
+import time
 from typing import Any
 
 from flask import Flask, jsonify, request
@@ -84,9 +85,20 @@ def create_receiver_app(store: ToastWebhookStore | None = None) -> Flask:
 
 
 def _serve_one(app: Flask, host: str, port: int) -> None:
-    server = make_server(host, port, app, threaded=True)
-    log.info("toast webhook receiver listening on http://%s:%s", host, port)
-    server.serve_forever()
+    while True:
+        try:
+            server = make_server(host, port, app, threaded=True)
+        except OSError:
+            log.exception(
+                "toast webhook receiver could not bind http://%s:%s; retrying",
+                host,
+                port,
+            )
+            time.sleep(15)
+            continue
+        log.info("toast webhook receiver listening on http://%s:%s", host, port)
+        server.serve_forever()
+        return
 
 
 def main() -> None:

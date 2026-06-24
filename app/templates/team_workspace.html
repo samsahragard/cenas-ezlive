@@ -49,9 +49,6 @@
       radial-gradient(ellipse 90% 70% at 20% 0%, rgba(199,59,54,.12), transparent);
     box-shadow: 0 10px 24px rgba(0,0,0,.38);
   }
-  .tws-head { margin-bottom: 14px; }
-  .tws-stickybar .tws-head { margin-bottom: 12px; }
-  .tws-title { font-family: 'Instrument Serif', serif; font-size: 30px; line-height: 1.05; color: var(--tws-cream); }
   .tws-sub { font-size: 13px; color: var(--tws-cream-dim); margin-top: 4px; }
 
   /* sub-tab bar -- squared tab chips (border-radius ~5px), kept functional */
@@ -354,10 +351,6 @@
      data-schedule-url="/{{ store_slug }}/schedules-v2/?embed=1">
 
   <div class="tws-stickybar" id="tws-stickybar">
-    <div class="tws-head">
-      <h1 class="tws-title">Team Roster</h1>
-    </div>
-
     {# sub-tabs: real anchors (?sub=KEY) so it works without JS; JS swaps in place #}
     <div class="tws-tabs" role="tablist">
       <a class="tws-tab active" href="?sub=team"     data-sub="team"     role="tab"><i class="ti ti-users"></i>Team</a>

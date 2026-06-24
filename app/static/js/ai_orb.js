@@ -336,12 +336,13 @@
     }
 
     function frame(now) {
-      t += 0.012;
       orbOn = isActive(now);
+      var moving = orbOn || act > 0.01 || bolts.length > 0;
+      if (moving) t += 0.012;
       act += ((orbOn ? 1 : 0) - act) * 0.07;
       bulgeL *= 0.93;
       bulgeR *= 0.93;
-      if (--nextStrike <= 0) {
+      if (orbOn && --nextStrike <= 0) {
         makeBolt();
         nextStrike = 45 + rnd() * 95;
       }
@@ -424,7 +425,7 @@
       requestAnimationFrame(frame);
     }
 
-    makeBolt();
+    if (isAssistantSurface()) makeBolt();
     requestAnimationFrame(frame);
   }
 

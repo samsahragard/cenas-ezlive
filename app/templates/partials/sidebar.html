@@ -38,6 +38,26 @@
       <div class="ck-sb-logo-sub">{{ store_label }}</div>
       {% endif %}
     </a>
+    {% if _accessible|length > 1 and user_role != 'driver' %}
+      {% set _path = request.path or '' %}
+      {% set _prefix = '/' ~ store_slug %}
+      {% if _path == _prefix %}
+        {% set _store_suffix = '/' %}
+      {% elif _path.startswith(_prefix ~ '/') %}
+        {% set _store_suffix = _path[_prefix|length:] %}
+      {% else %}
+        {% set _store_suffix = '/today' %}
+      {% endif %}
+      {% set _qs = ('?' ~ request.query_string.decode('utf-8')) if request.query_string else '' %}
+      <div class="ck-sb-store-switch" aria-label="Store switcher">
+        {% for _slug, _label in _accessible %}
+          <a class="ck-sb-store-link{% if _slug == store_slug %} active{% endif %}"
+             href="/{{ _slug }}{{ _store_suffix }}{{ _qs }}">
+            {{ _label }}
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
     {% if user_role != 'driver' %}
     <a class="ck-sb-ai-orb" href="/assistant" aria-label="Open Cenas AI assistant" title="Cenas AI">
       <canvas data-ck-ai-orb data-width="86" data-height="62" aria-hidden="true"></canvas>

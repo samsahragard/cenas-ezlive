@@ -46,6 +46,15 @@ def test_ai_orb_only_treats_standalone_assistant_as_ai_surface():
     assert 'params.get("tab") === "cena"' not in script
 
 
+def test_ai_orb_stays_static_until_active():
+    script = Path("app/static/js/ai_orb.js").read_text(encoding="utf-8")
+
+    assert "var moving = orbOn || act > 0.01 || bolts.length > 0;" in script
+    assert "if (moving) t += 0.012;" in script
+    assert "if (orbOn && --nextStrike <= 0)" in script
+    assert "if (isAssistantSurface()) makeBolt();" in script
+
+
 def test_assistant_page_is_clean_chat_surface():
     template = Path("app/templates/assistant_page.html").read_text(encoding="utf-8")
 

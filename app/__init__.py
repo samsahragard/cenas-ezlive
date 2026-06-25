@@ -357,6 +357,42 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("Base.metadata.create_all failed (non-fatal)")
 
+    # Manager reports (2026-06-25): attendance issue reports need to show
+    # which manager logged each event. AttendanceEvent is an existing table,
+    # so create_all cannot add these columns; backfill them idempotently.
+    try:
+        from sqlalchemy import inspect as _sa_insp_attn, text as _sa_text_attn
+        from app.db import engine as _eng_attn
+        if _eng_attn is not None:
+            _insp_attn = _sa_insp_attn(_eng_attn)
+            if "manager_attendance_event" in _insp_attn.get_table_names():
+                _attn_cols = {
+                    c["name"] for c in _insp_attn.get_columns("manager_attendance_event")
+                }
+                _attn_additions = [
+                    ("author_id", "INTEGER"),
+                    ("manager_name", "VARCHAR(120)"),
+                ]
+                _attn_added = []
+                with _eng_attn.begin() as conn:
+                    for _cn, _cdef in _attn_additions:
+                        if _cn not in _attn_cols:
+                            conn.execute(_sa_text_attn(
+                                f"ALTER TABLE manager_attendance_event ADD COLUMN {_cn} {_cdef}"
+                            ))
+                            _attn_added.append(_cn)
+                    conn.execute(_sa_text_attn(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_manager_attendance_event_author_id "
+                        "ON manager_attendance_event (author_id)"
+                    ))
+                if _attn_added:
+                    logging.getLogger(__name__).info(
+                        "manager_attendance_event: backfilled columns %s", _attn_added)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "manager_attendance_event report column backfill failed (non-fatal)")
+
     # docck v1 - multi-agent reliability monitor seed (Sam #1191, samai #1208)
     try:
         from app.services.docck_seed import seed_docck_agents

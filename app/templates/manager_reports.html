@@ -1,0 +1,344 @@
+{# ============================================================
+   manager_reports.html - Manager Reports
+
+   ROUTE CONTRACT (store_routes.py _render_manager_reports_v1):
+     report_kind -> 'attendance' | 'uniform'
+     date_from, date_to -> ISO strings
+     attendance_groups -> [{name, role, rows:[{date,time,issue,detail,logged_by}]}]
+     uniform_groups -> [{name, role, rows:[{date,time,item,logged_by}]}]
+   ============================================================ #}
+{% extends "base_dashboard.html" %}
+{% set active = 'manager_reports' %}
+
+{% block title %}Manager Reports - Cenas Kitchen{% endblock %}
+{% block page_module %}REPORTS{% endblock %}
+{% block page_module_class %}mod-attendance{% endblock %}
+{% block page_title %}<span class="word-primary">Manager</span> <span class="ck-accent">Reports</span>{% endblock %}
+{% block page_subtitle %}{{ range_label }}{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
+{% block content %}
+<style>
+  .mgrrep {
+    --red: #C73B36; --red-deep: #9B2A26; --red-bright: #E85852;
+    --gold: #E4B340; --gold-bright: #FFD970;
+    --teal: #2EA39F; --cream: #FAF6EC;
+    --cream-dim: rgba(250,246,236,0.82);
+    --cream-faint: rgba(250,246,236,0.52);
+    --cream-meta: rgba(250,246,236,0.40);
+    --surface: #241409; --surface-2: #2e1a0d; --surface-hover: #34200f;
+    --border: rgba(217,164,54,0.18); --border-active: rgba(228,179,64,0.5);
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--cream);
+    background: #1f1308;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 20px 30px;
+    margin-bottom: 40px;
+    min-height: calc(100vh - 220px);
+  }
+  .mgrrep * { box-sizing: border-box; }
+  .mgrrep-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .mgrrep-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 14px;
+    border-radius: 9px;
+    border: 0.5px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--cream-dim);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .mgrrep-tab.active {
+    color: #1a0d08;
+    background: var(--gold-bright);
+    border-color: var(--gold-bright);
+  }
+  .mgrrep-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px;
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    background: rgba(0,0,0,0.20);
+    margin-bottom: 14px;
+  }
+  .mgrrep-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .mgrrep-field span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--cream-meta);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 800;
+  }
+  .mgrrep-field input {
+    height: 36px;
+    min-width: 150px;
+    border-radius: 8px;
+    border: 0.5px solid var(--border);
+    background: var(--surface);
+    color: var(--cream);
+    padding: 0 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .mgrrep-run {
+    height: 36px;
+    border: 0.5px solid var(--red-bright);
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--red), var(--red-deep));
+    color: var(--cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 0 16px;
+    cursor: pointer;
+  }
+  .mgrrep-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .mgrrep-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 30px;
+    padding: 0 11px;
+    border-radius: 999px;
+    border: 0.5px solid var(--border);
+    background: var(--surface);
+    color: var(--cream-dim);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .mgrrep-chip b {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--gold-bright);
+  }
+  .mgrrep-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .mgrrep-group {
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .mgrrep-ghead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border-bottom: 0.5px solid var(--border);
+  }
+  .mgrrep-name {
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--cream);
+  }
+  .mgrrep-role {
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--cream-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .mgrrep-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--gold-bright);
+    white-space: nowrap;
+  }
+  .mgrrep-tablewrap { overflow-x: auto; }
+  .mgrrep-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 640px;
+  }
+  .mgrrep-table th,
+  .mgrrep-table td {
+    padding: 10px 12px;
+    border-bottom: 0.5px solid rgba(250,246,236,0.06);
+    text-align: left;
+    vertical-align: top;
+    font-size: 12px;
+  }
+  .mgrrep-table th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--cream-meta);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 800;
+  }
+  .mgrrep-table tr:last-child td { border-bottom: 0; }
+  .mgrrep-mono {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--cream-dim);
+    white-space: nowrap;
+  }
+  .mgrrep-strong { color: var(--cream); font-weight: 800; }
+  .mgrrep-empty {
+    padding: 44px 20px;
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    text-align: center;
+    color: var(--cream-faint);
+    font-size: 14px;
+  }
+  @media (max-width: 720px) {
+    .mgrrep { padding: 14px 13px 24px; }
+    .mgrrep-controls { align-items: stretch; }
+    .mgrrep-field, .mgrrep-field input, .mgrrep-run { width: 100%; }
+  }
+</style>
+
+<div class="mgrrep">
+  <div class="mgrrep-tabs" role="tablist">
+    <a class="mgrrep-tab{% if report_kind == 'attendance' %} active{% endif %}"
+       href="?report=attendance&amp;from={{ date_from }}&amp;to={{ date_to }}"
+       role="tab">Attendance</a>
+    <a class="mgrrep-tab{% if report_kind == 'uniform' %} active{% endif %}"
+       href="?report=uniform&amp;from={{ date_from }}&amp;to={{ date_to }}"
+       role="tab">Uniform</a>
+  </div>
+
+  <form class="mgrrep-controls" method="GET" action="">
+    <input type="hidden" name="report" value="{{ report_kind }}">
+    <label class="mgrrep-field">
+      <span>From</span>
+      <input type="date" name="from" value="{{ date_from }}">
+    </label>
+    <label class="mgrrep-field">
+      <span>To</span>
+      <input type="date" name="to" value="{{ date_to }}">
+    </label>
+    <button class="mgrrep-run" type="submit">Run Report</button>
+  </form>
+
+  {% if report_kind == 'attendance' %}
+    <div class="mgrrep-summary">
+      <span class="mgrrep-chip"><b>{{ attendance_total }}</b> total</span>
+      {% for item in attendance_summary %}
+        <span class="mgrrep-chip"><b>{{ item.count }}</b> {{ item.label }}</span>
+      {% endfor %}
+    </div>
+    {% if attendance_groups %}
+      <div class="mgrrep-groups">
+        {% for group in attendance_groups %}
+          <section class="mgrrep-group">
+            <div class="mgrrep-ghead">
+              <div>
+                <div class="mgrrep-name">{{ group.name }}</div>
+                {% if group.role %}<div class="mgrrep-role">{{ group.role }}</div>{% endif %}
+              </div>
+              <div class="mgrrep-count">{{ group.rows|length }} entries</div>
+            </div>
+            <div class="mgrrep-tablewrap">
+              <table class="mgrrep-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Issue</th>
+                    <th>Detail</th>
+                    <th>Logged By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in group.rows %}
+                  <tr>
+                    <td class="mgrrep-mono">{{ row.date }}</td>
+                    <td class="mgrrep-mono">{{ row.time }}</td>
+                    <td class="mgrrep-strong">{{ row.issue }}</td>
+                    <td>{{ row.detail or "-" }}</td>
+                    <td>{{ row.logged_by }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="mgrrep-empty">No attendance issues for this date range.</div>
+    {% endif %}
+  {% else %}
+    <div class="mgrrep-summary">
+      <span class="mgrrep-chip"><b>{{ uniform_total }}</b> total</span>
+      {% for item in uniform_summary %}
+        <span class="mgrrep-chip"><b>{{ item.count }}</b> {{ item.label }}</span>
+      {% endfor %}
+    </div>
+    {% if uniform_groups %}
+      <div class="mgrrep-groups">
+        {% for group in uniform_groups %}
+          <section class="mgrrep-group">
+            <div class="mgrrep-ghead">
+              <div>
+                <div class="mgrrep-name">{{ group.name }}</div>
+                {% if group.role %}<div class="mgrrep-role">{{ group.role }}</div>{% endif %}
+              </div>
+              <div class="mgrrep-count">{{ group.rows|length }} items</div>
+            </div>
+            <div class="mgrrep-tablewrap">
+              <table class="mgrrep-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Item</th>
+                    <th>Logged By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in group.rows %}
+                  <tr>
+                    <td class="mgrrep-mono">{{ row.date }}</td>
+                    <td class="mgrrep-mono">{{ row.time }}</td>
+                    <td class="mgrrep-strong">{{ row.item }}</td>
+                    <td>{{ row.logged_by }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="mgrrep-empty">No uniform items for this date range.</div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

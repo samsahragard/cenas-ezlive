@@ -2866,6 +2866,9 @@ class AttendanceEvent(Base):
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str | None] = mapped_column(String(60), nullable=True)
     counts_as_occurrence: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    manager_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     shift: Mapped["AttendanceShift"] = relationship(back_populates="events")
 

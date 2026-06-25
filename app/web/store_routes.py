@@ -1300,6 +1300,7 @@ _MANAGER_PAGE_LABELS = {
     "recipe-page":          "Recipe Page",
     "attendance":           "Attendance Tracking",
     "uniform":              "Uniform Tracking",
+    "reports":              "Manager Reports",
     "interview":            "Interview Surface",
     "training":             "Training Records",
     "maintenance":          "Maintenance Requests",
@@ -2950,12 +2951,24 @@ def _render_attendance_v3(db, label, active_key):
     )
 
 
+def _manager_actor_name(user):
+    if user is not None:
+        return (
+            getattr(user, "full_name", None)
+            or getattr(user, "name", None)
+            or getattr(user, "email", None)
+            or getattr(user, "phone", None)
+        )
+    return session.get("employee_name") or session.get("user_name") or "Unknown"
+
+
 def _attendance_v3_post(db, store_scope, user):
     """Every POST on the Attendance v3 page. Hidden form_action selects
     the op: add_shift | clock_in | clock_out | log_event."""
     from app.models import AttendanceShift, AttendanceEvent
     action = (request.form.get("form_action") or "").strip()
     uid = user.id if user else None
+    actor_name = (_manager_actor_name(user) or "Unknown")[:120]
 
     if action == "add_shift":
         raw_date = request.form.get("entry_date") or ""
@@ -3020,7 +3033,8 @@ def _attendance_v3_post(db, store_scope, user):
             text = f"{text} - {note}"
         db.add(AttendanceEvent(
             shift_id=shift.id, at=_attn_now(), kind=ev_kind, text=text,
-            reason=(reason[:60] or None), counts_as_occurrence=True))
+            reason=(reason[:60] or None), counts_as_occurrence=True,
+            author_id=uid, manager_name=actor_name))
         shift.updated_at = _attn_now()
         db.commit()
         return
@@ -3067,17 +3081,20 @@ def _attendance_v3_post(db, store_scope, user):
             if late > _ATTN_LATE_GRACE_MIN:
                 shift.status, shift.late_minutes = "late", late
                 db.add(AttendanceEvent(shift_id=shift.id, at=now, kind="late",
-                                       text=f"Clocked in {late}m late"))
+                                       text=f"Clocked in {late}m late",
+                                       author_id=uid, manager_name=actor_name))
             else:
                 shift.status, shift.late_minutes = "clocked-in", 0
                 db.add(AttendanceEvent(shift_id=shift.id, at=now, kind="in",
-                                       text="Clocked in"))
+                                       text="Clocked in",
+                                       author_id=uid, manager_name=actor_name))
 
     elif action == "clock_out":
         if shift.clock_in is not None and shift.clock_out is None:
             shift.clock_out, shift.status = now, "out"
             db.add(AttendanceEvent(shift_id=shift.id, at=now, kind="out",
-                                   text="Clocked out"))
+                                   text="Clocked out",
+                                   author_id=uid, manager_name=actor_name))
 
     elif action == "log_event":
         kind = (request.form.get("kind") or "note").strip()
@@ -3108,7 +3125,8 @@ def _attendance_v3_post(db, store_scope, user):
         else:
             kind, text = "note", (note or "Note added")
         db.add(AttendanceEvent(shift_id=shift.id, at=now, kind=kind, text=text,
-                               reason=reason, counts_as_occurrence=occ))
+                               reason=reason, counts_as_occurrence=occ,
+                               author_id=uid, manager_name=actor_name))
         if note and kind != "note":
             shift.note = note
 
@@ -3128,14 +3146,7 @@ _UNIFORM_ITEM_LABELS = dict(_UNIFORM_ITEMS)
 
 
 def _uniform_actor_name(user):
-    if user is not None:
-        return (
-            getattr(user, "full_name", None)
-            or getattr(user, "name", None)
-            or getattr(user, "email", None)
-            or getattr(user, "phone", None)
-        )
-    return session.get("employee_name") or session.get("user_name") or "Unknown"
+    return _manager_actor_name(user)
 
 
 def _uniform_datetime_label(dt):
@@ -3269,6 +3280,204 @@ def _uniform_v1_post(db, store_scope, user):
         manager_name=manager_name,
     ))
     db.commit()
+
+
+_ATTENDANCE_REPORT_KINDS = ("late", "no-show", "callout", "early-out", "switch", "note")
+_ATTENDANCE_REPORT_LABELS = {
+    "late": "Late",
+    "no-show": "No show",
+    "callout": "Callout",
+    "early-out": "Left early",
+    "switch": "Switched shift",
+    "note": "Note",
+}
+
+
+def _manager_report_dates():
+    today = _local_today()
+
+    def _parse(raw, fallback):
+        raw = (raw or "").strip()
+        if not raw:
+            return fallback
+        try:
+            return date.fromisoformat(raw)
+        except ValueError:
+            return fallback
+
+    date_to = _parse(request.args.get("to"), today)
+    date_from = _parse(request.args.get("from"), date_to - timedelta(days=29))
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+    return date_from, date_to
+
+
+def _manager_report_utc_bounds(date_from, date_to):
+    start_local = datetime.combine(date_from, datetime.min.time())
+    end_local = datetime.combine(date_to + timedelta(days=1), datetime.min.time())
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(APP_TZ)
+        utc = ZoneInfo("UTC")
+        start = start_local.replace(tzinfo=tz).astimezone(utc).replace(tzinfo=None)
+        end = end_local.replace(tzinfo=tz).astimezone(utc).replace(tzinfo=None)
+        return start, end
+    except Exception:
+        start_offset = _central_offset_hours(start_local)
+        end_offset = _central_offset_hours(end_local)
+        return (start_local - timedelta(hours=start_offset),
+                end_local - timedelta(hours=end_offset))
+
+
+def _manager_report_date_label(d):
+    return f"{d:%b} {d.day}, {d.year}" if d else ""
+
+
+def _manager_report_datetime_parts(dt, utc=False):
+    if not dt:
+        return "", ""
+    local = _central_dt(dt) if utc else dt
+    if not local:
+        return "", ""
+    return _manager_report_date_label(local.date()), (_attn_fmt(local) or "")
+
+
+def _manager_user_names(db, ids):
+    ids = {int(uid) for uid in ids if uid}
+    if not ids:
+        return {}
+    try:
+        from app.models import User
+        return {u.id: u.full_name for u in db.query(User).filter(User.id.in_(ids)).all()}
+    except Exception:
+        logging.getLogger(__name__).exception("manager reports user lookup failed")
+        return {}
+
+
+def _render_manager_reports_v1(db, label, active_key):
+    from app.models import AttendanceEvent, AttendanceShift, UniformIssue
+
+    report_kind = (request.args.get("report") or "attendance").strip().lower()
+    if report_kind not in ("attendance", "uniform"):
+        report_kind = "attendance"
+
+    date_from, date_to = _manager_report_dates()
+    loc = g.current_location
+
+    attn_q = (db.query(AttendanceEvent, AttendanceShift)
+              .join(AttendanceShift, AttendanceEvent.shift_id == AttendanceShift.id)
+              .filter(AttendanceShift.entry_date >= date_from,
+                      AttendanceShift.entry_date <= date_to,
+                      AttendanceEvent.kind.in_(_ATTENDANCE_REPORT_KINDS)))
+    if loc in ("tomball", "copperfield"):
+        attn_q = attn_q.filter((AttendanceShift.store_scope == loc) |
+                               (AttendanceShift.store_scope.is_(None)))
+    attn_rows = attn_q.order_by(
+        AttendanceShift.employee_name.asc(),
+        AttendanceShift.entry_date.asc(),
+        AttendanceEvent.at.asc(),
+    ).limit(1500).all()
+
+    author_ids = set()
+    for ev, shift in attn_rows:
+        if getattr(ev, "author_id", None):
+            author_ids.add(ev.author_id)
+        if getattr(shift, "author_id", None):
+            author_ids.add(shift.author_id)
+    user_names = _manager_user_names(db, author_ids)
+
+    attendance_groups = []
+    attendance_by_name = {}
+    attendance_summary = {label: 0 for label in _ATTENDANCE_REPORT_LABELS.values()}
+    for ev, shift in attn_rows:
+        label_for_kind = _ATTENDANCE_REPORT_LABELS.get(ev.kind, ev.kind.title())
+        attendance_summary[label_for_kind] = attendance_summary.get(label_for_kind, 0) + 1
+        logged_by = (
+            getattr(ev, "manager_name", None)
+            or user_names.get(getattr(ev, "author_id", None))
+            or user_names.get(getattr(shift, "author_id", None))
+            or "Unknown"
+        )
+        row = {
+            "date": _manager_report_date_label(shift.entry_date),
+            "time": _attn_fmt(ev.at) or "",
+            "issue": label_for_kind,
+            "detail": ev.text or ev.reason or "",
+            "logged_by": logged_by,
+        }
+        key = shift.employee_name or "Unknown"
+        attendance_by_name.setdefault(key, {
+            "name": key,
+            "role": shift.role_title or "",
+            "rows": [],
+        })["rows"].append(row)
+    for name in sorted(attendance_by_name, key=lambda n: n.lower()):
+        attendance_groups.append(attendance_by_name[name])
+    attendance_summary = [
+        {"label": k, "count": v}
+        for k, v in attendance_summary.items()
+        if v
+    ]
+
+    start_utc, end_utc = _manager_report_utc_bounds(date_from, date_to)
+    uniform_q = db.query(UniformIssue).filter(
+        UniformIssue.created_at >= start_utc,
+        UniformIssue.created_at < end_utc,
+    )
+    if loc in ("tomball", "copperfield"):
+        uniform_q = uniform_q.filter((UniformIssue.store_scope == loc) |
+                                     (UniformIssue.store_scope.is_(None)))
+    uniform_entries = uniform_q.order_by(
+        UniformIssue.employee_name.asc(),
+        UniformIssue.created_at.asc(),
+    ).limit(1500).all()
+
+    uniform_groups = []
+    uniform_by_name = {}
+    uniform_summary_counts = {}
+    for issue in uniform_entries:
+        date_label, time_label = _manager_report_datetime_parts(issue.created_at, utc=True)
+        uniform_summary_counts[issue.item_label] = (
+            uniform_summary_counts.get(issue.item_label, 0) + 1
+        )
+        row = {
+            "date": date_label,
+            "time": time_label,
+            "item": issue.item_label,
+            "logged_by": issue.manager_name or "Unknown",
+        }
+        key = issue.employee_name or "Unknown"
+        uniform_by_name.setdefault(key, {
+            "name": key,
+            "role": issue.employee_role or "",
+            "rows": [],
+        })["rows"].append(row)
+    for name in sorted(uniform_by_name, key=lambda n: n.lower()):
+        uniform_groups.append(uniform_by_name[name])
+    uniform_summary = [
+        {"label": k, "count": uniform_summary_counts[k]}
+        for k in sorted(uniform_summary_counts)
+    ]
+
+    return render_template(
+        "manager_reports.html",
+        page_slug="reports",
+        page_label=label,
+        report_kind=report_kind,
+        date_from=date_from.isoformat(),
+        date_to=date_to.isoformat(),
+        range_label=(
+            f"{_manager_report_date_label(date_from)} - "
+            f"{_manager_report_date_label(date_to)}"
+        ),
+        attendance_groups=attendance_groups,
+        attendance_summary=attendance_summary,
+        attendance_total=sum(item["count"] for item in attendance_summary),
+        uniform_groups=uniform_groups,
+        uniform_summary=uniform_summary,
+        uniform_total=sum(item["count"] for item in uniform_summary),
+        active=active_key,
+    )
 
 
 # ============================================================
@@ -4339,6 +4548,7 @@ _MANAGER_DASH_TABS = [
     ("log",         "Daily Log"),
     ("attendance",  "Attendance"),
     ("uniform",     "Uniform"),
+    ("reports",     "Reports"),
     ("counseling",  "Counseling"),
     ("incidents",   "Incidents"),
     ("interview",   "Interview"),
@@ -4355,7 +4565,7 @@ _MANAGER_DASH_GROUPS = [
         "key": "daily",
         "label": "Daily",
         "icon": "log",
-        "tabs": ("log", "attendance", "uniform"),
+        "tabs": ("log", "attendance", "uniform", "reports"),
     },
     {
         "key": "hr",
@@ -4391,6 +4601,7 @@ def _manager_dash_full_url(tab_key):
       incidents   -> /<store>/manager/incident-reports  (store.manager_page_list)
       attendance  -> /<store>/manager/attendance        (store.manager_page_list)
       uniform     -> /<store>/manager/uniform           (store.manager_page_list)
+      reports     -> /<store>/manager/reports           (store.manager_page_list)
       training    -> /<store>/manager/training          (store.manager_page_list)
       maintenance -> /<store>/manager/maintenance       (store.manager_page_list)
       counseling  -> /<store>/manager/counseling        (store.manager_page_list)
@@ -4407,6 +4618,8 @@ def _manager_dash_full_url(tab_key):
         return url_for("store.manager_page_list", page="attendance")
     if tab_key == "uniform":
         return url_for("store.manager_page_list", page="uniform")
+    if tab_key == "reports":
+        return url_for("store.manager_page_list", page="reports")
     if tab_key == "training":
         return url_for("store.manager_page_list", page="training")
     if tab_key == "maintenance":
@@ -4538,6 +4751,8 @@ def manager_page_list(page: str):
             return _render_attendance_v3(db, label, active_key)
         if page == "uniform":
             return _render_uniform_v1(db, label, active_key)
+        if page == "reports":
+            return _render_manager_reports_v1(db, label, active_key)
         if page == "maintenance":
             return _render_maintenance_v3(db, label, active_key)
         if page == "training":
@@ -4573,7 +4788,7 @@ def manager_page_new(page: str):
         abort(404)
     if not _manager_dashboard_ok():
         abort(403)
-    if page == "uniform":
+    if page in ("uniform", "reports"):
         abort(404)
     Model = _manager_model_for_slug(page)
     if Model is None:

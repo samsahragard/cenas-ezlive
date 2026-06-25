@@ -30,6 +30,48 @@
     gap: 10px;
     margin-bottom: 12px;
   }
+  .corp-categories {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    margin: 0 0 12px;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.22);
+    scrollbar-width: thin;
+  }
+  .corp-cat-label {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.50);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .corp-cat-pill {
+    flex: 0 0 auto;
+    min-height: 32px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.80);
+    padding: 7px 11px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .corp-cat-pill:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+  }
+  .corp-cat-pill.active {
+    border-color: rgba(232, 122, 62, 0.80);
+    background: rgba(232, 122, 62, 0.20);
+    color: #fff;
+  }
   .corp-search {
     width: min(360px, 100%);
     min-height: 40px;
@@ -464,6 +506,17 @@
       <input class="corp-search" id="corpSearch" type="search" placeholder="Search catalog" autocomplete="off">
       <a class="corp-history-link" href="{{ url_for('corporate_order.reports') }}">Order history</a>
     </div>
+    {% if categories %}
+    <nav class="corp-categories" aria-label="Departments">
+      <span class="corp-cat-label">Departments</span>
+      <a class="corp-cat-pill {% if not selected_category %}active{% endif %}"
+         href="{{ url_for('corporate_order.view') }}">All</a>
+      {% for c in categories %}
+        <a class="corp-cat-pill {% if selected_category == c %}active{% endif %}"
+           href="{{ url_for('corporate_order.view', category=c) }}">{{ c }}</a>
+      {% endfor %}
+    </nav>
+    {% endif %}
 
     {% if products %}
       {% if not is_admin %}

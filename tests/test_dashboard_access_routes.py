@@ -217,9 +217,9 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
     assert "Bleach (6/case)" in html
     assert 'src="https://cenaskitchen.com/media/Bleach.webp"' in html
     assert 'name="qty_42"' in html
-    assert "Departments" not in html
-    assert "corp-cat-pill" not in html
-    assert 'class="corp-cat"' not in html
+    assert "Departments" in html
+    assert "corp-cat-pill active" in html
+    assert 'href="/dos/corporate-order?category=Cleaning+Supplies"' in html
     assert "corporate_order_demo.html" not in html
 
 

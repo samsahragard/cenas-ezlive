@@ -1447,6 +1447,22 @@ def _central_dt(dt):
         return dt + timedelta(hours=_central_offset_hours(dt))
 
 
+def _ordinal_suffix(day: int) -> str:
+    if 10 <= day % 100 <= 13:
+        return "th"
+    return {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+
+
+def _long_order_date_label(order_date: date | None) -> str:
+    if order_date is None:
+        return "-"
+    return (
+        f"{order_date.strftime('%A').upper()} "
+        f"{order_date.strftime('%B')} "
+        f"{order_date.day}{_ordinal_suffix(order_date.day)}"
+    )
+
+
 def _render_daily_log_v3(db, label, active_key):
     """Daily Manager Log v3 — a 12-day windowed, day-grouped view.
     ?date=<iso> sets the window end (default today)."""
@@ -5758,6 +5774,9 @@ def _render_fresh_food_orders_tab(ff_tab: str):
         completed_local_by_order = {
             o.id: _central_dt(o.fulfilled_at) for o in rows
         }
+        order_date_label_by_order = {
+            o.id: _long_order_date_label(o.order_date) for o in rows
+        }
         return render_template(
             "fresh_food_recent_orders.html",
             orders=rows,
@@ -5769,6 +5788,7 @@ def _render_fresh_food_orders_tab(ff_tab: str):
             lines_by_order=lines_by_order,
             placed_local_by_order=placed_local_by_order,
             completed_local_by_order=completed_local_by_order,
+            order_date_label_by_order=order_date_label_by_order,
             ff_tab=ff_tab,
             active=(
                 "fresh_food_fulfill_order"

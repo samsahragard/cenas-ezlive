@@ -722,6 +722,7 @@
           {% set olines = lines_by_order.get(o.id, []) %}
           {% set placed_local = placed_local_by_order.get(o.id) %}
           {% set completed_local = completed_local_by_order.get(o.id) %}
+          {% set order_date_label = order_date_label_by_order.get(o.id, '—') %}
           {% set ns = namespace(sent=0) %}
           {% for ln in olines %}{% if ln.sent_qty %}{% set ns.sent = ns.sent + ln.sent_qty %}{% endif %}{% endfor %}
           <article class="ffro-complete-card" data-order-id="{{ o.id }}" data-status="completed">
@@ -729,8 +730,8 @@
               <span class="ac-stamp">Order Complete</span>
               <span class="store-tag {{ o.store_scope or 'both' }}">{{ (o.store_scope or 'both')|title }}</span>
             </div>
-            <div class="ac-title">Order #{{ o.id }}</div>
-            <div class="ac-sub">For {{ o.order_date.strftime('%a, %b %d') if o.order_date else '—' }}</div>
+            <div class="ac-title">{{ order_date_label }}</div>
+            <div class="ac-sub">Order #{{ o.id }}</div>
             <div class="ac-meta">
               Completed {% if completed_local %}{{ completed_local.strftime('%b %d') }} · {{ completed_local.strftime('%I:%M %p').lstrip('0') }} Houston{% else %}—{% endif %}<br>
               Placed {% if placed_local %}{{ placed_local.strftime('%b %d') }} · {{ placed_local.strftime('%I:%M %p').lstrip('0') }} Houston{% else %}—{% endif %}<br>

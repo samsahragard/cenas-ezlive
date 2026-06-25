@@ -47,7 +47,9 @@ def _central_offset_hours(utc_now: datetime) -> int:
     second_sunday_march = mar1 + timedelta(days=(6 - mar1.weekday()) % 7 + 7)
     nov1 = date(y, 11, 1)
     first_sunday_nov = nov1 + timedelta(days=(6 - nov1.weekday()) % 7)
-    return -5 if second_sunday_march <= utc_now.date() < first_sunday_nov else -6
+    dst_start_utc = datetime(y, 3, second_sunday_march.day, 8, 0)
+    dst_end_utc = datetime(y, 11, first_sunday_nov.day, 7, 0)
+    return -5 if dst_start_utc <= utc_now < dst_end_utc else -6
 
 
 def _local_today() -> date:
@@ -1430,9 +1432,9 @@ _DAILY_LOG_MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 
 def _central_dt(dt):
-    """A UTC-naive datetime -> America/Chicago naive, for display. The
-    manager logs stamp created_at with datetime.utcnow(); rendering that
-    raw read 5h ahead of Houston time (an 8:46 PM entry showed 1:46 AM)."""
+    """A UTC-naive datetime -> Houston/Central naive, for display. The
+    dashboard stores UTC with datetime.utcnow(); rendering that raw reads
+    ahead of the literal Houston time users expect."""
     if dt is None:
         return None
     try:
@@ -1441,7 +1443,7 @@ def _central_dt(dt):
                   .astimezone(ZoneInfo("America/Chicago"))
                   .replace(tzinfo=None))
     except Exception:
-        return dt - timedelta(hours=5)
+        return dt + timedelta(hours=_central_offset_hours(dt))
 
 
 def _render_daily_log_v3(db, label, active_key):
@@ -5537,6 +5539,10 @@ def _render_fresh_food_orders_tab(ff_tab: str):
         variance_rows = _ff_variance_rows(db, days=30)
         avg_by_slug = _ff_rolling_avg_by_slug(db, days=30)
         lines_by_order = _ff_lines_by_order(db, [o.id for o in rows])
+        placed_local_by_order = {o.id: _central_dt(o.placed_at) for o in rows}
+        completed_local_by_order = {
+            o.id: _central_dt(o.fulfilled_at) for o in rows
+        }
         return render_template(
             "fresh_food_recent_orders.html",
             orders=rows,
@@ -5546,10 +5552,14 @@ def _render_fresh_food_orders_tab(ff_tab: str):
             variance_rows=variance_rows,
             rolling_avg_by_slug=avg_by_slug,
             lines_by_order=lines_by_order,
+            placed_local_by_order=placed_local_by_order,
+            completed_local_by_order=completed_local_by_order,
             ff_tab=ff_tab,
             active=(
                 "fresh_food_fulfill_order"
                 if ff_tab == "fulfill"
+                else "fresh_food_complete_order"
+                if ff_tab == "complete"
                 else "fresh_food_recent_orders"
             ),
         )
@@ -5560,6 +5570,11 @@ def _render_fresh_food_orders_tab(ff_tab: str):
 @store_bp.route("/fresh-food/fulfill-order", methods=["GET"])
 def fresh_food_fulfill_order():
     return _render_fresh_food_orders_tab("fulfill")
+
+
+@store_bp.route("/fresh-food/complete-order", methods=["GET"])
+def fresh_food_complete_order():
+    return _render_fresh_food_orders_tab("complete")
 
 
 @store_bp.route("/fresh-food/recent-orders", methods=["GET"])

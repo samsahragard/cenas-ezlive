@@ -1,7 +1,8 @@
 {% extends "base_dashboard.html" %}
 {% set ff_tab = ff_tab|default('history') %}
-{% set active = 'fresh_food_fulfill_order' if ff_tab == 'fulfill' else 'fresh_food_recent_orders' %}
-{% block title %}Fresh Food — {{ 'Fullfill Order' if ff_tab == 'fulfill' else 'History' }} — Cenas Kitchen{% endblock %}
+{% set active = 'fresh_food_fulfill_order' if ff_tab == 'fulfill' else ('fresh_food_complete_order' if ff_tab == 'complete' else 'fresh_food_recent_orders') %}
+{% set ff_title = 'Fullfill Order' if ff_tab == 'fulfill' else ('Complete Order' if ff_tab == 'complete' else 'History') %}
+{% block title %}Fresh Food - {{ ff_title }} - Cenas Kitchen{% endblock %}
 {# Page header is an inline hero inside the content block (ck #8:44) —
    base page_title/page_subtitle emptied so there's no stacked title row.
    The inline .ffh-title is already a Page-Title-Library two-word treatment
@@ -136,6 +137,7 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
+  .ffro-page .muted { color: rgba(255,255,255,0.40); }
 
   /* SECTION 1: Live trackers ---------------------------------------------- */
   .ffro-tracker-grid {
@@ -336,6 +338,58 @@
   .ffro-active-card .ac-sub { font-size: 12px; color: rgba(255,255,255,0.72); }
   .ffro-active-card .ac-meta { font-size: 11px; color: rgba(255,255,255,0.50); line-height: 1.5; margin-top: 2px; }
   .ffro-active-card .ac-fill { width: 100%; justify-content: center; margin-top: 8px; }
+  .ffro-active-card .ac-stamp.complete,
+  .status-pill.completed { background: rgba(156,203,118,0.14); color: #9CCB76; }
+
+  /* SECTION 1.6: Completed order cards ----------------------------------- */
+  .ffro-complete-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .ffro-complete-card {
+    background: rgba(0,0,0,0.20);
+    border: 0.5px solid rgba(156,203,118,0.20);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .ffro-complete-card .ac-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .ffro-complete-card .ac-stamp {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: #9CCB76;
+    background: rgba(156,203,118,0.14);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .ffro-complete-card .ac-title { font-size: 14px; font-weight: 700; color: #FAF6EC; }
+  .ffro-complete-card .ac-sub { font-size: 12px; color: rgba(255,255,255,0.72); margin-top: 2px; }
+  .ffro-complete-card .ac-meta { font-size: 11px; color: rgba(255,255,255,0.52); line-height: 1.5; margin-top: 6px; }
+  table.ffro-complete-lines {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 11.5px;
+    color: #FAF6EC;
+  }
+  table.ffro-complete-lines th,
+  table.ffro-complete-lines td {
+    padding: 5px 0;
+    border-bottom: 0.5px solid rgba(255,255,255,0.05);
+    text-align: right;
+  }
+  table.ffro-complete-lines th { color: rgba(255,255,255,0.48); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; }
+  table.ffro-complete-lines th:first-child,
+  table.ffro-complete-lines td:first-child { text-align: left; padding-right: 8px; }
 
   /* MODAL: filter / fulfill ---------------------------------------------- */
   .ffro-modal-bg {
@@ -515,6 +569,7 @@
   <div class="ff-tabs">
     <a class="ff-tab" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
     <a class="ff-tab{% if ff_tab == 'fulfill' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill Order</a>
+    <a class="ff-tab{% if ff_tab == 'complete' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_complete_order') }}">Complete Order</a>
     <a class="ff-tab{% if ff_tab == 'history' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
   </div>
@@ -590,22 +645,23 @@
   {% endif %}
 
   {% if ff_tab == 'fulfill' %}
-  {# --- SECTION 1.5: Active orders awaiting SENT confirmation --------- #}
+  {# --- SECTION 1.5: Active orders shown as New Order cards ---------- #}
   {% set active_orders = orders | selectattr('status', 'equalto', 'active') | list %}
   <div class="ffro-section">
     <h2>
       <i class="ti ti-clock-hour-4"></i>Active orders
-      <span class="h-sub">{{ active_orders|length }} awaiting SENT confirmation</span>
+      <span class="h-sub">{{ active_orders|length }} new order{{ '' if active_orders|length == 1 else 's' }}</span>
     </h2>
     {% if active_orders %}
       <div class="ffro-active-grid">
         {% for o in active_orders %}
           {% set olines = lines_by_order.get(o.id, []) %}
+          {% set placed_local = placed_local_by_order.get(o.id) %}
           {% set ns = namespace(units=0) %}
           {% for ln in olines %}{% if ln.or_qty %}{% set ns.units = ns.units + ln.or_qty %}{% endif %}{% endfor %}
           <div class="ffro-active-card" data-order-id="{{ o.id }}" data-status="active">
             <div class="ac-top">
-              <span class="ac-stamp">Active</span>
+              <span class="ac-stamp">New Order</span>
               <span class="store-tag {{ o.store_scope or 'both' }}">{{ (o.store_scope or 'both')|title }}</span>
             </div>
             <div class="ac-title">Order #{{ o.id }}</div>
@@ -615,14 +671,14 @@
               {{ olines|length }} item{{ '' if olines|length == 1 else 's' }} · {{ '%.1f'|format(ns.units) }} units ordered
             </div>
             <button class="ffro-btn primary ac-fill" type="button" data-order-id="{{ o.id }}">
-              <i class="ti ti-truck-delivery"></i>Fill SENT
+              <i class="ti ti-truck-delivery"></i>New Order
             </button>
             {# ---- Mobile collapsed row + dropdown (phone only) ---- #}
             <div class="ffro-m-row">
               <div class="ffro-m-left">
                 <div class="ffro-m-num">Order #{{ o.id }}</div>
                 <div class="ffro-m-sub">
-                  {%- if o.placed_at -%}{{ o.placed_at.strftime('%b %d') }} · {{ o.placed_at.strftime('%I:%M %p').lstrip('0') }}{%- else -%}—{%- endif -%}
+                  {%- if placed_local -%}{{ placed_local.strftime('%b %d') }} · {{ placed_local.strftime('%I:%M %p').lstrip('0') }} Houston{%- else -%}—{%- endif -%}
                 </div>
               </div>
               <div class="ffro-m-right">
@@ -632,13 +688,13 @@
             </div>
             <div class="ffro-m-detail">
               <div class="ffro-m-d-inner">
-                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Status</span><span class="ffro-m-d-value"><span class="status-pill active">Active</span></span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Status</span><span class="ffro-m-d-value"><span class="status-pill active">New Order</span></span></div>
                 <div class="ffro-m-d-row"><span class="ffro-m-d-label">For</span><span class="ffro-m-d-value">{{ o.order_date.strftime('%a, %b %d') if o.order_date else '—' }}</span></div>
                 <div class="ffro-m-d-row"><span class="ffro-m-d-label">Placed by</span><span class="ffro-m-d-value">{{ o.placed_by_name or '—' }}</span></div>
                 <div class="ffro-m-d-row"><span class="ffro-m-d-label">Items</span><span class="ffro-m-d-value">{{ olines|length }} · {{ '%.1f'|format(ns.units) }} units</span></div>
                 <div class="ffro-m-d-actions">
                   <button class="ffro-btn primary ac-fill" type="button" data-order-id="{{ o.id }}">
-                    <i class="ti ti-truck-delivery"></i>Fill SENT
+                    <i class="ti ti-truck-delivery"></i>New Order
                   </button>
                 </div>
               </div>
@@ -648,6 +704,59 @@
       </div>
     {% else %}
       <div class="var-empty" style="padding:24px;">All caught up — no orders awaiting confirmation.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if ff_tab == 'complete' %}
+  {# --- SECTION 1.6: Completed orders with actual SENT quantities ----- #}
+  {% set completed_orders = orders | selectattr('status', 'equalto', 'completed') | list %}
+  <div class="ffro-section">
+    <h2>
+      <i class="ti ti-circle-check"></i>Complete orders
+      <span class="h-sub">{{ completed_orders|length }} order{{ '' if completed_orders|length == 1 else 's' }} complete</span>
+    </h2>
+    {% if completed_orders %}
+      <div class="ffro-complete-grid">
+        {% for o in completed_orders %}
+          {% set olines = lines_by_order.get(o.id, []) %}
+          {% set placed_local = placed_local_by_order.get(o.id) %}
+          {% set completed_local = completed_local_by_order.get(o.id) %}
+          {% set ns = namespace(sent=0) %}
+          {% for ln in olines %}{% if ln.sent_qty %}{% set ns.sent = ns.sent + ln.sent_qty %}{% endif %}{% endfor %}
+          <article class="ffro-complete-card" data-order-id="{{ o.id }}" data-status="completed">
+            <div class="ac-top">
+              <span class="ac-stamp">Order Complete</span>
+              <span class="store-tag {{ o.store_scope or 'both' }}">{{ (o.store_scope or 'both')|title }}</span>
+            </div>
+            <div class="ac-title">Order #{{ o.id }}</div>
+            <div class="ac-sub">For {{ o.order_date.strftime('%a, %b %d') if o.order_date else '—' }}</div>
+            <div class="ac-meta">
+              Completed {% if completed_local %}{{ completed_local.strftime('%b %d') }} · {{ completed_local.strftime('%I:%M %p').lstrip('0') }} Houston{% else %}—{% endif %}<br>
+              Placed {% if placed_local %}{{ placed_local.strftime('%b %d') }} · {{ placed_local.strftime('%I:%M %p').lstrip('0') }} Houston{% else %}—{% endif %}<br>
+              Fulfilled by {{ o.fulfilled_by_name or '—' }}{% if o.sent_date %} · Sent date {{ o.sent_date.isoformat() }}{% endif %}
+            </div>
+            <table class="ffro-complete-lines">
+              <thead>
+                <tr><th>Item</th><th>OR</th><th>Sent</th></tr>
+              </thead>
+              <tbody>
+                {% for ln in olines %}
+                  <tr>
+                    <td>{{ ln.item_slug.replace('-', ' ').title() }}</td>
+                    <td>{% if ln.or_qty is not none %}{{ ln.or_qty }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>{% if ln.sent_qty is not none %}<strong>{{ ln.sent_qty }}</strong>{% else %}<span class="muted">—</span>{% endif %}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="3" style="text-align:center;color:rgba(255,255,255,0.40);padding:12px 0;">No line items found.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="var-empty" style="padding:24px;">No completed orders yet.</div>
     {% endif %}
   </div>
   {% endif %}
@@ -667,7 +776,7 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>Placed</th>
+            <th>Placed (Houston)</th>
             <th>Order date</th>
             <th>Store</th>
             <th>Placed by</th>
@@ -678,13 +787,15 @@
         </thead>
         <tbody>
           {% for o in orders %}
+            {% set placed_local = placed_local_by_order.get(o.id) %}
+            {% set status_label = 'Order Complete' if o.status == 'completed' else ('New Order' if o.status == 'active' else o.status) %}
             <tr class="{% if o.status == 'active' %}is-active{% endif %}" data-order-id="{{ o.id }}" data-status="{{ o.status }}">
               <td>{{ o.id }}</td>
-              <td>{{ o.placed_at.strftime('%Y-%m-%d %H:%M') if o.placed_at else '' }}</td>
+              <td>{{ placed_local.strftime('%Y-%m-%d %H:%M') if placed_local else '' }}</td>
               <td>{{ o.order_date.isoformat() if o.order_date else '' }}</td>
               <td><span class="store-tag {{ (o.store_scope or 'both') }}">{{ (o.store_scope or 'both')|title }}</span></td>
               <td>{{ o.placed_by_name or '—' }}</td>
-              <td><span class="status-pill {{ o.status }}">{{ o.status }}</span></td>
+              <td><span class="status-pill {{ o.status }}">{{ status_label }}</span></td>
               <td>{{ o.sent_date.isoformat() if o.sent_date else '—' }}</td>
               <td>{{ o.fulfilled_by_name or '—' }}</td>
             </tr>
@@ -694,12 +805,14 @@
       {# ---- Mobile cards mirror of history table (phone only) ---- #}
       <div class="ffro-hist-mobile">
         {% for o in orders %}
+          {% set placed_local = placed_local_by_order.get(o.id) %}
+          {% set status_label = 'Order Complete' if o.status == 'completed' else ('New Order' if o.status == 'active' else o.status) %}
           <div class="ffro-m-card" data-order-id="{{ o.id }}" data-status="{{ o.status }}">
             <div class="ffro-m-row">
               <div class="ffro-m-left">
                 <div class="ffro-m-num">Order #{{ o.id }}</div>
                 <div class="ffro-m-sub">
-                  {%- if o.placed_at -%}{{ o.placed_at.strftime('%b %d') }} · {{ o.placed_at.strftime('%I:%M %p').lstrip('0') }}{%- else -%}—{%- endif -%}
+                  {%- if placed_local -%}{{ placed_local.strftime('%b %d') }} · {{ placed_local.strftime('%I:%M %p').lstrip('0') }} Houston{%- else -%}—{%- endif -%}
                 </div>
               </div>
               <div class="ffro-m-right">
@@ -709,7 +822,7 @@
             </div>
             <div class="ffro-m-detail">
               <div class="ffro-m-d-inner">
-                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Status</span><span class="ffro-m-d-value"><span class="status-pill {{ o.status }}">{{ o.status }}</span></span></div>
+                <div class="ffro-m-d-row"><span class="ffro-m-d-label">Status</span><span class="ffro-m-d-value"><span class="status-pill {{ o.status }}">{{ status_label }}</span></span></div>
                 <div class="ffro-m-d-row"><span class="ffro-m-d-label">Order date</span><span class="ffro-m-d-value">{{ o.order_date.isoformat() if o.order_date else '—' }}</span></div>
                 <div class="ffro-m-d-row"><span class="ffro-m-d-label">Placed by</span><span class="ffro-m-d-value">{{ o.placed_by_name or '—' }}</span></div>
                 <div class="ffro-m-d-row"><span class="ffro-m-d-label">Sent date</span><span class="ffro-m-d-value">{{ o.sent_date.isoformat() if o.sent_date else '—' }}</span></div>
@@ -778,7 +891,7 @@
   <div class="ffro-modal">
     <div class="mh">
       <i class="ti ti-truck-delivery" style="color:#E4B340;"></i>
-      <h3>Fulfill order <span id="ffro-ff-id" style="color:#E4B340;"></span></h3>
+      <h3>New Order <span id="ffro-ff-id" style="color:#E4B340;"></span></h3>
       <button class="x" type="button" onclick="document.getElementById('ffro-fulfill-bg').classList.remove('is-open');">×</button>
     </div>
     <div class="mb">
@@ -802,7 +915,7 @@
     </div>
     <div class="mf">
       <button class="ffro-btn ghost" type="button" onclick="document.getElementById('ffro-fulfill-bg').classList.remove('is-open');">Cancel</button>
-      <button class="ffro-btn primary" type="button" id="ffro-ff-submit"><i class="ti ti-check"></i>Save fulfillment</button>
+      <button class="ffro-btn primary" type="button" id="ffro-ff-submit"><i class="ti ti-check"></i>Complete order</button>
     </div>
   </div>
 </div>
@@ -943,7 +1056,7 @@
       sent_lines: sent_lines,
     };
 
-    ffSubmit.disabled = true; ffSubmit.textContent = 'Saving...';
+    ffSubmit.disabled = true; ffSubmit.textContent = 'Completing...';
     fetch("{{ url_for('store.fresh_food_recent_orders') }}" + '/' + currentOrderId + '/fulfill', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -951,13 +1064,13 @@
     })
     .then(function(r){ return r.json(); })
     .then(function(j){
-      ffSubmit.disabled = false; ffSubmit.innerHTML = '<i class="ti ti-check"></i>Save fulfillment';
+      ffSubmit.disabled = false; ffSubmit.innerHTML = '<i class="ti ti-check"></i>Complete order';
       if(j && j.ok){
         ffBanner.style.display = 'block';
         ffBanner.style.background = 'rgba(156,203,118,0.10)';
         ffBanner.style.color = '#9CCB76';
         ffBanner.style.border = '0.5px solid rgba(156,203,118,0.30)';
-        ffBanner.textContent = 'Saved (status: ' + j.status + '). Reloading...';
+        ffBanner.textContent = 'Order complete. Reloading...';
         setTimeout(function(){ window.location.reload(); }, 700);
       } else {
         ffBanner.style.display = 'block';
@@ -968,7 +1081,7 @@
       }
     })
     .catch(function(e){
-      ffSubmit.disabled = false; ffSubmit.innerHTML = '<i class="ti ti-check"></i>Save fulfillment';
+      ffSubmit.disabled = false; ffSubmit.innerHTML = '<i class="ti ti-check"></i>Complete order';
       ffBanner.style.display = 'block';
       ffBanner.style.background = 'rgba(229,107,107,0.10)';
       ffBanner.style.color = '#E56B6B';

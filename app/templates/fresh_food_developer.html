@@ -223,6 +223,7 @@
   <div class="ff-tabs">
     <a class="ff-tab" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill Order</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_complete_order') }}">Complete Order</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
     <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
   </div>
@@ -310,18 +311,19 @@
           <tr>
             <th>#</th>
             <th class="left">Placed by</th>
-            <th>Placed time</th>
+            <th>Placed time (Houston)</th>
             <th>Delivery date</th>
             <th>Items</th>
             <th>Ordered</th>
             <th>Status</th>
-            <th>Completed time</th>
+            <th>Completed time (Houston)</th>
             <th>Completed by</th>
             <th>Minutes</th>
           </tr>
         </thead>
         <tbody>
           {% for o in orders %}
+            {% set status_label = 'Order Complete' if o.status == 'completed' else ('New Order' if o.status == 'active' else o.status) %}
             <tr>
               <td>{{ o.id }}</td>
               <td class="left">{{ o.placed_by }}</td>
@@ -329,7 +331,7 @@
               <td>{{ o.order_date.isoformat() if o.order_date else '-' }}</td>
               <td>{{ o.item_count }}</td>
               <td>{{ '%.1f'|format(o.units_ordered) }}</td>
-              <td><span class="status-pill {{ o.status }}">{{ o.status }}</span></td>
+              <td><span class="status-pill {{ o.status }}">{{ status_label }}</span></td>
               <td>{% if o.completed_local %}{{ o.completed_local.strftime('%m/%d %I:%M %p').lstrip('0') }}{% else %}<span class="muted">-</span>{% endif %}</td>
               <td class="left">{% if o.fulfilled_by %}{{ o.fulfilled_by }}{% else %}<span class="muted">-</span>{% endif %}</td>
               <td>{% if o.review_minutes is not none %}{{ '%.1f'|format(o.review_minutes) }}{% else %}<span class="muted">-</span>{% endif %}</td>

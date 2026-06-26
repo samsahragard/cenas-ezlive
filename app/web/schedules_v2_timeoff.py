@@ -21,9 +21,11 @@ rows). Only an APPROVED request blocks shift-create (scheduling_timeoff.conflict
 """
 from __future__ import annotations
 
-from datetime import datetime
+import json
+import re
+from datetime import date, datetime
 
-from flask import g, jsonify, request
+from flask import g, jsonify, render_template_string, request
 
 from app.db import SessionLocal
 from app.models import Employee, EmployeeStoreAssignment, TimeOffRequest
@@ -128,6 +130,216 @@ def sv2_time_off_approve(req_id):
 def sv2_time_off_deny(req_id):
     """Deny a pending (or reverse a previously-approved) request. Cancelled -> 409."""
     return _review(req_id, "denied", allowed_from=("pending", "approved"))
+
+
+_SLING_IMPORT_FORM = """
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Sling time-off import</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; background: #1c1009; color: #fff8ea; }
+      textarea { width: 100%; min-height: 280px; background: #100804; color: #fff8ea; border: 1px solid #7b4a16; border-radius: 6px; padding: 10px; }
+      button { margin-top: 12px; padding: 10px 14px; border-radius: 6px; border: 1px solid #d8a629; background: #d8a629; color: #160c06; font-weight: 800; }
+      label { display: block; margin-top: 12px; }
+      input[type=text] { background: #100804; color: #fff8ea; border: 1px solid #7b4a16; border-radius: 6px; padding: 8px; }
+      pre { white-space: pre-wrap; background: #100804; border: 1px solid #7b4a16; border-radius: 6px; padding: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Sling time-off import - {{ store }}</h1>
+    <form method="post">
+      <textarea name="requests_json" placeholder='{"requests":[{"name":"Employee","start_date":"2026-07-01","end_date":"2026-07-02","status":"pending","reason":"Vacation"}]}'></textarea>
+      <label><input type="checkbox" name="commit" value="1"> Commit import</label>
+      <label>Type IMPORT to commit <input type="text" name="confirm" autocomplete="off"></label>
+      <button type="submit">Run import</button>
+    </form>
+    {% if result %}<h2>Result</h2><pre>{{ result }}</pre>{% endif %}
+  </body>
+</html>
+"""
+
+
+def _norm_import_name(value):
+    text = re.sub(r"[^a-z0-9]+", " ", (value or "").casefold())
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _parse_import_date(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def _load_import_rows(body):
+    if isinstance(body, list):
+        rows = body
+    elif isinstance(body, dict):
+        rows = body.get("requests")
+    else:
+        rows = None
+    return rows if isinstance(rows, list) else []
+
+
+def _sling_timeoff_import_summary(db, rows, commit=False):
+    now = datetime.utcnow()
+    employees = (db.query(Employee)
+                   .join(EmployeeStoreAssignment,
+                         EmployeeStoreAssignment.employee_id == Employee.id)
+                   .filter(EmployeeStoreAssignment.store_key == _store())
+                   .order_by(Employee.full_name.asc(), Employee.id.asc())
+                   .all())
+    by_name = {}
+    for emp in employees:
+        key = _norm_import_name(emp.full_name)
+        if key:
+            by_name.setdefault(key, []).append(emp)
+
+    summary = {
+        "ok": True,
+        "store": _store(),
+        "commit": bool(commit),
+        "received": len(rows),
+        "created": 0,
+        "duplicates": [],
+        "overlaps": [],
+        "unmatched": [],
+        "ambiguous": [],
+        "invalid": [],
+        "created_requests": [],
+    }
+    allowed_statuses = {"pending", "approved", "denied", "cancelled"}
+
+    for idx, raw in enumerate(rows, start=1):
+        if not isinstance(raw, dict):
+            summary["invalid"].append({"row": idx, "error": "row is not an object"})
+            continue
+        name = (raw.get("name") or raw.get("employee_name") or "").strip()
+        start = _parse_import_date(raw.get("start_date"))
+        end = _parse_import_date(raw.get("end_date") or raw.get("start_date"))
+        status = (raw.get("status") or "pending").strip().lower()
+        reason = (raw.get("reason") or "").strip() or None
+        if not name or start is None or end is None or end < start:
+            summary["invalid"].append({
+                "row": idx, "name": name, "start_date": raw.get("start_date"),
+                "end_date": raw.get("end_date"), "error": "missing or invalid name/date range",
+            })
+            continue
+        if status not in allowed_statuses:
+            summary["invalid"].append({
+                "row": idx, "name": name, "status": raw.get("status"),
+                "error": "invalid status",
+            })
+            continue
+
+        matches = by_name.get(_norm_import_name(name), [])
+        if not matches:
+            summary["unmatched"].append({
+                "row": idx, "name": name, "start_date": start.isoformat(),
+                "end_date": end.isoformat(), "reason": reason,
+            })
+            continue
+        if len(matches) > 1:
+            summary["ambiguous"].append({
+                "row": idx, "name": name,
+                "candidates": [{"id": emp.id, "full_name": emp.full_name} for emp in matches],
+            })
+            continue
+        emp = matches[0]
+
+        exact = (db.query(TimeOffRequest)
+                   .filter(TimeOffRequest.employee_id == emp.id,
+                           TimeOffRequest.start_date == start,
+                           TimeOffRequest.end_date == end,
+                           TimeOffRequest.status == status,
+                           TimeOffRequest.reason == reason)
+                   .first())
+        if exact is not None:
+            summary["duplicates"].append({
+                "row": idx, "id": exact.id, "employee_id": emp.id,
+                "employee_name": emp.full_name, "start_date": start.isoformat(),
+                "end_date": end.isoformat(), "status": status,
+            })
+            continue
+
+        overlap = (db.query(TimeOffRequest)
+                     .filter(TimeOffRequest.employee_id == emp.id,
+                             TimeOffRequest.status.in_(("pending", "approved")),
+                             TimeOffRequest.start_date <= end,
+                             TimeOffRequest.end_date >= start)
+                     .first())
+        if overlap is not None:
+            summary["overlaps"].append({
+                "row": idx, "employee_id": emp.id, "employee_name": emp.full_name,
+                "start_date": start.isoformat(), "end_date": end.isoformat(),
+                "existing_id": overlap.id,
+                "existing_start_date": overlap.start_date.isoformat(),
+                "existing_end_date": overlap.end_date.isoformat(),
+                "existing_status": overlap.status,
+            })
+            continue
+
+        item = {
+            "row": idx, "employee_id": emp.id, "employee_name": emp.full_name,
+            "start_date": start.isoformat(), "end_date": end.isoformat(),
+            "status": status, "reason": reason,
+        }
+        if commit:
+            req = TimeOffRequest(employee_id=emp.id, start_date=start, end_date=end,
+                                 reason=reason, status=status, created_at=now,
+                                 updated_at=now)
+            db.add(req)
+            db.flush()
+            item["id"] = req.id
+            summary["created"] += 1
+        summary["created_requests"].append(item)
+
+    if commit:
+        db.commit()
+    return summary
+
+
+@store_bp.route("/schedules-v2/time-off/import-sling", methods=["GET", "POST"])
+@require_level("partner")
+def sv2_time_off_import_sling():
+    """Hidden partner utility for Sling time-off exports.
+
+    Creates real TimeOffRequest rows, so imported requests appear in:
+      - employee self-service time-off history,
+      - manager time-off review/list flows,
+      - the week-builder request markers.
+    """
+    if request.method == "GET":
+        return render_template_string(_SLING_IMPORT_FORM, store=_store(), result=None)
+
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        commit = bool(body.get("commit")) if isinstance(body, dict) else False
+    else:
+        raw = (request.form.get("requests_json") or "").strip()
+        try:
+            body = json.loads(raw) if raw else {}
+        except json.JSONDecodeError as exc:
+            result = {"ok": False, "error": f"invalid JSON: {exc}"}
+            return render_template_string(_SLING_IMPORT_FORM, store=_store(),
+                                          result=json.dumps(result, indent=2)), 400
+        commit = request.form.get("commit") == "1" and request.form.get("confirm") == "IMPORT"
+
+    rows = _load_import_rows(body)
+    db = SessionLocal()
+    try:
+        summary = _sling_timeoff_import_summary(db, rows, commit=commit)
+    finally:
+        db.close()
+
+    if request.is_json or "application/json" in (request.headers.get("Accept") or ""):
+        return jsonify(summary), 200
+    return render_template_string(_SLING_IMPORT_FORM, store=_store(),
+                                  result=json.dumps(summary, indent=2))
 
 
 # ---------------------------------------------------------------------------

@@ -376,6 +376,7 @@
   var bannerErr = document.getElementById('ffpo-banner-err');
   var todayInputs = todayView.querySelectorAll('input.ff-num');
   var confirming = false;
+  var draftKey = 'cenas:fresh-food-place-order:v1:' + (dateInput.value || 'default');
 
   function showOk(m){ bannerErr.style.display='none'; bannerOk.textContent=m; bannerOk.style.display='block'; }
   function showErr(m){ bannerOk.style.display='none'; bannerErr.textContent=m; bannerErr.style.display='block'; }
@@ -388,6 +389,69 @@
     cancelBtn.style.display = 'none';
   }
 
+  function storageOk(){
+    try {
+      var t = '__ffpo_test__';
+      window.localStorage.setItem(t, '1');
+      window.localStorage.removeItem(t);
+      return true;
+    } catch(e){
+      return false;
+    }
+  }
+  var canStoreDraft = storageOk();
+
+  function draftValueKey(el){
+    return el.getAttribute('data-slug') + ':' + el.getAttribute('data-kind');
+  }
+
+  function saveDraft(){
+    if(!canStoreDraft) return;
+    var values = {};
+    var hasAny = false;
+    for(var i=0; i<todayInputs.length; i++){
+      var el = todayInputs[i];
+      var raw = el.value.trim();
+      if(raw === '') continue;
+      values[draftValueKey(el)] = raw;
+      hasAny = true;
+    }
+    try {
+      if(hasAny){
+        window.localStorage.setItem(draftKey, JSON.stringify({
+          order_date: dateInput.value,
+          saved_at: new Date().toISOString(),
+          values: values
+        }));
+      } else {
+        window.localStorage.removeItem(draftKey);
+      }
+    } catch(e){}
+  }
+
+  function clearDraft(){
+    if(!canStoreDraft) return;
+    try { window.localStorage.removeItem(draftKey); } catch(e){}
+  }
+
+  function restoreDraft(){
+    if(!canStoreDraft) return;
+    var raw = null;
+    try { raw = window.localStorage.getItem(draftKey); } catch(e){}
+    if(!raw) return;
+    try {
+      var parsed = JSON.parse(raw);
+      var values = parsed && parsed.values ? parsed.values : {};
+      for(var i=0; i<todayInputs.length; i++){
+        var el = todayInputs[i];
+        var saved = values[draftValueKey(el)];
+        if(saved !== undefined && saved !== null){
+          el.value = saved;
+        }
+      }
+    } catch(e){}
+  }
+
   function fmtLong(iso){
     try {
       return new Date(iso + 'T12:00:00').toLocaleDateString('en-US',
@@ -397,6 +461,7 @@
   function syncDate(){ if(dateLabel) dateLabel.textContent = fmtLong(dateInput.value); }
   dateInput.addEventListener('change', function(){
     if(!dateInput.value){ return; }
+    saveDraft();
     var url = new URL(window.location.href);
     url.searchParams.set('order_date', dateInput.value);
     window.location.href = url.toString();
@@ -415,8 +480,9 @@
     }
   }
   for(var j=0; j<todayInputs.length; j++){
-    todayInputs[j].addEventListener('input', function(){ refreshCount(); resetConfirm(); });
+    todayInputs[j].addEventListener('input', function(){ refreshCount(); saveDraft(); resetConfirm(); });
   }
+  restoreDraft();
   refreshCount();
 
   function collectLines(){
@@ -465,6 +531,7 @@
       resetConfirm();
       if(j && j.ok){
         showOk('Order #' + j.order_id + ' placed for ' + date + ' (' + arr.length + ' items).');
+        clearDraft();
         var clearTargets = todayInputs;
         for(var k=0; k<clearTargets.length; k++){ clearTargets[k].value = ''; }
         refreshCount();

@@ -749,6 +749,32 @@ def test_store_scope_blocks_other_store_dashboard(dashboard_app):
         assert resp.headers["Location"].endswith("/dos/")
 
 
+def test_both_store_user_gets_combined_store_switch_option(dashboard_app):
+    flask_app, db = dashboard_app
+    gm = _seed_actor(db, uid=105, role="gm", position="GM", store_key="tomball")
+    gm.store_scope = "tomball,copperfield"
+    db.add(EmployeePosition(employee_id=105, position_id=105, store_key="copperfield"))
+    db.commit()
+    client = _client_as(flask_app, gm)
+
+    resp = client.get("/dos/today")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert 'href="/uno/today"' in html
+    assert 'href="/dos/today"' in html
+    assert 'href="/corporate/today"' in html
+    assert re.search(r'href="/corporate/today"[^>]*>\s*Both\s*</a>', html)
+
+    combined = client.get("/corporate/today")
+    assert combined.status_code == 200
+    combined_html = combined.get_data(as_text=True)
+    assert 'href="/corporate/today"' in combined_html
+    assert re.search(
+        r'class="ck-sb-store-link active"[^>]*href="/corporate/today"[^>]*>\s*Both\s*</a>',
+        combined_html,
+    )
+
+
 @pytest.mark.parametrize(
     ("uid", "role", "position"),
     [

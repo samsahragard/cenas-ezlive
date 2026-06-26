@@ -530,8 +530,10 @@
    (1) session.last_store_slug; (2) the user's first accessible store; (3) 'dos' as the legacy default. #}
 {% set _user_slugs = current_user_stores() %}
 {% set store_slug = g.current_store or session.get('last_store_slug') or (_user_slugs[0][0] if _user_slugs else None) or 'dos' %}
-{% set _slug_labels = {'dos': 'Tomball', 'uno': 'Copperfield', 'corporate': 'Corporate', 'partner': 'Partner'} %}
-{% set store_label = g.store_label or _slug_labels.get(store_slug, 'Tomball') %}
+{% set _current_perm = (g.current_user.permission_level if g.current_user else '') %}
+{% set _corporate_label = 'Corporate' if _current_perm in ['partner', 'corporate'] else 'Both' %}
+{% set _slug_labels = {'dos': 'Tomball', 'uno': 'Copperfield', 'corporate': _corporate_label, 'partner': 'Partner'} %}
+{% set store_label = _slug_labels.get(store_slug, 'Tomball') if store_slug == 'corporate' else (g.store_label or _slug_labels.get(store_slug, 'Tomball')) %}
 {% set _accessible = current_user_stores() %}
 {# user_role drives which sections show in the new sidebar partial. Detection order:
    (1) session['driver_id'] → 'driver' (logged in via /driver/login) — collapses sidebar to driver-only menu;

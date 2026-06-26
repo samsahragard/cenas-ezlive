@@ -994,8 +994,16 @@ def install(app):
     from app.web.store_routes import STORE_LABELS
 
     def _current_user_stores():
-        slugs = accessible_store_slugs(getattr(g, "current_user", None))
-        return [(s, STORE_LABELS.get(s, s.title())) for s in slugs]
+        user = getattr(g, "current_user", None)
+        slugs = accessible_store_slugs(user)
+        role = (getattr(user, "permission_level", None) or "").strip().lower()
+        stores = []
+        for slug in slugs:
+            label = STORE_LABELS.get(slug, slug.title())
+            if slug == "corporate" and role not in ("partner", "corporate"):
+                label = "Both"
+            stores.append((slug, label))
+        return stores
 
     app.jinja_env.globals["current_user_stores"] = _current_user_stores
 

@@ -95,12 +95,22 @@ def test_team_pages_render_and_roster_is_section_grouped(app_with_partner):
             assert f'data-sub="{sub}"' in html, f"missing tab {sub} on /{slug}/team"
         for key in ("week-uno", "week-dos", "market-uno", "market-dos"):
             assert key in html, f"missing per-store frame {key} on /{slug}/team"
+        assert 'data-src="/uno/schedules-v2/?embed=1"' in html
+        assert 'data-src="/dos/schedules-v2/?embed=1"' in html
+        assert 'data-src="/uno/?embed=1"' not in html
+        assert 'data-src="/dos/?embed=1"' not in html
         assert 'data-src="/uno/schedules-v2/marketplace?embed=1"' in html
         assert 'data-src="/dos/schedules-v2/marketplace?embed=1"' in html
         assert 'data-embed-frame="schedule-reports"' in html
         assert 'data-src="/partner/schedule?embed=1"' in html
         assert "data-add-section" in html, f"missing section +Add wiring on /{slug}/team"
         assert "openAddFor" in html
+
+        sched = client.get(f"/{slug}/schedules-v2/?embed=1")
+        assert sched.status_code == 200, sched.get_data(as_text=True)[:500]
+        sched_html = sched.get_data(as_text=True)
+        assert "Week Builder" in sched_html
+        assert "Sales mix" not in sched_html
 
     # 2) team-roster JSON is section-grouped per store.
     rj = client.get("/dos/schedules-v2/team-roster")

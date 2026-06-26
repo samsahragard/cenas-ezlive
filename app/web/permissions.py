@@ -70,8 +70,10 @@ def accessible_store_slugs(user) -> list[str]:
     user can access. Partner and corporate see everything via their own
     slug; store-scoped roles (gm, manager, km, assistant_km, corporate_chef,
     prep_manager, foh_manager, expo, driver, corporate-driver) get one entry
-    per assigned store, derived from the User.store_scope CSV. Order is
-    stable so the sidebar dropdown is consistent."""
+    per assigned store, derived from the User.store_scope CSV. A store-scoped
+    user assigned to both concrete stores also gets the corporate slug as the
+    combined both-locations view. Order is stable so the sidebar dropdown is
+    consistent."""
     if user is None:
         return []
     level = user.permission_level
@@ -88,6 +90,8 @@ def accessible_store_slugs(user) -> list[str]:
         slug = SCOPE_TO_SLUG.get(scope.strip())
         if slug and slug not in out:
             out.append(slug)
+    if level not in ("driver", "corporate-driver") and "dos" in out and "uno" in out and "corporate" not in out:
+        out.append("corporate")
     return out
 
 

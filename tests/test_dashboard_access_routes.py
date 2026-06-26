@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime
 
 import pytest
 
 os.environ.setdefault("ALLOW_DEV_SECRET", "1")
 
-from app.models import Employee, EmployeePosition, Order, Position, User
+from app.models import Employee, EmployeePosition, Order, Position, User, VendorRecentOrder
 
 
 @pytest.fixture
@@ -776,6 +777,7 @@ def test_expo_can_access_all_vendor_tabs_but_not_insights(dashboard_app):
         "performance-food",
         "restaurant-depot",
         "specs",
+        "reports",
     }
 
     for path in (
@@ -784,8 +786,64 @@ def test_expo_can_access_all_vendor_tabs_but_not_insights(dashboard_app):
         "/dos/vendors/performance-food/recent-orders",
         "/dos/vendors/restaurant-depot/recent-orders",
         "/dos/vendors/specs/recent-orders",
+        "/dos/vendors/reports",
     ):
         assert client.get(path).status_code == 200, path
 
     assert client.get("/dos/performance").status_code == 403
     assert client.get("/dos/reports/server-performance").status_code == 403
+
+
+def test_vendor_reports_render_order_items_and_price_watch(dashboard_app):
+    flask_app, db = dashboard_app
+    partner = _seed_actor(db, uid=240, role="partner", position="Partner")
+    db.add_all([
+        VendorRecentOrder(
+            vendor="webstaurant",
+            store_scope="tomball",
+            order_number="W-200",
+            placed_at=datetime(2099, 6, 10, 9, 0),
+            total_cents=3000,
+            status="confirmed",
+            parse_status="parsed",
+            items_json=[{
+                "name": "Nitrile Gloves",
+                "sku": "GLV-XL",
+                "qty": "2",
+                "unit_price_cents": 1500,
+                "subtotal_cents": 3000,
+            }],
+        ),
+        VendorRecentOrder(
+            vendor="webstaurant",
+            store_scope="tomball",
+            order_number="W-201",
+            placed_at=datetime(2099, 6, 18, 9, 0),
+            total_cents=1800,
+            status="confirmed",
+            parse_status="parsed",
+            items_json={"items": [{
+                "name": "Nitrile Gloves",
+                "sku": "GLV-XL",
+                "qty": "1",
+                "unit_price_cents": 1800,
+                "subtotal_cents": 1800,
+            }]},
+        ),
+    ])
+    db.commit()
+    client = _client_as(flask_app, partner)
+    with client.session_transaction() as sess:
+        sess["partner_auth_ok"] = True
+
+    resp = client.get(
+        "/partner/vendors/reports"
+        "?vendor=webstaurant&start=2099-06-01&end=2099-06-30"
+    )
+
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Nitrile Gloves" in html
+    assert "$48.00" in html
+    assert "$18.00" in html
+    assert "+20.0%" in html

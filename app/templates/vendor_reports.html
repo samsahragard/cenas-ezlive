@@ -1,0 +1,564 @@
+{# Vendor analytics: /<store>/vendors/reports #}
+{% extends "base_dashboard.html" %}
+{% block title %}Vendor Reports - Cenas Kitchen{% endblock %}
+{% block topbar %}{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block content %}
+<style>
+  .vrp-page {
+    --vrp-bg: #100d0a;
+    --vrp-panel: #221b13;
+    --vrp-panel-2: #2b2318;
+    --vrp-border: rgba(236, 227, 208, 0.16);
+    --vrp-border-strong: rgba(228, 179, 64, 0.42);
+    --vrp-cream: #f3ead8;
+    --vrp-muted: rgba(243, 234, 216, 0.68);
+    --vrp-faint: rgba(243, 234, 216, 0.42);
+    --vrp-gold: #e2b83f;
+    --vrp-coral: #e85852;
+    --vrp-teal: #54c3ba;
+    --vrp-green: #77c36a;
+    --vrp-red: #e05a4f;
+    color: var(--vrp-cream);
+    min-height: 100vh;
+    position: relative;
+    padding-bottom: 64px;
+  }
+  .vrp-page::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--vrp-bg);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .vrp-page > * { position: relative; z-index: 1; }
+  .vrp-page *, .vrp-page *::before, .vrp-page *::after { box-sizing: border-box; }
+  .vrp-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  .vrp-title h1 {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 750;
+    letter-spacing: 0;
+  }
+  .vrp-title .accent { color: #C99368; }
+  .vrp-period {
+    color: var(--vrp-muted);
+    font-size: 12px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    letter-spacing: 0.04em;
+    margin-top: 8px;
+  }
+  .vrp-form {
+    display: grid;
+    grid-template-columns: minmax(210px, 1.2fr) minmax(140px, 0.7fr) minmax(140px, 0.7fr) auto;
+    gap: 10px;
+    align-items: end;
+    padding: 12px;
+    background: var(--vrp-panel);
+    border: 1px solid var(--vrp-border);
+    border-radius: 8px;
+    margin-bottom: 14px;
+  }
+  .vrp-field label {
+    display: block;
+    margin: 0 0 6px;
+    color: var(--vrp-faint);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .vrp-field select,
+  .vrp-field input {
+    width: 100%;
+    height: 38px;
+    border: 1px solid var(--vrp-border);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.28);
+    color: var(--vrp-cream);
+    padding: 0 10px;
+    font-size: 13px;
+  }
+  .vrp-field select:focus,
+  .vrp-field input:focus {
+    outline: none;
+    border-color: var(--vrp-border-strong);
+    box-shadow: 0 0 0 2px rgba(228, 179, 64, 0.12);
+  }
+  .vrp-run {
+    height: 38px;
+    border: 1px solid rgba(226, 184, 63, 0.62);
+    border-radius: 6px;
+    background: var(--vrp-gold);
+    color: #19130b;
+    padding: 0 14px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .vrp-alert,
+  .vrp-empty {
+    padding: 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(224, 90, 79, 0.35);
+    background: rgba(224, 90, 79, 0.12);
+    color: var(--vrp-cream);
+    margin-bottom: 14px;
+  }
+  .vrp-empty {
+    border-color: var(--vrp-border);
+    background: var(--vrp-panel);
+    color: var(--vrp-muted);
+  }
+  .vrp-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .vrp-stat {
+    min-height: 82px;
+    background: var(--vrp-panel);
+    border: 1px solid var(--vrp-border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .vrp-stat .num {
+    color: var(--vrp-gold);
+    font-size: 22px;
+    line-height: 1.1;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .vrp-stat .lbl {
+    margin-top: 7px;
+    color: var(--vrp-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .vrp-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .vrp-stack { display: grid; gap: 14px; }
+  .vrp-panel {
+    background: var(--vrp-panel);
+    border: 1px solid var(--vrp-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .vrp-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--vrp-border);
+  }
+  .vrp-panel h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  .vrp-panel .meta {
+    color: var(--vrp-faint);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .vrp-table-wrap { overflow-x: auto; }
+  .vrp-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+  }
+  .vrp-table.compact { min-width: 520px; }
+  .vrp-table th {
+    text-align: left;
+    padding: 9px 10px;
+    color: var(--vrp-faint);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--vrp-border);
+  }
+  .vrp-table td {
+    padding: 10px;
+    border-bottom: 1px solid rgba(236, 227, 208, 0.09);
+    color: var(--vrp-cream);
+    font-size: 12.5px;
+    vertical-align: top;
+  }
+  .vrp-table tr:last-child td { border-bottom: 0; }
+  .vrp-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .vrp-muted { color: var(--vrp-muted); }
+  .vrp-faint { color: var(--vrp-faint); }
+  .vrp-name {
+    min-width: 260px;
+    font-weight: 650;
+  }
+  .vrp-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--vrp-border);
+    color: var(--vrp-muted);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .vrp-change.up { color: var(--vrp-red); }
+  .vrp-change.down { color: var(--vrp-green); }
+  .vrp-daily {
+    padding: 6px 12px 12px;
+  }
+  .vrp-day {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr) 88px;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(236, 227, 208, 0.08);
+  }
+  .vrp-day:last-child { border-bottom: 0; }
+  .vrp-day-label {
+    color: var(--vrp-muted);
+    font-size: 11px;
+  }
+  .vrp-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(84, 195, 186, 0.15);
+    overflow: hidden;
+  }
+  .vrp-bar span {
+    display: block;
+    height: 100%;
+    min-width: 3px;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--vrp-teal), var(--vrp-gold));
+  }
+  .vrp-day-spend {
+    text-align: right;
+    color: var(--vrp-gold);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 750;
+  }
+  .vrp-breakdown {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+  }
+  .vrp-vendor-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid rgba(236, 227, 208, 0.1);
+    border-radius: 8px;
+    background: var(--vrp-panel-2);
+  }
+  .vrp-vendor-row strong {
+    display: block;
+    font-size: 13px;
+  }
+  .vrp-vendor-row span {
+    display: block;
+    margin-top: 3px;
+    color: var(--vrp-muted);
+    font-size: 11px;
+  }
+  .vrp-vendor-row .money {
+    color: var(--vrp-gold);
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+  }
+  @media (max-width: 1040px) {
+    .vrp-grid { grid-template-columns: 1fr; }
+    .vrp-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    .vrp-head { display: block; }
+    .vrp-form { grid-template-columns: 1fr; }
+    .vrp-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .vrp-stat { min-height: 74px; }
+    .vrp-stat .num { font-size: 19px; }
+    .vrp-panel-head { align-items: flex-start; flex-direction: column; gap: 4px; }
+    .vrp-day { grid-template-columns: 76px minmax(0, 1fr) 78px; }
+  }
+  @media (max-width: 440px) {
+    .vrp-summary { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="vrp-page">
+  <div class="vrp-head">
+    <div class="vrp-title">
+      <h1>Vendor <span class="accent">Reports</span></h1>
+      <div class="vrp-period">{{ selected_vendor_label }} · {{ start_iso }} to {{ end_iso }}</div>
+    </div>
+  </div>
+
+  <form class="vrp-form" method="get" action="/{{ store_slug }}/vendors/reports">
+    <div class="vrp-field">
+      <label for="vendor">Vendor</label>
+      <select id="vendor" name="vendor">
+        {% for opt in vendor_options %}
+          <option value="{{ opt.value }}"{% if opt.value == selected_vendor %} selected{% endif %}>{{ opt.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="vrp-field">
+      <label for="start">Start</label>
+      <input id="start" name="start" type="date" value="{{ start_iso }}">
+    </div>
+    <div class="vrp-field">
+      <label for="end">End</label>
+      <input id="end" name="end" type="date" value="{{ end_iso }}">
+    </div>
+    <button class="vrp-run" type="submit">
+      <i class="ti ti-player-play-filled" aria-hidden="true"></i>
+      <span>Run Report</span>
+    </button>
+  </form>
+
+  {% if error %}
+    <div class="vrp-alert">{{ error }}</div>
+  {% elif report %}
+    <div class="vrp-summary">
+      <div class="vrp-stat"><div class="num">{{ report.summary.orders }}</div><div class="lbl">Orders</div></div>
+      <div class="vrp-stat"><div class="num">{{ report.summary.spend }}</div><div class="lbl">Spend</div></div>
+      <div class="vrp-stat"><div class="num">{{ report.summary.units }}</div><div class="lbl">Ordered Units</div></div>
+      <div class="vrp-stat"><div class="num">{{ report.summary.unique_items }}</div><div class="lbl">Unique Items</div></div>
+      {% if report.kind == 'produce' %}
+        <div class="vrp-stat"><div class="num">{{ report.summary.tracked_quote_items }}</div><div class="lbl">Tracked Prices</div></div>
+      {% else %}
+        <div class="vrp-stat"><div class="num">{{ report.summary.avg_order }}</div><div class="lbl">Avg Order</div></div>
+      {% endif %}
+    </div>
+
+    {% if report.empty %}
+      <div class="vrp-empty">No vendor data for this selection.</div>
+    {% endif %}
+
+    <div class="vrp-grid">
+      <div class="vrp-stack">
+        <section class="vrp-panel">
+          <div class="vrp-panel-head">
+            <h2>Top Items</h2>
+            <div class="meta">{{ report.top_items|length }} shown</div>
+          </div>
+          <div class="vrp-table-wrap">
+            {% if report.kind == 'produce' %}
+              <table class="vrp-table">
+                <thead>
+                  <tr>
+                    <th>Item</th><th>Size</th><th>Vendor</th><th class="num">Units</th><th class="num">Orders</th><th class="num">Spend</th><th class="num">Latest</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in report.top_items %}
+                    <tr>
+                      <td class="vrp-name">{{ row.name }}</td>
+                      <td class="vrp-muted">{{ row.size or '-' }}</td>
+                      <td><span class="vrp-pill">{{ row.vendors or '-' }}</span></td>
+                      <td class="num">{{ row.units }}</td>
+                      <td class="num">{{ row.orders }}</td>
+                      <td class="num">{{ row.spend }}</td>
+                      <td class="num">{{ row.latest_unit }}</td>
+                    </tr>
+                  {% else %}
+                    <tr><td colspan="7" class="vrp-muted">No ordered items in this range.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <table class="vrp-table">
+                <thead>
+                  <tr>
+                    <th>Item</th><th>Vendor</th><th>SKU</th><th class="num">Units</th><th class="num">Orders</th><th class="num">Spend</th><th class="num">Latest</th><th class="num">Avg</th><th class="num">Low / High</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in report.top_items %}
+                    <tr>
+                      <td class="vrp-name">{{ row.name }}</td>
+                      <td><span class="vrp-pill">{{ row.vendor_label }}</span></td>
+                      <td class="vrp-muted">{{ row.sku or '-' }}</td>
+                      <td class="num">{{ row.units_display }}</td>
+                      <td class="num">{{ row.orders }}</td>
+                      <td class="num">{{ row.spend }}</td>
+                      <td class="num">{{ row.latest_unit }}</td>
+                      <td class="num">{{ row.avg_unit }}</td>
+                      <td class="num">{{ row.low_unit }} / {{ row.high_unit }}</td>
+                    </tr>
+                  {% else %}
+                    <tr><td colspan="9" class="vrp-muted">No parsed line items in this range.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </div>
+        </section>
+
+        <section class="vrp-panel">
+          <div class="vrp-panel-head">
+            <h2>Price Watch</h2>
+            <div class="meta">{{ report.price_watch|length }} changes</div>
+          </div>
+          <div class="vrp-table-wrap">
+            <table class="vrp-table compact">
+              <thead>
+                <tr>
+                  <th>Item</th><th>Vendor</th><th class="num">First</th><th class="num">Latest</th><th class="num">Move</th><th class="num">Dates</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in report.price_watch %}
+                  <tr>
+                    <td class="vrp-name">{{ row.name }}{% if row.size %}<span class="vrp-faint"> · {{ row.size }}</span>{% endif %}</td>
+                    <td><span class="vrp-pill">{{ row.vendor_label }}</span></td>
+                    <td class="num">{{ row.first_unit }}</td>
+                    <td class="num">{{ row.latest_unit }}</td>
+                    <td class="num vrp-change {{ row.price_delta_class }}">{{ row.price_delta }} · {{ row.price_delta_pct_display }}</td>
+                    <td class="num vrp-muted">{{ row.first_seen }} to {{ row.latest_seen }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="6" class="vrp-muted">No price movement found in this range.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {% if report.kind == 'produce' %}
+          <section class="vrp-panel">
+            <div class="vrp-panel-head">
+              <h2>Produce Price Matrix</h2>
+              <div class="meta">{{ report.summary.price_snapshots }} snapshots</div>
+            </div>
+            <div class="vrp-table-wrap">
+              <table class="vrp-table compact">
+                <thead>
+                  <tr>
+                    <th>Item</th><th>Size</th><th class="num">Alvarado</th><th class="num">J. Luna</th><th class="num">Cheaper</th><th class="num">Spread</th><th class="num">Latest</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in report.price_rows %}
+                    <tr>
+                      <td class="vrp-name">{{ row.name }}</td>
+                      <td class="vrp-muted">{{ row.size or '-' }}</td>
+                      <td class="num">{{ row.alvarado }}</td>
+                      <td class="num">{{ row.jluna }}</td>
+                      <td class="num"><span class="vrp-pill">{{ row.cheaper }}</span></td>
+                      <td class="num">{{ row.spread }}</td>
+                      <td class="num vrp-muted">{{ row.latest_seen }}</td>
+                    </tr>
+                  {% else %}
+                    <tr><td colspan="7" class="vrp-muted">No produce price snapshots in this range.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        {% endif %}
+
+        <section class="vrp-panel">
+          <div class="vrp-panel-head">
+            <h2>Recent Orders</h2>
+            <div class="meta">{{ report.order_rows|length }} shown</div>
+          </div>
+          <div class="vrp-table-wrap">
+            <table class="vrp-table compact">
+              <thead>
+                <tr>
+                  <th>Order</th><th>Date</th><th>Store</th><th>Status</th><th class="num">Lines</th><th class="num">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in report.order_rows %}
+                  <tr>
+                    <td class="vrp-name">{{ row.order_number }}{% if row.vendor_label %}<span class="vrp-faint"> · {{ row.vendor_label }}</span>{% endif %}</td>
+                    <td>{{ row.date }}</td>
+                    <td class="vrp-muted">{{ row.store }}</td>
+                    <td><span class="vrp-pill">{{ row.status }}</span></td>
+                    <td class="num">{{ row.line_count }}</td>
+                    <td class="num">{{ row.total }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="6" class="vrp-muted">No orders in this range.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <aside class="vrp-stack">
+        <section class="vrp-panel">
+          <div class="vrp-panel-head">
+            <h2>Daily Spend</h2>
+            <div class="meta">{{ report.daily_rows|length }} days</div>
+          </div>
+          <div class="vrp-daily">
+            {% for row in report.daily_rows %}
+              <div class="vrp-day">
+                <div class="vrp-day-label">{{ row.label }}</div>
+                <div class="vrp-bar"><span style="width: {{ row.bar_pct }}%;"></span></div>
+                <div class="vrp-day-spend">{{ row.spend }}</div>
+              </div>
+            {% else %}
+              <div class="vrp-empty" style="margin: 6px 0 0;">No daily spend to chart.</div>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="vrp-panel">
+          <div class="vrp-panel-head">
+            <h2>Vendor Mix</h2>
+            <div class="meta">{{ report.vendor_breakdown|length }} vendors</div>
+          </div>
+          <div class="vrp-breakdown">
+            {% for row in report.vendor_breakdown %}
+              <div class="vrp-vendor-row">
+                <div>
+                  <strong>{{ row.vendor_label }}</strong>
+                  <span>{{ row.orders }} orders{% if row.units %} · {{ row.units }} units{% endif %}</span>
+                </div>
+                <div class="money">{{ row.spend }}</div>
+              </div>
+            {% else %}
+              <div class="vrp-muted">No vendor mix for this range.</div>
+            {% endfor %}
+          </div>
+        </section>
+      </aside>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

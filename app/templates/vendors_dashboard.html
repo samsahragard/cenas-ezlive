@@ -3,14 +3,15 @@
    ck build, structural twin of catering_dashboard.html (dck's
    reworked Catering dashboard). Per Sam: the bottom-nav Vendors tab
    no longer opens a popover - it links straight here, and this page
-   is a tab strip across the five vendor surfaces, defaulting to
+   is a tab strip across the vendor surfaces, defaulting to
    Produce.
 
    Each tab embeds the REAL, fully-functional vendor page inline in
    an <iframe> - click a tab and the actual working page is right
    there (Produce -> /<store>/produce/, and a per-vendor Recent
    Orders page for Webstaurant / Performance Food / Restaurant Depot
-   / Specs -> /<store>/vendors/<vendor>/recent-orders). All existing
+   / Specs -> /<store>/vendors/<vendor>/recent-orders, plus Reports
+   -> /<store>/vendors/reports). All existing
    vendor functionality is left as-is - the pages are simply iframed,
    not rewritten.
 
@@ -22,7 +23,7 @@
    chrome the iframe stays hidden until its load+strip completes.
 
    LAZY-LOAD: each iframe carries a data-src, not a src. JS sets src
-   from data-src the first time that tab is activated, so the five
+   from data-src the first time that tab is activated, so the vendor
    vendor pages do not all load at once - only the default tab
    (Produce) loads on page load.
 
@@ -38,7 +39,7 @@
      store_label   -> str (store display name)
      today_label   -> str, e.g. "Wed, May 21"
      active_tab    -> one of: produce | webstaurant | performance-food |
-                      restaurant-depot | specs
+                      restaurant-depot | specs | reports
                       (default 'produce'; from ?tab=, validated)
      tabs          -> ordered list[dict], one per tab:
        key   (str)  - tab id, matches active_tab values
@@ -360,14 +361,15 @@
 
 {# Per-tab SVG glyphs - keyed by tab.key so the route stays glyph-free.
    Plain Jinja dict; the icon falls back to the Produce glyph if a key
-   is missing. Produce gets a leaf glyph; the four supply vendors share
-   a delivery-truck glyph. #}
+   is missing. Produce gets a leaf glyph; supply vendors share a
+   delivery-truck glyph; Reports gets a chart glyph. #}
 {% set _vend_icons = {
   'produce':          '<path d="M6.05 8.05c-2.73 2.73-2.73 7.15-.02 9.88 1.47-3.4 4.09-6.24 7.36-7.93-2.77 2.34-4.71 5.61-5.39 9.32 2.6 1.23 5.8.78 7.95-1.37C19.43 14.47 20 4 20 4S9.43 4.57 6.05 8.05z"/>',
   'webstaurant':      '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
   'performance-food': '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
   'restaurant-depot': '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
-  'specs':            '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>'
+  'specs':            '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
+  'reports':          '<path d="M4 19h16v2H2V3h2v16zm3-2H5v-7h2v7zm5 0H9V5h3v12zm5 0h-3V8h3v9zm4 0h-2v-5h2v5z"/>'
 } %}
 
 <div class="vendash" id="vendash">
@@ -450,7 +452,7 @@
      swaps the visible panel in place (no navigation).
 
      Each tab's panel holds ONE iframe of the real, fully-functional
-     vendor page. The iframe carries data-src, not src - so the five
+     vendor page. The iframe carries data-src, not src - so the
      vendor pages do not all load at once. The default tab's iframe is
      loaded immediately; every other iframe loads the first time its
      tab is activated.
@@ -598,7 +600,7 @@
 
   /* Load the iframe for the tab that is active on page load (the
      default tab, produce, unless ?tab= deep-linked another). The
-     other four iframes stay unloaded until their tab is clicked. */
+     other iframes stay unloaded until their tab is clicked. */
   var startTab = (function () {
     var activeTabEl = root.querySelector(".vend-tab.active");
     return activeTabEl ? activeTabEl.getAttribute("data-tab") : null;

@@ -269,6 +269,9 @@ def _vendors_subnav_cards(store_slug: str) -> list[dict]:
         {"label": "Specs", "icon": "📋", "disabled": True,
          "active": ["specs"],
          "sub": "Product specs + nutritional info. Coming soon."},
+        {"label": "Reports", "icon": "📊", "href": f"/{store_slug}/vendors/reports",
+         "active": ["vendor_reports"],
+         "sub": "Order volume, spend, item quantities and price movement."},
     ]
 
 
@@ -395,6 +398,7 @@ _ACTIVE_TO_CATEGORY = {
     "vendors":         "vendors",
     "produce":         "vendors",
     "produce_orders":  "vendors",
+    "vendor_reports":  "vendors",
     "webstaurant":     "vendors",
     "vendor_perf":     "vendors",
     "specs":           "vendors",
@@ -1369,6 +1373,48 @@ def vendor_recent_orders(vendor: str):
         )
     finally:
         db.close()
+
+
+@store_bp.route("/vendors/reports", methods=["GET"])
+def vendor_reports():
+    """Vendor analytics across produce and supply-vendor order history."""
+    require_dashboard_access("dash.vendors")
+    from app.services import vendor_reports as vendor_report_service
+
+    vendor = vendor_report_service.normalize_vendor(request.args.get("vendor"))
+    start, end, err = vendor_report_service.parse_report_dates(
+        request.args.get("start"),
+        request.args.get("end"),
+        today=_local_today(),
+    )
+    report = None
+    if not err:
+        db = next(get_db())
+        try:
+            report = vendor_report_service.build_report(
+                db,
+                vendor,
+                start,
+                end,
+                store_scope=g.current_location,
+            )
+        finally:
+            db.close()
+    return render_template(
+        "vendor_reports.html",
+        active="vendor_reports",
+        vendor_options=vendor_report_service.REPORT_VENDOR_OPTIONS,
+        selected_vendor=vendor,
+        selected_vendor_label=next(
+            (o["label"] for o in vendor_report_service.REPORT_VENDOR_OPTIONS
+             if o["value"] == vendor),
+            "All Supply Vendors",
+        ),
+        start_iso=start.isoformat(),
+        end_iso=end.isoformat(),
+        error=err,
+        report=report,
+    )
 
 
 # Slug → SQLAlchemy model class lookup. All 14 share ManagerLogMixin
@@ -7654,17 +7700,15 @@ def today_dashboard():
 # Structural twin of the Catering / Operations / Today dashboards above
 # (each a twin of the Manager dashboard). The bottom-nav Vendors tab no
 # longer opens a sub-option popover - it links straight here. This
-# route renders vendors_dashboard.html: a tab strip across the five
-# vendor surfaces, defaulting to the Produce tab.
+# route renders vendors_dashboard.html: a tab strip across the vendor
+# surfaces, defaulting to the Produce tab.
 #
 # Each tab embeds the REAL, fully-functional vendor page inline in an
 # <iframe> - click a tab and the working page is right there. So this
 # route is a thin shell: it only resolves each tab's URL for the iframe
 # to load. The existing produce / vendor-recent-orders pages and routes
-# are untouched - they are simply iframed. Every tab points at a built,
-# live page (produce_root for Produce; vendor_recent_orders for the
-# four supply vendors), so - unlike Operations' Forecasts - there is no
-# coming-soon tab here.
+# are untouched - they are simply iframed. Reports points at a dedicated
+# analytics page over the same order and price-history sources.
 
 # Ordered tab spec: (tab key, caption). The key matches the active_tab
 # values vendors_dashboard.html expects; for the four supply-vendor
@@ -7676,6 +7720,7 @@ _VENDORS_DASH_TABS = [
     ("performance-food", "Performance Food"),
     ("restaurant-depot", "Restaurant Depot"),
     ("specs",            "Specs"),
+    ("reports",          "Reports"),
 ]
 
 
@@ -7686,6 +7731,7 @@ def _vendors_dash_full_url(tab_key):
       performance-food -> /<store>/vendors/performance-food/recent-orders
       restaurant-depot -> /<store>/vendors/restaurant-depot/recent-orders
       specs            -> /<store>/vendors/specs/recent-orders
+      reports          -> /<store>/vendors/reports
     The four supply-vendor tabs share store.vendor_recent_orders with
     the tab key passed as the <vendor> slug (the tab keys are exactly
     the slugs that route's _VENDOR_LABELS accepts). All are store-scoped
@@ -7697,6 +7743,8 @@ def _vendors_dash_full_url(tab_key):
     if tab_key in ("webstaurant", "performance-food",
                    "restaurant-depot", "specs"):
         return url_for("store.vendor_recent_orders", vendor=tab_key)
+    if tab_key == "reports":
+        return url_for("store.vendor_reports")
     return url_for("store.produce_root")
 
 

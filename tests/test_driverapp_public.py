@@ -110,6 +110,9 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert "Real orders, real payouts." in html
     assert "Driver Guidelines" in html
     assert "cenas-store-night.png" in html
+    assert "driverapp-qr.png" in html
+    assert "Scan while this is on screen" in html
+    assert "Final scan moment" in html
     assert "Aplicar ahora" in html
     assert "Como se te paga" in html
     assert "How You Get Paid" in html

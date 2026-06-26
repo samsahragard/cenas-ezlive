@@ -15,6 +15,9 @@
 .header-actions{display:flex;align-items:center;gap:12px}.lang-toggle{display:flex;align-items:center;gap:4px;background:rgba(243,231,209,.08);border:1px solid rgba(243,231,209,.2);border-radius:999px;padding:4px 6px;color:rgba(243,231,209,.7);font-size:12px;font-weight:900;letter-spacing:.08em}.lang-toggle button{border:0;background:transparent;color:rgba(243,231,209,.62);border-radius:7px;padding:6px 8px;font-weight:900;cursor:pointer}.lang-toggle button.active{background:var(--gold);color:#351108}.lang-toggle span{color:rgba(243,231,209,.28)}@media(max-width:860px){.header-actions{margin-left:auto}.lang-toggle{font-size:11px}.links{display:none}}
 html,body{overflow-x:hidden}.hero{padding:0}.hero-grid>*{min-width:0}.brand img{width:58px;height:58px}.lang-toggle{gap:6px;padding:6px 8px;font-size:13px;letter-spacing:0}.lang-toggle button{padding:8px 10px}.driver-app-cta{margin-bottom:28px}.driver-app-button{min-width:300px;flex-direction:column;padding:18px 30px;font-size:21px;line-height:1.12;gap:5px}.driver-app-button span{display:block;font-size:13px;font-weight:800;line-height:1.2;opacity:.82}.photo{aspect-ratio:950/635;min-height:0;background-color:#160506;background-image:linear-gradient(180deg,rgba(43,9,12,.03),rgba(43,9,12,.22)),url("{{ url_for('static', filename='brand/banners/cenas-store-night.png') }}");background-size:cover;background-position:center}.ad-toggle{border:1px solid rgba(243,231,209,.35);background:rgba(255,255,255,.08);color:var(--bone);border-radius:999px;padding:10px 14px;font-weight:900;line-height:1;cursor:pointer}.ad-toggle.active{background:var(--gold);border-color:var(--gold);color:#351108}.ad-panel{position:fixed;left:50%;bottom:18px;z-index:30;display:none;width:min(520px,calc(100vw - 28px));transform:translateX(-50%);align-items:center;gap:12px;background:rgba(22,5,6,.94);border:1px solid rgba(233,162,59,.5);box-shadow:0 18px 60px rgba(0,0,0,.45);border-radius:8px;padding:13px 15px 17px;color:var(--bone)}body.ad-mode .ad-panel{display:flex}.ad-step-badge{width:36px;height:36px;border-radius:999px;background:var(--gold);color:#351108;display:grid;place-items:center;font-weight:900;flex:none}.ad-copy b{display:block;font-family:Fraunces,Georgia,serif;font-size:19px;line-height:1.05}.ad-copy span{display:block;font-size:13px;color:rgba(243,231,209,.76);line-height:1.3;margin-top:3px}.ad-progress{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(243,231,209,.16);overflow:hidden;border-radius:0 0 8px 8px}.ad-progress i{display:block;height:100%;width:0;background:var(--gold);transition:width .25s ease}.ad-spotlight{position:relative;z-index:1;box-shadow:0 0 0 4px rgba(233,162,59,.34),0 18px 70px rgba(233,162,59,.2);border-radius:10px;transition:box-shadow .2s ease}.guidelines{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.guideline-num{font-family:Fraunces,Georgia,serif;font-size:34px;color:var(--gold);font-weight:900;line-height:1;margin-bottom:12px}@media(max-width:860px){.guidelines{grid-template-columns:1fr}.photo{background-size:contain;background-repeat:no-repeat;background-position:center}}@media(max-width:560px){.announce{font-size:12px;line-height:1.35}.nav{height:76px;gap:8px}.brand{gap:8px;font-size:14px;min-width:0}.brand img{width:50px;height:50px}.brand div{display:none}.header-actions{justify-content:flex-end;margin-left:auto;gap:7px}.ad-toggle{padding:8px 9px;font-size:12px}.lang-toggle{padding:5px 7px;font-size:12px}.lang-toggle button{padding:7px 9px}.hero-grid{gap:22px;padding-top:12px;padding-bottom:36px}.lead{font-size:18px;max-width:100%}.driver-app-button{min-width:270px;max-width:calc(100vw - 44px);padding:17px 24px;font-size:20px}.driver-app-button span{font-size:12px}.ad-panel{bottom:10px;padding:12px 12px 16px}.ad-copy b{font-size:17px}}
 </style>
+<style>
+body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{animation:adButtonBeat 1.15s ease-in-out infinite}.ad-panel{width:min(650px,calc(100vw - 28px));overflow:hidden}.ad-panel::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent,rgba(233,162,59,.18),transparent);transform:translateX(-120%);animation:adSweep 2.4s linear infinite;pointer-events:none}.ad-copy{position:relative;z-index:1}.ad-copy small{display:block;color:var(--gold);font-size:11px;font-weight:900;text-transform:uppercase;line-height:1;margin-bottom:4px}.ad-copy b{font-size:clamp(19px,3vw,28px)}.ad-copy span{font-size:clamp(13px,2vw,15px)}.ad-step-badge{position:relative;z-index:1;box-shadow:0 0 0 0 rgba(233,162,59,.5);animation:adBadgePulse 1.3s ease-out infinite}.ad-spotlight{overflow:visible}.ad-spotlight .section-head h2,.ad-spotlight .form-top h3{color:var(--gold);text-shadow:0 8px 28px rgba(233,162,59,.34);animation:adHeadlinePop 1.1s ease both}.ad-spotlight .section-head p,.ad-spotlight .lead{animation:adCopyLift .9s ease both}.ad-spotlight .delivery,.ad-spotlight .pay-card,.ad-spotlight .calc,.ad-spotlight .card,.ad-spotlight .form-shell,.ad-spotlight .qr-card,.ad-spotlight.final-scan{animation:adCardLift .9s ease both}.ad-spotlight .delivery:nth-child(2),.ad-spotlight .card:nth-child(2){animation-delay:.08s}.ad-spotlight .delivery:nth-child(3),.ad-spotlight .card:nth-child(3){animation-delay:.16s}.ad-spotlight .pay,.ad-spotlight .amt,.ad-spotlight .calc-total .n,.ad-spotlight .guideline-num{animation:adMoneyPulse .9s ease-in-out infinite alternate}.scan-section{background:linear-gradient(135deg,#160506 0,#4b1218 52%,#2b090c 100%);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.scan-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:36px;align-items:center}.scan-kicker{margin:0 0 10px;color:var(--gold);font-weight:900;text-transform:uppercase}.scan-copy h2{font-size:clamp(38px,6vw,72px)}.scan-copy p{font-size:19px;color:rgba(243,231,209,.78);max-width:560px}.qr-card{position:relative;justify-self:center;width:min(360px,100%);border-radius:8px;background:rgba(251,245,232,.96);padding:12px;box-shadow:0 22px 70px rgba(0,0,0,.36),0 0 0 1px rgba(233,162,59,.45)}.qr-card img{display:block;width:100%;height:auto;border-radius:7px}.qr-card::after{content:"";position:absolute;inset:-8px;border:2px solid rgba(233,162,59,.78);border-radius:12px;pointer-events:none}.qr-note{margin:14px 0 0;text-align:center;color:rgba(243,231,209,.72);font-weight:800}.final-scan{display:grid;grid-template-columns:1fr 240px;gap:22px;align-items:center;margin:0 auto 24px;max-width:860px;background:linear-gradient(135deg,#5c1a21,#2b090c);color:var(--bone);border-radius:8px;padding:20px;border:1px solid rgba(233,162,59,.45);box-shadow:0 16px 60px rgba(0,0,0,.22)}.final-scan h3{font-size:30px}.final-scan p{margin:8px 0 0;color:rgba(243,231,209,.78)}.final-scan img{width:240px;border-radius:8px;background:#fbf5e8}.final-scan .btn{margin-top:14px}body[data-ad-step="scan"] #scan .qr-card,body[data-ad-step="final-scan"] #scan-final img{animation:qrPulse 1.2s ease-in-out infinite alternate}body[data-ad-step="pay"] #pay .calc-total .n{font-size:58px}body[data-ad-step="live"] #live .delivery .pay{font-size:40px}body[data-ad-step="apply"] #apply .section-head h2{font-size:clamp(42px,7vw,70px)}@keyframes adButtonBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}@keyframes adSweep{to{transform:translateX(120%)}}@keyframes adBadgePulse{0%{box-shadow:0 0 0 0 rgba(233,162,59,.5)}100%{box-shadow:0 0 0 12px rgba(233,162,59,0)}}@keyframes adHeadlinePop{0%{transform:scale(.94);filter:brightness(1)}55%{transform:scale(1.08);filter:brightness(1.28)}100%{transform:scale(1.02);filter:brightness(1.1)}}@keyframes adCopyLift{0%{transform:translateY(10px);opacity:.72}100%{transform:translateY(0);opacity:1}}@keyframes adCardLift{0%{transform:translateY(18px);filter:brightness(.9)}100%{transform:translateY(0);filter:brightness(1.08)}}@keyframes adMoneyPulse{from{transform:scale(1);text-shadow:0 0 0 rgba(233,162,59,0)}to{transform:scale(1.12);text-shadow:0 8px 28px rgba(233,162,59,.4)}}@keyframes qrPulse{from{transform:scale(1);box-shadow:0 18px 60px rgba(0,0,0,.24)}to{transform:scale(1.06);box-shadow:0 24px 86px rgba(233,162,59,.36)}}@media(max-width:860px){.scan-grid{grid-template-columns:1fr}.scan-copy{text-align:center}.scan-copy p{margin-left:auto;margin-right:auto}.qr-card{width:min(340px,100%)}.final-scan{grid-template-columns:1fr;text-align:center}.final-scan img{justify-self:center;width:min(260px,80vw)}}@media(max-width:560px){body[data-ad-step="live"] #live .delivery .pay{font-size:34px}body[data-ad-step="pay"] #pay .calc-total .n{font-size:48px}.scan-copy h2{font-size:40px}.ad-spotlight .section-head h2{font-size:42px}}@media(prefers-reduced-motion:reduce){.ad-toggle.active,.ad-panel::before,.ad-step-badge,.ad-spotlight .section-head h2,.ad-spotlight .form-top h3,.ad-spotlight .section-head p,.ad-spotlight .lead,.ad-spotlight .delivery,.ad-spotlight .pay-card,.ad-spotlight .calc,.ad-spotlight .card,.ad-spotlight .form-shell,.ad-spotlight .qr-card,.ad-spotlight.final-scan,.ad-spotlight .pay,.ad-spotlight .amt,.ad-spotlight .calc-total .n,.ad-spotlight .guideline-num,body[data-ad-step="scan"] #scan .qr-card,body[data-ad-step="final-scan"] #scan-final img{animation:none!important;transform:none!important}}
+</style>
 </head>
 <body>
 <div class="announce" data-i18n-html data-en="Join <b>20+ drivers</b> already delivering for Cenas Kitchen" data-es="Unete a <b>mas de 20 conductores</b> que ya entregan para Cenas Kitchen">Join <b>20+ drivers</b> already delivering for Cenas Kitchen</div>
@@ -43,7 +46,7 @@ html,body{overflow-x:hidden}.hero{padding:0}.hero-grid>*{min-width:0}.brand img{
 </header>
 <div class="ad-panel" id="adPanel" role="status" aria-live="polite">
   <div class="ad-step-badge" id="adStepBadge">1</div>
-  <div class="ad-copy"><b id="adTitle">Real orders, real payouts.</b><span id="adSubtitle">Preview the delivery cards drivers choose from.</span></div>
+  <div class="ad-copy"><small id="adKicker">Driver Spotlight</small><b id="adTitle">Real orders, real payouts.</b><span id="adSubtitle">Preview the delivery cards drivers choose from.</span></div>
   <div class="ad-progress"><i id="adProgress"></i></div>
 </div>
 
@@ -141,6 +144,22 @@ html,body{overflow-x:hidden}.hero{padding:0}.hero-grid>*{min-width:0}.brand img{
     {% endif %}
   </section>
 
+  <section id="scan" class="scan-section">
+    <div class="wrap scan-grid">
+      <div class="scan-copy">
+        <p class="scan-kicker" data-i18n data-en="Scan while this is on screen" data-es="Escanea mientras esta en pantalla">Scan while this is on screen</p>
+        <h2 data-i18n data-en="Open the driver application on your phone." data-es="Abre la aplicacion de conductor en tu telefono.">Open the driver application on your phone.</h2>
+        <p data-i18n data-en="Watching this on a TV, tablet, or someone else's phone? Scan the code and the application opens right on your device." data-es="Viendo esto en una TV, tableta o telefono de otra persona? Escanea el codigo y la aplicacion abre en tu dispositivo.">Watching this on a TV, tablet, or someone else's phone? Scan the code and the application opens right on your device.</p>
+      </div>
+      <div>
+        <div class="qr-card">
+          <img src="{{ url_for('static', filename='brand/banners/driverapp-qr.png') }}" alt="QR code for the Cenas Kitchen driver application">
+        </div>
+        <p class="qr-note">app.cenaskitchen.com/driverapp</p>
+      </div>
+    </div>
+  </section>
+
   <section id="benefits">
     <div class="wrap">
       <div class="section-head">
@@ -192,6 +211,14 @@ html,body{overflow-x:hidden}.hero{padding:0}.hero-grid>*{min-width:0}.brand img{
       {% if submitted %}
       <div class="success" data-i18n-html data-en="<strong>Application received.</strong> We will reach out within 1-2 days by phone, text, WhatsApp, or email with next steps. Keep an eye on your phone and WhatsApp." data-es="<strong>Aplicacion recibida.</strong> Te contactaremos en 1-2 dias por telefono, texto, WhatsApp o correo con los siguientes pasos. Revisa tu telefono y WhatsApp."><strong>Application received.</strong> We will reach out within 1-2 days by phone, text, WhatsApp, or email with next steps. Keep an eye on your phone and WhatsApp.</div>
       {% endif %}
+      <div class="final-scan" id="scan-final">
+        <div>
+          <h3 data-i18n data-en="Ready to drive with Cenas?" data-es="Listo para manejar con Cenas?">Ready to drive with Cenas?</h3>
+          <p data-i18n data-en="Scan this code, open the application on your phone, and send it in when you are ready." data-es="Escanea este codigo, abre la aplicacion en tu telefono y enviala cuando estes listo.">Scan this code, open the application on your phone, and send it in when you are ready.</p>
+          <a class="btn btn-gold" href="#apply" data-i18n data-en="Apply Below" data-es="Aplica abajo">Apply Below</a>
+        </div>
+        <img src="{{ url_for('static', filename='brand/banners/driverapp-qr.png') }}" alt="QR code for the Cenas Kitchen driver application">
+      </div>
       <div class="form-shell">
         <div class="form-top"><h3 data-i18n data-en="Tell us about yourself" data-es="Cuentanos de ti">Tell us about yourself</h3><p data-i18n data-en="Fields marked * are required." data-es="Los campos marcados con * son obligatorios.">Fields marked * are required.</p></div>
         <form class="form" method="POST" action="{{ url_for('driver_system.driverapp') }}">
@@ -351,33 +378,66 @@ function setDriverLanguage(lang){
     // Some embedded browsers block localStorage; the toggle should still work.
   }
   syncAdButtonLabel();
+  if (adRunning) showAdStep((adIndex + adSteps.length - 1) % adSteps.length);
 }
 
 const adToggle = document.getElementById('adToggle');
+const adKicker = document.getElementById('adKicker');
 const adTitle = document.getElementById('adTitle');
 const adSubtitle = document.getElementById('adSubtitle');
 const adStepBadge = document.getElementById('adStepBadge');
 const adProgress = document.getElementById('adProgress');
 const adSteps = [
   {
+    key: 'live',
     selector: '#live',
-    title: {en: 'Real orders, real payouts.', es: 'Ordenes reales, pagos reales.'},
-    subtitle: {en: 'Preview the delivery cards drivers choose from.', es: 'Mira las tarjetas de entrega que los conductores pueden escoger.'}
+    kicker: {en: 'Live delivery board', es: 'Panel de entregas'},
+    title: {en: 'Real orders. Real payouts.', es: 'Ordenes reales. Pagos reales.'},
+    subtitle: {en: 'The cards move like opportunities, with payout numbers big enough to catch a driver eye.', es: 'Las tarjetas se sienten como oportunidades, con pagos grandes y faciles de ver.'}
   },
   {
+    key: 'scan',
+    selector: '#scan',
+    kicker: {en: 'Scan any time', es: 'Escanea cuando quieras'},
+    title: {en: 'Point your camera. Start on your phone.', es: 'Apunta la camara. Empieza en tu telefono.'},
+    subtitle: {en: 'This QR code opens the application directly, even if someone only catches the middle of the ad.', es: 'Este codigo abre la aplicacion directo, aunque alguien vea solo la mitad del anuncio.'},
+    duration: 6400
+  },
+  {
+    key: 'pay',
     selector: '#pay',
+    kicker: {en: 'Pay that pops', es: 'Pago que resalta'},
     title: {en: 'Know the money before you drive.', es: 'Conoce el pago antes de manejar.'},
-    subtitle: {en: 'Base pay, tracking bonus, mileage, and 5-star upside are shown clearly.', es: 'Pago base, bono de seguimiento, millas y bono de 5 estrellas se muestran claro.'}
+    subtitle: {en: 'Base pay, tracking bonus, mileage, and 5-star upside get the spotlight.', es: 'Pago base, bono de seguimiento, millas y bono de 5 estrellas reciben el foco.'}
   },
   {
+    key: 'guidelines',
     selector: '#guidelines',
+    kicker: {en: 'Simple driver rules', es: 'Reglas simples'},
     title: {en: 'Simple rules, no guessing.', es: 'Reglas simples, sin adivinar.'},
     subtitle: {en: 'Accept what fits, keep tracking on, and upload photos when the job is done.', es: 'Acepta lo que te conviene, manten el seguimiento y sube fotos al terminar.'}
   },
   {
+    key: 'benefits',
+    selector: '#benefits',
+    kicker: {en: 'Why drivers notice', es: 'Por que llama la atencion'},
+    title: {en: 'Flexible, local, and transparent.', es: 'Flexible, local y transparente.'},
+    subtitle: {en: 'The page sells what matters fast: choose hours, see pay, join a local crew.', es: 'La pagina vende lo importante rapido: horarios, pago claro y equipo local.'}
+  },
+  {
+    key: 'apply',
     selector: '#apply',
+    kicker: {en: 'How to apply', es: 'Como aplicar'},
     title: {en: 'Apply in about five minutes.', es: 'Aplica en unos cinco minutos.'},
     subtitle: {en: 'Drivers can tell us location, availability, and contact details right here.', es: 'Los conductores pueden mandar ubicacion, horario y contacto aqui mismo.'}
+  },
+  {
+    key: 'final-scan',
+    selector: '#scan-final',
+    kicker: {en: 'Final scan moment', es: 'Ultimo momento para escanear'},
+    title: {en: 'Scan now. Apply when ready.', es: 'Escanea ahora. Aplica cuando estes listo.'},
+    subtitle: {en: 'The loop keeps running so drivers always get another chance to scan.', es: 'El anuncio sigue en ciclo para que siempre haya otra oportunidad de escanear.'},
+    duration: 6800
   }
 ];
 let adRunning = false;
@@ -402,16 +462,19 @@ function clearAdSpotlight(){
 }
 
 function showAdStep(index){
-  const step = adSteps[index % adSteps.length];
+  const cycleIndex = index % adSteps.length;
+  const step = adSteps[cycleIndex];
   const target = document.querySelector(step.selector);
   if (!target || !adTitle || !adSubtitle || !adStepBadge || !adProgress) return;
   const lang = currentDriverLang();
   clearAdSpotlight();
+  document.body.setAttribute('data-ad-step', step.key || '');
   target.classList.add('ad-spotlight');
+  if (adKicker) adKicker.textContent = step.kicker[lang];
   adTitle.textContent = step.title[lang];
   adSubtitle.textContent = step.subtitle[lang];
-  adStepBadge.textContent = String(index + 1);
-  adProgress.style.width = (((index + 1) / adSteps.length) * 100) + '%';
+  adStepBadge.textContent = String(cycleIndex + 1);
+  adProgress.style.width = (((cycleIndex + 1) / adSteps.length) * 100) + '%';
   target.scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 
@@ -420,22 +483,19 @@ function stopAdMode(){
   window.clearTimeout(adTimer);
   adTimer = null;
   document.body.classList.remove('ad-mode');
+  document.body.removeAttribute('data-ad-step');
   clearAdSpotlight();
+  if (adProgress) adProgress.style.width = '0';
   syncAdButtonLabel();
 }
 
 function runAdStep(){
   if (!adRunning) return;
-  showAdStep(adIndex);
-  adIndex += 1;
-  if (adIndex >= adSteps.length) {
-    adTimer = window.setTimeout(() => {
-      stopAdMode();
-      window.scrollTo({top: 0, behavior: 'smooth'});
-    }, 4200);
-    return;
-  }
-  adTimer = window.setTimeout(runAdStep, 5200);
+  const cycleIndex = adIndex % adSteps.length;
+  const step = adSteps[cycleIndex];
+  showAdStep(cycleIndex);
+  adIndex = (cycleIndex + 1) % adSteps.length;
+  adTimer = window.setTimeout(runAdStep, step.duration || 5400);
 }
 
 function startAdMode(){

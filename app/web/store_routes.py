@@ -3328,6 +3328,21 @@ def _manager_report_dates():
     return date_from, date_to
 
 
+def _manager_report_selected_staff():
+    selected = []
+    seen = set()
+    raw_values = request.args.getlist("staff")
+    if any((v or "").strip().lower() == "all" for v in raw_values):
+        return []
+    for raw in raw_values:
+        name = (raw or "").strip()[:120]
+        key = name.lower()
+        if name and key not in seen:
+            selected.append(name)
+            seen.add(key)
+    return selected
+
+
 def _manager_report_utc_bounds(date_from, date_to):
     start_local = datetime.combine(date_from, datetime.min.time())
     end_local = datetime.combine(date_to + timedelta(days=1), datetime.min.time())
@@ -3370,6 +3385,55 @@ def _manager_user_names(db, ids):
         return {}
 
 
+def _manager_report_staff_options(db, loc, date_from, date_to,
+                                  start_utc, end_utc, selected_staff):
+    from app.models import AttendanceShift, UniformIssue
+
+    people = {}
+
+    def _add(name, role=""):
+        name = (name or "").strip()
+        if not name:
+            return
+        key = name.lower()
+        if key not in people:
+            people[key] = {"name": name, "role": (role or "").strip()}
+        elif role and not people[key].get("role"):
+            people[key]["role"] = role.strip()
+
+    for emp in _active_manager_roster(db, loc):
+        _add(emp.get("name"), emp.get("role") or "")
+
+    attn_names = db.query(
+        AttendanceShift.employee_name, AttendanceShift.role_title
+    ).filter(
+        AttendanceShift.entry_date >= date_from,
+        AttendanceShift.entry_date <= date_to,
+    )
+    if loc in ("tomball", "copperfield"):
+        attn_names = attn_names.filter((AttendanceShift.store_scope == loc) |
+                                       (AttendanceShift.store_scope.is_(None)))
+    for name, role in attn_names.distinct().limit(1000).all():
+        _add(name, role or "")
+
+    uniform_names = db.query(
+        UniformIssue.employee_name, UniformIssue.employee_role
+    ).filter(
+        UniformIssue.created_at >= start_utc,
+        UniformIssue.created_at < end_utc,
+    )
+    if loc in ("tomball", "copperfield"):
+        uniform_names = uniform_names.filter((UniformIssue.store_scope == loc) |
+                                             (UniformIssue.store_scope.is_(None)))
+    for name, role in uniform_names.distinct().limit(1000).all():
+        _add(name, role or "")
+
+    for name in selected_staff:
+        _add(name)
+
+    return sorted(people.values(), key=lambda row: row["name"].lower())
+
+
 def _render_manager_reports_v1(db, label, active_key):
     from app.models import AttendanceEvent, AttendanceShift, UniformIssue
 
@@ -3379,12 +3443,24 @@ def _render_manager_reports_v1(db, label, active_key):
 
     date_from, date_to = _manager_report_dates()
     loc = g.current_location
+    selected_staff = _manager_report_selected_staff()
+    selected_staff_set = set(selected_staff)
+    start_utc, end_utc = _manager_report_utc_bounds(date_from, date_to)
+    staff_options = _manager_report_staff_options(
+        db, loc, date_from, date_to, start_utc, end_utc, selected_staff)
+    staff_label = (
+        "All employees" if not selected_staff
+        else selected_staff[0] if len(selected_staff) == 1
+        else f"{len(selected_staff)} employees"
+    )
 
     attn_q = (db.query(AttendanceEvent, AttendanceShift)
               .join(AttendanceShift, AttendanceEvent.shift_id == AttendanceShift.id)
               .filter(AttendanceShift.entry_date >= date_from,
                       AttendanceShift.entry_date <= date_to,
                       AttendanceEvent.kind.in_(_ATTENDANCE_REPORT_KINDS)))
+    if selected_staff_set:
+        attn_q = attn_q.filter(AttendanceShift.employee_name.in_(selected_staff))
     if loc in ("tomball", "copperfield"):
         attn_q = attn_q.filter((AttendanceShift.store_scope == loc) |
                                (AttendanceShift.store_scope.is_(None)))
@@ -3435,11 +3511,12 @@ def _render_manager_reports_v1(db, label, active_key):
         if v
     ]
 
-    start_utc, end_utc = _manager_report_utc_bounds(date_from, date_to)
     uniform_q = db.query(UniformIssue).filter(
         UniformIssue.created_at >= start_utc,
         UniformIssue.created_at < end_utc,
     )
+    if selected_staff_set:
+        uniform_q = uniform_q.filter(UniformIssue.employee_name.in_(selected_staff))
     if loc in ("tomball", "copperfield"):
         uniform_q = uniform_q.filter((UniformIssue.store_scope == loc) |
                                      (UniformIssue.store_scope.is_(None)))
@@ -3482,6 +3559,9 @@ def _render_manager_reports_v1(db, label, active_key):
         report_kind=report_kind,
         date_from=date_from.isoformat(),
         date_to=date_to.isoformat(),
+        selected_staff=selected_staff,
+        staff_options=staff_options,
+        staff_label=staff_label,
         range_label=(
             f"{_manager_report_date_label(date_from)} - "
             f"{_manager_report_date_label(date_to)}"

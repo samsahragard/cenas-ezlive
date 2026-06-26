@@ -15,7 +15,7 @@
   },
   "production": {
     "alvarado": {
-      "to": "C.alvarado@alvaradosmexicanproducts.com",
+      "to": "sale@alvaradosmexproduce.com",
       "cc": ["sam@cenaskitchen.com", "javier@cenaskitchen.com"],
       "label": "Alvarado's Mexican Produce"
     },

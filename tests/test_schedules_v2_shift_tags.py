@@ -205,3 +205,69 @@ def test_selected_shift_copy_to_week_preserves_tags_and_day_offsets(db_session, 
     assert new_shift.end_at == datetime(2026, 6, 17, 22, 0)
     assert new_shift.published_at is None
     assert [row.tag_id for row in db_session.query(ShiftTag).filter_by(shift_id=new_shift.id).all()] == [tag["id"]]
+
+
+def test_selected_shift_copy_to_week_skips_source_open_shifts(db_session, monkeypatch):
+    flask_app = _bind_app(db_session, monkeypatch)
+    client = _partner_client(flask_app)
+
+    db_session.add(Shift(
+        id=250,
+        schedule_id=100,
+        employee_id=None,
+        position_id=10,
+        start_at=datetime(2026, 6, 10, 12, 0),
+        end_at=datetime(2026, 6, 10, 16, 0),
+        status="open",
+    ))
+    db_session.commit()
+
+    copied = client.post("/dos/schedules-v2/shifts/copy-to-week", json={
+        "shift_ids": [250],
+        "source_week_start": "2026-06-07",
+        "target_week_start": "2026-06-14",
+    })
+    assert copied.status_code == 201, copied.get_data(as_text=True)
+    body = copied.get_json()
+    assert body["copied"] == 0
+    assert body["skipped_open"] == 1
+
+    db_session.expire_all()
+    target_schedule = db_session.get(Schedule, body["target_schedule_id"])
+    assert target_schedule is not None
+    assert db_session.query(Shift).filter_by(schedule_id=target_schedule.id).count() == 0
+
+
+def test_selected_shift_copy_to_week_skips_exact_duplicates(db_session, monkeypatch):
+    flask_app = _bind_app(db_session, monkeypatch)
+    client = _partner_client(flask_app)
+
+    created = client.post("/dos/schedules-v2/shifts/new", json={
+        "schedule_id": 100,
+        "employee_id": 20,
+        "position_id": 10,
+        "start_at": "2026-06-10T15:00:00",
+        "end_at": "2026-06-10T22:00:00",
+    })
+    assert created.status_code == 201, created.get_data(as_text=True)
+    shift_id = created.get_json()["id"]
+
+    payload = {
+        "shift_ids": [shift_id],
+        "source_week_start": "2026-06-07",
+        "target_week_start": "2026-06-14",
+    }
+    first = client.post("/dos/schedules-v2/shifts/copy-to-week", json=payload)
+    assert first.status_code == 201, first.get_data(as_text=True)
+    assert first.get_json()["copied"] == 1
+
+    second = client.post("/dos/schedules-v2/shifts/copy-to-week", json=payload)
+    assert second.status_code == 201, second.get_data(as_text=True)
+    body = second.get_json()
+    assert body["copied"] == 0
+    assert body["duplicates"] == 1
+
+    db_session.expire_all()
+    target_schedule = db_session.get(Schedule, first.get_json()["target_schedule_id"])
+    rows = db_session.query(Shift).filter_by(schedule_id=target_schedule.id).all()
+    assert len(rows) == 1

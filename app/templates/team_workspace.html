@@ -346,7 +346,7 @@
   }
 </style>
 
-<div class="tws team-active" id="tws-root"
+<div class="tws" id="tws-root"
      data-roster-url="/{{ store_slug }}/schedules-v2/team-roster"
      data-schedule-url="/{{ store_slug }}/schedules-v2/?embed=1"
      data-roster-location="{{ roster_location|default('all') }}">
@@ -354,8 +354,8 @@
   <div class="tws-stickybar" id="tws-stickybar">
     {# sub-tabs: real anchors (?sub=KEY) so it works without JS; JS swaps in place #}
     <div class="tws-tabs" role="tablist">
-      <a class="tws-tab active" href="?sub=team"     data-sub="team"     role="tab"><i class="ti ti-users"></i>Team</a>
-      <a class="tws-tab"        href="?sub=schedule" data-sub="schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
+      <a class="tws-tab active" href="?sub=schedule" data-sub="schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
+      <a class="tws-tab"        href="?sub=team"     data-sub="team"     role="tab"><i class="ti ti-users"></i>Team</a>
       <a class="tws-tab"        href="?sub=market"   data-sub="market"   role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
       <a class="tws-tab"        href="?sub=link"     data-sub="link"     role="tab"><i class="ti ti-link"></i>Link</a>
       <a class="tws-tab"        href="?sub=schedule-reports" data-sub="schedule-reports" role="tab"><i class="ti ti-report-analytics"></i>Schedule Reports</a>
@@ -387,12 +387,12 @@
      +Add buttons rendered INSIDE each store block (one in Management, one in
      Hourly). The pill/position/inactive filters stay global (apply to both
      blocks). #}
-  <div class="tws-panel active" id="tws-panel-team" data-sub-panel="team" role="tabpanel">
+  <div class="tws-panel" id="tws-panel-team" data-sub-panel="team" role="tabpanel">
     <div id="tws-roster"><div class="tws-empty">Loading roster...</div></div>
   </div>
 
   {# ---- SCHEDULE panel: location tabs first, then Week | Time off | Availability for that store. ---- #}
-  <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel">
+  <div class="tws-panel active" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel">
     <div class="tws-store-tabs tws-schedule-storebar" role="tablist" aria-label="Schedule location">
       {% for st in schedule_stores %}
         <button class="tws-store-tab{% if st.slug == schedule_store_default %} active{% endif %}" type="button" role="tab" data-sched-store-tab="{{ st.slug }}">{{ st.label }}</button>
@@ -733,7 +733,7 @@
   });
 
   // honour ?sub= on load
-  var initial = (new URLSearchParams(location.search)).get("sub") || "team";
+  var initial = (new URLSearchParams(location.search)).get("sub") || "schedule";
   setTimeout(function () { show(initial); }, 0);
 
   /* ---------------- Team roster: fetch + render against the contract ---------------- */

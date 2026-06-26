@@ -2078,6 +2078,8 @@
     var chips = elBody.querySelectorAll(".sv2-chip[data-shift]");
     for (var i = 0; i < chips.length; i++) {
       var id = chips[i].getAttribute("data-shift");
+      var sh = shiftById(id);
+      if (sh && sh.employee_id == null) continue;
       if (id && !seen[id]) { seen[id] = true; out.push(id); }
     }
     return out;
@@ -2202,6 +2204,8 @@
       .then(parseJsonOrThrow).then(function (j) {
         state.busy = false;
         var c = (j && j.copied) || 0, msg = "Copied " + c + (c === 1 ? " shift" : " shifts");
+        if (j && j.skipped_open) msg += " (" + j.skipped_open + " open skipped)";
+        if (j && j.duplicates) msg += " (" + j.duplicates + " already there)";
         if (j && j.opened_for_timeoff) msg += " (" + j.opened_for_timeoff + " left unassigned for time-off)";
         toast(msg);
         var targetWeek = cpTargetWeek;

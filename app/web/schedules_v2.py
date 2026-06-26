@@ -105,6 +105,23 @@ def _sync_shift_tags(db, shift_id: int, tag_ids, now: datetime) -> None:
             db.add(ShiftTag(shift_id=shift_id, tag_id=tid, created_at=now))
 
 
+def _shift_copy_exists(db, schedule_id: int, employee_id: int | None,
+                       position_id: int | None, start_at: datetime,
+                       end_at: datetime, break_minutes: int | None,
+                       status: str | None, notes: str | None) -> bool:
+    q = db.query(Shift.id).filter(
+        Shift.schedule_id == schedule_id,
+        Shift.position_id == position_id,
+        Shift.start_at == start_at,
+        Shift.end_at == end_at,
+        Shift.break_minutes == break_minutes,
+        Shift.status == status,
+    )
+    q = q.filter(Shift.employee_id.is_(None) if employee_id is None else Shift.employee_id == employee_id)
+    q = q.filter(Shift.notes.is_(None) if notes is None else Shift.notes == notes)
+    return q.first() is not None
+
+
 def _store() -> str | None:
     """The store_key stored on schedules/shifts is the LOCATION
     ('tomball'/'copperfield'), NOT the URL slug ('dos'/'uno') - so it joins with
@@ -1039,9 +1056,11 @@ def sv2_shift_bulk_copy():
             return jsonify({"ok": False, "error": "source/target schedule not found in this store"}), 404
         offset = dst.week_start - src.week_start  # timedelta (week delta)
         now = datetime.utcnow()
-        n = 0
-        opened_for_timeoff = 0
+        n = duplicates = skipped_open = opened_for_timeoff = 0
         for sh in db.query(Shift).filter_by(schedule_id=src.id).all():
+            if sh.employee_id is None:
+                skipped_open += 1
+                continue
             new_start = sh.start_at + offset
             emp_id, status = sh.employee_id, sh.status
             # B7: don't template an assignment onto the employee's approved time-off.
@@ -1051,8 +1070,13 @@ def sv2_shift_bulk_copy():
             if emp_id and scheduling_timeoff.conflict(emp_id, new_start.date()):
                 emp_id, status = None, "open"
                 opened_for_timeoff += 1
+            new_end = sh.end_at + offset
+            if _shift_copy_exists(db, dst.id, emp_id, sh.position_id, new_start, new_end,
+                                  sh.break_minutes, status, sh.notes):
+                duplicates += 1
+                continue
             nsh = Shift(schedule_id=dst.id, employee_id=emp_id, position_id=sh.position_id,
-                        start_at=new_start, end_at=sh.end_at + offset,
+                        start_at=new_start, end_at=new_end,
                         break_minutes=sh.break_minutes, status=status, notes=sh.notes,
                         created_at=now, updated_at=now)
             db.add(nsh)
@@ -1062,6 +1086,7 @@ def sv2_shift_bulk_copy():
             n += 1
         db.commit()
         return jsonify({"ok": True, "copied": n, "to_schedule_id": dst_id,
+                        "duplicates": duplicates, "skipped_open": skipped_open,
                         "opened_for_timeoff": opened_for_timeoff}), 201
     finally:
         db.close()
@@ -1090,11 +1115,14 @@ def sv2_shift_copy_to_date():
     db = SessionLocal()
     try:
         now = datetime.utcnow()
-        copied = skipped = opened_for_timeoff = 0
+        copied = skipped = duplicates = skipped_open = opened_for_timeoff = 0
         for sid in shift_ids:
             sh = _shift_in_store(db, sid)  # same-store guard; foreign/unknown -> skip
             if sh is None or sh.start_at is None or sh.end_at is None:
                 skipped += 1
+                continue
+            if sh.employee_id is None:
+                skipped_open += 1
                 continue
             new_start = datetime.combine(tdate, sh.start_at.time())
             new_end = new_start + (sh.end_at - sh.start_at)  # preserve duration (overnight-safe)
@@ -1105,6 +1133,10 @@ def sv2_shift_copy_to_date():
             if emp_id and not skip_checks and scheduling_timeoff.conflict(emp_id, new_start.date()):
                 emp_id, status = None, "open"
                 opened_for_timeoff += 1
+            if _shift_copy_exists(db, sh.schedule_id, emp_id, sh.position_id, new_start, new_end,
+                                  sh.break_minutes, status, sh.notes):
+                duplicates += 1
+                continue
             nsh = Shift(schedule_id=sh.schedule_id, employee_id=emp_id, position_id=sh.position_id,
                         start_at=new_start, end_at=new_end, break_minutes=sh.break_minutes,
                         status=status, notes=sh.notes, published_at=None,
@@ -1116,6 +1148,7 @@ def sv2_shift_copy_to_date():
             copied += 1
         db.commit()
         return jsonify({"ok": True, "copied": copied, "skipped": skipped,
+                        "duplicates": duplicates, "skipped_open": skipped_open,
                         "opened_for_timeoff": opened_for_timeoff}), 201
     finally:
         db.close()
@@ -1153,11 +1186,14 @@ def sv2_shift_copy_to_week():
             db.commit()
             created_schedule = True
 
-        copied = skipped = opened_for_timeoff = 0
+        copied = skipped = duplicates = skipped_open = opened_for_timeoff = 0
         for sid in shift_ids:
             sh = _shift_in_store(db, sid)
             if sh is None or sh.start_at is None or sh.end_at is None:
                 skipped += 1
+                continue
+            if sh.employee_id is None:
+                skipped_open += 1
                 continue
             day_offset = (sh.start_at.date() - source_start).days
             if day_offset < 0 or day_offset > 6:
@@ -1171,6 +1207,10 @@ def sv2_shift_copy_to_week():
             if emp_id and not skip_checks and scheduling_timeoff.conflict(emp_id, new_start.date()):
                 emp_id, status = None, "open"
                 opened_for_timeoff += 1
+            if _shift_copy_exists(db, target_sched.id, emp_id, sh.position_id, new_start, new_end,
+                                  sh.break_minutes, status, sh.notes):
+                duplicates += 1
+                continue
             nsh = Shift(schedule_id=target_sched.id, employee_id=emp_id, position_id=sh.position_id,
                         start_at=new_start, end_at=new_end, break_minutes=sh.break_minutes,
                         status=status, notes=sh.notes, published_at=None,
@@ -1182,6 +1222,7 @@ def sv2_shift_copy_to_week():
             copied += 1
         db.commit()
         return jsonify({"ok": True, "copied": copied, "skipped": skipped,
+                        "duplicates": duplicates, "skipped_open": skipped_open,
                         "target_schedule_id": target_sched.id,
                         "target_week_start": target_sched.week_start.isoformat(),
                         "created_schedule": created_schedule,

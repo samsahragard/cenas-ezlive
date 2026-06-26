@@ -132,12 +132,16 @@ def test_team_roster_controls_are_inside_stickybar():
         template.index("{# ---- TEAM panel")
     ]
     team_panel = template[
-        template.index('<div class="tws-panel active" id="tws-panel-team"'):
+        template.index('<div class="tws-panel" id="tws-panel-team"'):
         template.index("{# ---- SCHEDULE panel")
+    ]
+    schedule_panel = template[
+        template.index('<div class="tws-panel active" id="tws-panel-schedule"'):
+        template.index("{# ---- MARKET panel")
     ]
 
     assert 'id="tws-stickybar"' in sticky
-    assert "Team Roster" in sticky
+    assert sticky.index('data-sub="schedule"') < sticky.index('data-sub="team"')
     assert 'data-sub="team"' in sticky
     assert 'data-sub="schedule"' in sticky
     assert 'data-sub="market"' in sticky
@@ -150,6 +154,8 @@ def test_team_roster_controls_are_inside_stickybar():
     assert 'id="tws-team-storetabs"' in sticky
     assert 'id="tws-team-storemeta"' in sticky
     assert 'id="tws-roster"' in team_panel
+    assert 'data-sub-panel="schedule"' in schedule_panel
+    assert 'var initial = (new URLSearchParams(location.search)).get("sub") || "schedule";' in template
     assert 'id="tws-pos-btn"' not in team_panel
     assert 'id="tws-team-storetabs"' not in team_panel
     assert "position: sticky; top: 0;" in template
@@ -157,6 +163,14 @@ def test_team_roster_controls_are_inside_stickybar():
     assert "function renderActiveStoreMeta()" in template
     assert "var elStoreTabs = document.getElementById(\"tws-team-storetabs\");" in template
     assert "state.storeMeta = metaByStore;" in template
+
+
+def test_schedule_visible_selection_skips_open_shifts_and_copy_reports_skips():
+    template = _read("schedules_v2_week.html")
+
+    assert 'if (sh && sh.employee_id == null) continue;' in template
+    assert 'j.skipped_open' in template
+    assert 'j.duplicates' in template
 
 
 def test_schedule_template_has_view_options_for_empty_unpublished_hours_and_conflicts():
@@ -230,8 +244,9 @@ def test_team_workspace_market_panel_omits_repeated_store_headings():
         template.index("{# ---- LINK panel")
     ]
 
-    assert 'data-embed-frame="market-uno"' in market_panel
-    assert 'data-embed-frame="market-dos"' in market_panel
+    assert 'data-embed-frame="market-{{ st.slug }}"' in market_panel
+    assert 'data-src="/{{ st.slug }}/schedules-v2/marketplace?embed=1"' in market_panel
+    assert "{% for st in schedule_stores %}" in market_panel
     assert "tws-sched-storehead" not in market_panel
 
 

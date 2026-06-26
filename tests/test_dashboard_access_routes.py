@@ -805,6 +805,7 @@ def test_vendor_reports_render_order_items_and_price_watch(dashboard_app):
             placed_at=datetime(2099, 6, 10, 9, 0),
             total_cents=3000,
             status="confirmed",
+            customer_or_caterer="Sam",
             parse_status="parsed",
             items_json=[{
                 "name": "Nitrile Gloves",
@@ -821,6 +822,7 @@ def test_vendor_reports_render_order_items_and_price_watch(dashboard_app):
             placed_at=datetime(2099, 6, 18, 9, 0),
             total_cents=1800,
             status="confirmed",
+            customer_or_caterer="Chef Luis",
             parse_status="parsed",
             items_json={"items": [{
                 "name": "Nitrile Gloves",
@@ -847,3 +849,15 @@ def test_vendor_reports_render_order_items_and_price_watch(dashboard_app):
     assert "$48.00" in html
     assert "$18.00" in html
     assert "+20.0%" in html
+    match = re.search(r'<option value="([^"]+)"[^>]*>Nitrile Gloves', html)
+    assert match is not None
+
+    detail_resp = client.get(
+        "/partner/vendors/reports"
+        f"?vendor=webstaurant&start=2099-06-01&end=2099-06-30&item={match.group(1)}"
+    )
+    assert detail_resp.status_code == 200
+    detail_html = detail_resp.get_data(as_text=True)
+    assert "Price History" in detail_html
+    assert "Orders With This Item" in detail_html
+    assert "Chef Luis" in detail_html

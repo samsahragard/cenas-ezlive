@@ -54,9 +54,24 @@ def test_supply_report_normalizes_item_shapes_and_price_changes(db_session):
     assert report["summary"]["orders"] == 2
     assert report["summary"]["spend"] == "$37.00"
     assert report["summary"]["units"] == "3"
+    assert [opt["label"] for opt in report["item_options"]] == [
+        "Foil Pan · PAN-1 · Webstaurant"
+    ]
     assert report["top_items"][0]["name"] == "Foil Pan"
     assert report["top_items"][0]["latest_unit"] == "$12.00"
     assert report["price_watch"][0]["price_delta_pct_display"] == "+20.0%"
+
+    selected = build_supply_report(
+        db_session,
+        "webstaurant",
+        date(2099, 6, 1),
+        date(2099, 6, 30),
+        "tomball",
+        selected_item_key=report["item_options"][0]["value"],
+    )
+    assert selected["selected_item"]["name"] == "Foil Pan"
+    assert selected["selected_item"]["price_history"][0]["unit"] == "$10.00"
+    assert selected["selected_item"]["order_lines"][0]["order_number"] == "W-2"
 
 
 def test_produce_report_builds_price_matrix_and_watch(db_session):
@@ -97,3 +112,14 @@ def test_produce_report_builds_price_matrix_and_watch(db_session):
     assert report["price_rows"][0]["cheaper"] == "J. Luna"
     assert report["price_watch"][0]["name"] == "Limes"
     assert report["price_watch"][0]["price_delta_pct_display"] == "+20.0%"
+
+    selected = build_produce_report(
+        db_session,
+        date(2099, 6, 1),
+        date(2099, 6, 30),
+        "both",
+        selected_item_key=report["item_options"][0]["value"],
+    )
+    assert selected["selected_item"]["name"] == "Limes"
+    assert selected["selected_item"]["price_history"][-1]["cheaper"] == "J. Luna"
+    assert selected["selected_item"]["price_history"][-1]["best_price_display"] == "$23.00"

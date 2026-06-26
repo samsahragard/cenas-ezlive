@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -67,11 +68,12 @@ def build_report(
     start: date,
     end: date,
     store_scope: str = "both",
+    selected_item_key: str | None = None,
 ) -> dict[str, Any]:
     vendor = normalize_vendor(vendor)
     if vendor == "produce":
-        return build_produce_report(db, start, end, store_scope)
-    return build_supply_report(db, vendor, start, end, store_scope)
+        return build_produce_report(db, start, end, store_scope, selected_item_key)
+    return build_supply_report(db, vendor, start, end, store_scope, selected_item_key)
 
 
 def build_supply_report(
@@ -80,6 +82,7 @@ def build_supply_report(
     start: date,
     end: date,
     store_scope: str = "both",
+    selected_item_key: str | None = None,
 ) -> dict[str, Any]:
     vendor_slugs = (
         list(SUPPLY_VENDOR_LABELS)
@@ -136,7 +139,9 @@ def build_supply_report(
             if unit_cents is None and line_cents is not None and qty_val:
                 unit_cents = int(round(line_cents / qty_val))
             item_key = (row.vendor, sku.lower(), _norm_name(name))
+            encoded_item_key = _supply_item_key(row.vendor, sku, name)
             acc = item_acc.setdefault(item_key, {
+                "item_key": encoded_item_key,
                 "vendor": row.vendor,
                 "vendor_label": SUPPLY_VENDOR_LABELS.get(row.vendor, row.vendor),
                 "name": name,
@@ -148,6 +153,8 @@ def build_supply_report(
                 "first_seen": None,
                 "latest_seen": None,
                 "latest_unit_cents": None,
+                "price_points": [],
+                "order_lines": [],
             })
             acc["orders"].add(row.id)
             acc["units"] += qty_val
@@ -160,6 +167,32 @@ def build_supply_report(
                     acc["latest_unit_cents"] = int(unit_cents)
                 if acc["first_seen"] is None or seen_date <= acc["first_seen"]:
                     acc["first_seen"] = seen_date
+                acc["price_points"].append({
+                    "date": _display_date(order_date),
+                    "date_iso": order_date.isoformat() if order_date else "",
+                    "vendor_label": SUPPLY_VENDOR_LABELS.get(row.vendor, row.vendor),
+                    "order_number": row.order_number or "Order",
+                    "unit_cents": int(unit_cents),
+                    "unit": money(unit_cents),
+                    "qty": qty_display(qty_val),
+                    "line": money(line_cents) if line_cents is not None else "-",
+                    "store": _display_store(row.store_scope),
+                    "buyer": _buyer_label(row.customer_or_caterer, row.subject),
+                    "status": row.status or "order",
+                })
+            acc["order_lines"].append({
+                "date": _display_date(order_date),
+                "date_iso": order_date.isoformat() if order_date else "",
+                "vendor_label": SUPPLY_VENDOR_LABELS.get(row.vendor, row.vendor),
+                "order_number": row.order_number or "Order",
+                "store": _display_store(row.store_scope),
+                "buyer": _buyer_label(row.customer_or_caterer, row.subject),
+                "status": row.status or "order",
+                "qty": qty_display(qty_val),
+                "unit": money(unit_cents) if unit_cents is not None else "-",
+                "line": money(line_cents) if line_cents is not None else "-",
+                "subject": row.subject or "",
+            })
             total_units += qty_val
             line_count += 1
             if order_date:
@@ -182,6 +215,12 @@ def build_supply_report(
 
     item_rows = [_finalize_supply_item(acc) for acc in item_acc.values()]
     item_rows.sort(key=lambda r: (-r["spend_cents"], -r["units"], r["name"].lower()))
+    item_options = _item_options_from_rows(item_rows)
+    acc_by_item_key = {acc["item_key"]: acc for acc in item_acc.values()}
+    selected_detail = None
+    if selected_item_key in acc_by_item_key:
+        selected_detail = _supply_item_detail(acc_by_item_key[selected_item_key])
+    selected_item_key = selected_detail["item_key"] if selected_detail else ""
     price_watch = [
         r for r in item_rows
         if r["price_delta_cents"] is not None and r["price_delta_cents"] != 0
@@ -209,6 +248,9 @@ def build_supply_report(
         "summary": summary,
         "daily_rows": daily_rows,
         "vendor_breakdown": breakdown_rows,
+        "item_options": item_options,
+        "selected_item_key": selected_item_key,
+        "selected_item": selected_detail,
         "top_items": item_rows[:25],
         "price_watch": price_watch[:20],
         "order_rows": order_rows[:40],
@@ -221,6 +263,7 @@ def build_produce_report(
     start: date,
     end: date,
     store_scope: str = "both",
+    selected_item_key: str | None = None,
 ) -> dict[str, Any]:
     completed = _load_completed_produce_orders()
     orders = [
@@ -300,6 +343,7 @@ def build_produce_report(
     item_rows = []
     for acc in item_acc.values():
         item_rows.append({
+            "item_key": _produce_item_key(acc["name"], acc["size"]),
             "name": acc["name"],
             "size": acc["size"],
             "orders": len({x for x in acc["orders"] if x}),
@@ -313,6 +357,24 @@ def build_produce_report(
     item_rows.sort(key=lambda r: (-r["spend_cents"], -r["units_num"], r["name"].lower()))
 
     price_rows, price_watch = _produce_price_rows(db, start, end)
+    item_options = _produce_item_options(item_rows, price_rows)
+    selected_detail = None
+    selected_payload = _decode_item_key(selected_item_key)
+    if selected_payload and selected_payload.get("kind") == "produce":
+        selected_key = _produce_item_key(
+            selected_payload.get("name") or "",
+            selected_payload.get("size") or "",
+        )
+        if selected_key in {opt["value"] for opt in item_options}:
+            selected_detail = _produce_item_detail(
+                db,
+                selected_payload.get("name") or "",
+                selected_payload.get("size") or "",
+                start,
+                end,
+                orders,
+            )
+    selected_item_key = selected_detail["item_key"] if selected_detail else ""
     daily_rows = _finalize_daily_rows(daily)
     breakdown_rows = []
     for row in vendor_breakdown.values():
@@ -340,6 +402,9 @@ def build_produce_report(
         "summary": summary,
         "daily_rows": daily_rows,
         "vendor_breakdown": breakdown_rows,
+        "item_options": item_options,
+        "selected_item_key": selected_item_key,
+        "selected_item": selected_detail,
         "top_items": item_rows[:25],
         "price_rows": price_rows[:30],
         "price_watch": price_watch[:20],
@@ -468,6 +533,7 @@ def _finalize_supply_item(acc: dict[str, Any]) -> dict[str, Any]:
         if first_price:
             delta_pct = (delta / first_price) * 100
     return {
+        "item_key": acc["item_key"],
         "vendor": acc["vendor"],
         "vendor_label": acc["vendor_label"],
         "name": acc["name"],
@@ -529,6 +595,7 @@ def _produce_price_rows(db, start: date, end: date) -> tuple[list[dict[str, Any]
                 delta = new.price - old.price
                 if delta:
                     price_watch.append({
+                        "item_key": _produce_item_key(name, size or ""),
                         "vendor_label": _produce_vendor_label(vendor),
                         "name": name,
                         "size": size or "",
@@ -552,6 +619,7 @@ def _produce_price_rows(db, start: date, end: date) -> tuple[list[dict[str, Any]
             vals = list(latest_prices.values())
             spread = max(vals) - min(vals)
         price_rows.append({
+            "item_key": _produce_item_key(name, size or ""),
             "name": name,
             "size": size or "",
             "alvarado": money(round(latest["alvarado"].price * 100)) if latest.get("alvarado") else "-",
@@ -566,6 +634,170 @@ def _produce_price_rows(db, start: date, end: date) -> tuple[list[dict[str, Any]
     price_rows.sort(key=lambda r: (r["name"].lower(), r["size"].lower()))
     price_watch.sort(key=lambda r: -abs(r["price_delta_pct"]))
     return price_rows, price_watch
+
+
+def _supply_item_detail(acc: dict[str, Any]) -> dict[str, Any]:
+    price_points = sorted(
+        acc["price_points"],
+        key=lambda r: (r.get("date_iso") or "", r.get("order_number") or ""),
+    )
+    max_price = max((p["unit_cents"] for p in price_points), default=0)
+    for point in price_points:
+        point["bar_pct"] = round((point["unit_cents"] / max_price) * 100) if max_price else 0
+    order_lines = sorted(
+        acc["order_lines"],
+        key=lambda r: (r.get("date_iso") or "", r.get("order_number") or ""),
+        reverse=True,
+    )
+    finalized = _finalize_supply_item(acc)
+    return {
+        "kind": "supply",
+        "item_key": acc["item_key"],
+        "name": acc["name"],
+        "subtitle": " · ".join(
+            part for part in (acc["vendor_label"], acc["sku"] or None) if part
+        ),
+        "summary_cards": [
+            {"label": "Latest Unit", "value": finalized["latest_unit"]},
+            {"label": "Avg Unit", "value": finalized["avg_unit"]},
+            {"label": "Ordered Units", "value": finalized["units_display"]},
+            {"label": "Spend", "value": finalized["spend"]},
+        ],
+        "price_history": price_points,
+        "order_lines": order_lines,
+    }
+
+
+def _produce_item_detail(
+    db,
+    name: str,
+    size: str,
+    start: date,
+    end: date,
+    orders: list[dict[str, Any]],
+) -> dict[str, Any]:
+    q = (
+        db.query(ProducePriceSnapshot)
+        .filter(ProducePriceSnapshot.canonical_name == name)
+        .filter(ProducePriceSnapshot.snapshot_date >= start.isoformat())
+        .filter(ProducePriceSnapshot.snapshot_date <= end.isoformat())
+    )
+    if size:
+        q = q.filter(ProducePriceSnapshot.canonical_size == size)
+    else:
+        q = q.filter(or_(
+            ProducePriceSnapshot.canonical_size.is_(None),
+            ProducePriceSnapshot.canonical_size == "",
+        ))
+    rows = q.order_by(
+        ProducePriceSnapshot.snapshot_date.asc(),
+        ProducePriceSnapshot.vendor.asc(),
+    ).all()
+
+    by_date: dict[str, dict[str, Any]] = defaultdict(dict)
+    for row in rows:
+        by_date[row.snapshot_date][row.vendor] = row
+    price_history = []
+    max_price = 0.0
+    for day in sorted(by_date):
+        vendors = by_date[day]
+        prices = {
+            vendor: row.price
+            for vendor, row in vendors.items()
+            if row.price is not None
+        }
+        if prices:
+            max_price = max(max_price, *prices.values())
+        cheaper = min(prices, key=prices.get) if prices else ""
+        spread = None
+        if len(prices) >= 2:
+            spread = max(prices.values()) - min(prices.values())
+        price_history.append({
+            "date": _display_date(_date_from_iso(day)),
+            "date_iso": day,
+            "alvarado": money(round(prices["alvarado"] * 100)) if "alvarado" in prices else "-",
+            "jluna": money(round(prices["jluna"] * 100)) if "jluna" in prices else "-",
+            "cheaper": _produce_vendor_label(cheaper) if cheaper else "-",
+            "spread": money(round(spread * 100)) if spread is not None else "-",
+            "best_price": min(prices.values()) if prices else 0,
+            "best_price_display": money(round(min(prices.values()) * 100)) if prices else "-",
+        })
+    for point in price_history:
+        point["bar_pct"] = round((point["best_price"] / max_price) * 100) if max_price else 0
+
+    order_lines = []
+    orders_by_date: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"units": 0.0, "spend_cents": 0, "buyers": set(), "orders": set()}
+    )
+    ordered_units = 0.0
+    spend_cents = 0
+    order_ids = set()
+    for order in orders:
+        order_date = _produce_order_date(order)
+        for line in order.get("cart") or []:
+            line_name = (line.get("canonical_name") or line.get("vendor_name") or "").strip()
+            line_size = (line.get("canonical_size") or "").strip()
+            if line_name != name or line_size != size:
+                continue
+            qty = _parse_qty(line.get("qty")) or 0.0
+            unit_cents = _money_to_cents(line.get("price"))
+            line_cents = int(round((unit_cents or 0) * qty))
+            ordered_units += qty
+            spend_cents += line_cents
+            order_id = order.get("order_id") or "Produce order"
+            order_ids.add(order_id)
+            if order_date:
+                date_bucket = orders_by_date[order_date.isoformat()]
+                date_bucket["units"] += qty
+                date_bucket["spend_cents"] += line_cents
+                date_bucket["orders"].add(order_id)
+                buyer = (order.get("manager") or "").strip()
+                if buyer:
+                    date_bucket["buyers"].add(buyer)
+            order_lines.append({
+                "date": _display_date(order_date),
+                "date_iso": order_date.isoformat() if order_date else "",
+                "vendor_label": _produce_vendor_label(line.get("vendor")),
+                "order_number": order_id,
+                "store": _display_store(order.get("used_location") or order.get("selected_location")),
+                "buyer": order.get("manager") or "-",
+                "status": order.get("status") or "sent",
+                "qty": qty_display(qty),
+                "unit": money(unit_cents) if unit_cents is not None else "-",
+                "line": money(line_cents),
+                "delivery_date": order.get("delivery_date") or "",
+            })
+    order_lines.sort(key=lambda r: (r.get("date_iso") or "", r.get("order_number") or ""), reverse=True)
+    for point in price_history:
+        bucket = orders_by_date.get(point["date_iso"])
+        if not bucket:
+            point["order_note"] = ""
+            point["order_people"] = ""
+            continue
+        point["order_note"] = (
+            f"{qty_display(bucket['units'])} units ordered · {money(bucket['spend_cents'])}"
+        )
+        point["order_people"] = ", ".join(sorted(bucket["buyers"])) or "-"
+
+    latest = price_history[-1] if price_history else {}
+    latest_best = "-"
+    if latest:
+        latest_best = f"{latest.get('best_price_display', '-')} · {latest.get('cheaper', '-')}"
+    return {
+        "kind": "produce",
+        "item_key": _produce_item_key(name, size),
+        "name": name,
+        "subtitle": size or "Produce item",
+        "summary_cards": [
+            {"label": "Latest Best", "value": latest_best},
+            {"label": "Snapshots", "value": str(len(price_history))},
+            {"label": "Ordered Units", "value": qty_display(ordered_units)},
+            {"label": "Spend", "value": money(spend_cents)},
+        ],
+        "price_history": price_history,
+        "order_lines": order_lines,
+        "order_count": len(order_ids),
+    }
 
 
 def _load_completed_produce_orders() -> list[dict[str, Any]]:
@@ -655,6 +887,84 @@ def _money_to_cents(value: Any) -> int | None:
 
 def _norm_name(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+
+def _encode_item_key(payload: dict[str, Any]) -> str:
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_item_key(value: str | None) -> dict[str, Any] | None:
+    if not value:
+        return None
+    try:
+        padded = value + ("=" * (-len(value) % 4))
+        payload = json.loads(urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _supply_item_key(vendor: str, sku: str, name: str) -> str:
+    return _encode_item_key({
+        "kind": "supply",
+        "vendor": vendor,
+        "sku": (sku or "").strip().lower(),
+        "name": _norm_name(name),
+    })
+
+
+def _produce_item_key(name: str, size: str | None) -> str:
+    return _encode_item_key({
+        "kind": "produce",
+        "name": (name or "").strip(),
+        "size": (size or "").strip(),
+    })
+
+
+def _item_options_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    seen: dict[str, str] = {}
+    for row in rows:
+        key = row.get("item_key")
+        if not key:
+            continue
+        parts = [row.get("name") or "Item"]
+        if row.get("sku"):
+            parts.append(row["sku"])
+        if row.get("vendor_label"):
+            parts.append(row["vendor_label"])
+        seen[key] = " · ".join(parts)
+    return [
+        {"value": key, "label": label}
+        for key, label in sorted(seen.items(), key=lambda kv: kv[1].lower())
+    ]
+
+
+def _produce_item_options(
+    item_rows: list[dict[str, Any]],
+    price_rows: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    seen: dict[str, str] = {}
+    for row in [*item_rows, *price_rows]:
+        key = row.get("item_key")
+        if not key:
+            continue
+        label = row.get("name") or "Produce item"
+        if row.get("size"):
+            label = f"{label} · {row['size']}"
+        seen[key] = label
+    return [
+        {"value": key, "label": label}
+        for key, label in sorted(seen.items(), key=lambda kv: kv[1].lower())
+    ]
+
+
+def _buyer_label(customer_or_caterer: str | None, subject: str | None) -> str:
+    val = (customer_or_caterer or "").strip()
+    if val:
+        return val
+    subj = (subject or "").strip()
+    return subj[:90] if subj else "-"
 
 
 def _display_date(value: date | datetime | None) -> str:

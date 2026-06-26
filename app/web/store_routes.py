@@ -1382,6 +1382,7 @@ def vendor_reports():
     from app.services import vendor_reports as vendor_report_service
 
     vendor = vendor_report_service.normalize_vendor(request.args.get("vendor"))
+    selected_item_key = (request.args.get("item") or "").strip()
     start, end, err = vendor_report_service.parse_report_dates(
         request.args.get("start"),
         request.args.get("end"),
@@ -1397,6 +1398,7 @@ def vendor_reports():
                 start,
                 end,
                 store_scope=g.current_location,
+                selected_item_key=selected_item_key,
             )
         finally:
             db.close()
@@ -1410,6 +1412,7 @@ def vendor_reports():
              if o["value"] == vendor),
             "All Supply Vendors",
         ),
+        selected_item_key=(report.get("selected_item_key") if report else selected_item_key),
         start_iso=start.isoformat(),
         end_iso=end.isoformat(),
         error=err,

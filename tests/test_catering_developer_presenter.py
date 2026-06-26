@@ -137,13 +137,25 @@ def test_developer_calculation_explains_executive_meat_rates():
     chicken = _row(mixed, "Chicken (Lb)")
     beef = _row(mixed, "Beef (Lb)")
     all_beef = _row(beef_only, "Beef (Lb)")
+    lettuce = _row(mixed, "Lettuce (Lb)")
+    avocado = _row(mixed, "Avocado Diced (Lb)")
+    grated_cheese = _row(mixed, "Grated Cheese (Lb)")
+    pico = _row(mixed, "Pico De Gallo (Lb)")
 
-    assert chicken["amount"] == "2.81"
-    assert chicken["calculation"] == "15 x 3oz = 45oz = 2.81lb"
-    assert beef["amount"] == "2.81"
-    assert beef["calculation"] == "15 x 3oz = 45oz = 2.81lb"
-    assert all_beef["amount"] == "5.62"
-    assert all_beef["calculation"] == "15 x 6oz = 90oz = 5.62lb"
+    assert chicken["amount"] == "3.28"
+    assert chicken["calculation"] == "15 x 3.5oz = 52.5oz = 3.28lb"
+    assert beef["amount"] == "3.28"
+    assert beef["calculation"] == "15 x 3.5oz = 52.5oz = 3.28lb"
+    assert all_beef["amount"] == "6.56"
+    assert all_beef["calculation"] == "15 x 7oz = 105oz = 6.56lb"
+    assert lettuce["amount"] == "2.34"
+    assert lettuce["calculation"] == "15 x 2.5oz = 37.5oz = 2.34lb"
+    assert avocado["amount"] == "1.41"
+    assert avocado["calculation"] == "15 x 1.5oz = 22.5oz = 1.41lb"
+    assert grated_cheese["amount"] == "0.94"
+    assert grated_cheese["calculation"] == "15 x 1oz = 15oz = 0.94lb"
+    assert pico["amount"] == "0.94"
+    assert pico["calculation"] == "15 x 1oz = 15oz = 0.94lb"
 
 
 def test_developer_calculation_explains_individual_tableware():

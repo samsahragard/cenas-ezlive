@@ -350,7 +350,7 @@ def test_master_individual_package_uses_specific_label_row():
     assert master["meta.individual"] == ""
 
 
-def test_executive_package_uses_six_oz_total_meat_per_person():
+def test_executive_package_uses_seven_oz_total_meat_per_person():
     item = _item(
         "cenas_exec_spread",
         "premium",
@@ -361,20 +361,27 @@ def test_executive_package_uses_six_oz_total_meat_per_person():
 
     breakdown = rule_premium(item, {})
 
-    assert _line_named(breakdown["proteins"], "Chicken")["per_qty"] == 3.0
-    assert _line_named(breakdown["proteins"], "Chicken")["total"] == 30.0
-    assert _line_named(breakdown["proteins"], "Beef")["per_qty"] == 3.0
-    assert _line_named(breakdown["proteins"], "Beef")["total"] == 30.0
+    assert _line_named(breakdown["proteins"], "Chicken")["per_qty"] == 3.5
+    assert _line_named(breakdown["proteins"], "Chicken")["total"] == 35.0
+    assert _line_named(breakdown["proteins"], "Beef")["per_qty"] == 3.5
+    assert _line_named(breakdown["proteins"], "Beef")["total"] == 35.0
     assert _line_named(breakdown["sides"], "Rice")["total"] == 38.0
     assert _line_named(breakdown["sides"], "Charro Beans")["total"] == 38.0
+    assert _line_named(breakdown["sides"], "Pico De Gallo")["total"] == 10.0
+    assert _line_named(breakdown["sides"], "Guacamole")["total"] == 10.0
+    assert _line_named(breakdown["sides"], "Sour Cream")["total"] == 10.0
     assert _line_named(breakdown["sides"], "Queso Blanco")["total"] == 15.0
-    assert _line_named(breakdown["sides"], "Lettuce")["total"] == 40.0
+    assert _line_named(breakdown["sides"], "Lettuce")["total"] == 25.0
+    assert _line_named(breakdown["sides"], "Avocado Diced")["total"] == 15.0
+    assert _line_named(breakdown["sides"], "Tomatoes Diced")["total"] == 15.0
+    assert _line_named(breakdown["sides"], "Cucumber Diced")["total"] == 15.0
+    assert _line_named(breakdown["sides"], "Grated Cheese")["total"] == 10.0
     assert _line_named(breakdown["sides"], "Churros")["total"] == 20
     assert _line_named(breakdown["sauces"], "Dressing - Dressing")["total"] == 30.0
     assert _line_named(breakdown["counts"], "Flour Tortillas")["packets"] == 13
 
 
-def test_executive_package_single_meat_uses_all_six_oz():
+def test_executive_package_single_meat_uses_all_seven_oz():
     chicken_item = _item(
         "cenas_exec_spread",
         "premium",
@@ -394,11 +401,11 @@ def test_executive_package_single_meat_uses_all_six_oz():
     beef = rule_premium(beef_item, {})
 
     assert len(chicken["proteins"]) == 1
-    assert _line_named(chicken["proteins"], "Chicken")["per_qty"] == 6.0
-    assert _line_named(chicken["proteins"], "Chicken")["total"] == 60.0
+    assert _line_named(chicken["proteins"], "Chicken")["per_qty"] == 7.0
+    assert _line_named(chicken["proteins"], "Chicken")["total"] == 70.0
     assert len(beef["proteins"]) == 1
-    assert _line_named(beef["proteins"], "Beef")["per_qty"] == 6.0
-    assert _line_named(beef["proteins"], "Beef")["total"] == 60.0
+    assert _line_named(beef["proteins"], "Beef")["per_qty"] == 7.0
+    assert _line_named(beef["proteins"], "Beef")["total"] == 70.0
 
 
 def test_bulk_tableware_uses_ordered_food_qty_plus_buffer():

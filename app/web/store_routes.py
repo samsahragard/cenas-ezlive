@@ -1456,6 +1456,15 @@ def _kitchen_dashboard_ok():
     return has_dashboard_access("dash.kitchen")
 
 
+def _fresh_food_access_ok():
+    """Fresh Food operators may place and complete orders through one gate."""
+    return (
+        has_dashboard_access("dash.kitchen")
+        or has_dashboard_access("kitchen.fresh_view")
+        or has_dashboard_access("kitchen.fresh_edit")
+    )
+
+
 def _operations_full_access_ok():
     return has_dashboard_access("dash.operations") and not current_role_is("expo")
 
@@ -5963,7 +5972,7 @@ def _ff_lines_by_order(db, order_ids):
 
 @store_bp.route("/fresh-food/place-order", methods=["GET"])
 def fresh_food_place_order():
-    if not _kitchen_dashboard_ok():
+    if not _fresh_food_access_ok():
         abort(403)
     db = next(get_db())
     today, delivery_date = _ff_target_order_date(request.args.get("order_date"))
@@ -5985,7 +5994,7 @@ def fresh_food_place_order():
 
 @store_bp.route("/fresh-food/place-order", methods=["POST"])
 def fresh_food_place_order_submit():
-    if not _kitchen_dashboard_ok():
+    if not _fresh_food_access_ok():
         abort(403)
     from app.models import FreshFoodOrder, FreshFoodOrderLine
     body = request.get_json(silent=True) or {}
@@ -6030,7 +6039,7 @@ def fresh_food_place_order_submit():
 
 @store_bp.route("/fresh-food/developer", methods=["GET"])
 def fresh_food_developer():
-    if not _kitchen_dashboard_ok():
+    if not _fresh_food_access_ok():
         abort(403)
     from app.models import FreshFoodOrder, FreshFoodOrderLine
 
@@ -6199,7 +6208,7 @@ def fresh_food_developer():
 
 
 def _render_fresh_food_orders_tab(ff_tab: str):
-    if not _kitchen_dashboard_ok():
+    if not _fresh_food_access_ok():
         abort(403)
     from app.models import FreshFoodOrder
     db = next(get_db())
@@ -6262,7 +6271,7 @@ def fresh_food_recent_orders():
 @store_bp.route("/fresh-food/recent-orders/<int:order_id>/fulfill",
                 methods=["POST"])
 def fresh_food_recent_orders_fulfill(order_id: int):
-    if not _kitchen_dashboard_ok():
+    if not _fresh_food_access_ok():
         abort(403)
     from app.models import FreshFoodOrder, FreshFoodOrderLine
     body = request.get_json(silent=True) or {}
@@ -6290,14 +6299,19 @@ def fresh_food_recent_orders_fulfill(order_id: int):
                     ln.sent_qty = _coerce_float(sent_qty)
             except Exception:
                 continue
-        # Mark COMPLETED if every line has a sent_qty
-        all_filled = all(
-            ln.sent_qty is not None
-            for ln in db.query(FreshFoodOrderLine)
-                        .filter(FreshFoodOrderLine.order_id == order_id).all()
+        # Only ordered-positive rows need a sent quantity. Blank/zero OR rows
+        # are visual inventory rows and should not block completing the order.
+        ordered_lines = (
+            db.query(FreshFoodOrderLine)
+              .filter(FreshFoodOrderLine.order_id == order_id)
+              .filter(FreshFoodOrderLine.or_qty.isnot(None))
+              .filter(FreshFoodOrderLine.or_qty > 0)
+              .all()
         )
-        if all_filled:
+        if ordered_lines and all(ln.sent_qty is not None for ln in ordered_lines):
             order.status = "completed"
+        else:
+            order.status = "active"
         db.commit()
         return jsonify({"ok": True, "status": order.status})
     finally:
@@ -6306,7 +6320,7 @@ def fresh_food_recent_orders_fulfill(order_id: int):
 
 @store_bp.route("/fresh-food/recent-orders/report.csv", methods=["GET"])
 def fresh_food_recent_orders_report():
-    if not _kitchen_dashboard_ok():
+    if not _fresh_food_access_ok():
         abort(403)
     import csv
     import io as _io

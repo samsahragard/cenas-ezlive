@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
 os.environ.setdefault("ALLOW_DEV_SECRET", "1")
 
-from app.models import Employee, EmployeePosition, Order, Position, User, VendorRecentOrder
+from app.models import (
+    Employee,
+    EmployeePosition,
+    FreshFoodOrder,
+    FreshFoodOrderLine,
+    Order,
+    Position,
+    User,
+    VendorRecentOrder,
+)
 
 
 @pytest.fixture
@@ -671,6 +680,62 @@ def test_cook_keeps_kitchen_but_not_manager_or_operations(dashboard_app):
     assert client.get("/dos/recipes").status_code == 200
     assert client.get("/dos/manager").status_code == 403
     assert client.get("/dos/operations").status_code == 403
+
+
+def test_fresh_food_completion_ignores_blank_order_rows(dashboard_app):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=118, role="km", position="KM")
+    client = _client_as(flask_app, km)
+
+    order = FreshFoodOrder(
+        id=13,
+        order_date=date(2026, 6, 26),
+        placed_by_user_id=km.id,
+        placed_by_name=km.full_name,
+        status="active",
+    )
+    ordered_line = FreshFoodOrderLine(
+        id=1301,
+        order_id=13,
+        item_slug="beef-fajita",
+        item_category="MEAT",
+        inv_qty=5,
+        or_qty=9,
+    )
+    blank_or_line = FreshFoodOrderLine(
+        id=1302,
+        order_id=13,
+        item_slug="chipotle-cream",
+        item_category="SAUCES",
+        inv_qty=4,
+        or_qty=None,
+    )
+    zero_or_line = FreshFoodOrderLine(
+        id=1303,
+        order_id=13,
+        item_slug="cochinita",
+        item_category="MEAT",
+        inv_qty=3,
+        or_qty=0,
+    )
+    db.add_all([order, ordered_line, blank_or_line, zero_or_line])
+    db.commit()
+
+    resp = client.post(
+        "/dos/fresh-food/recent-orders/13/fulfill",
+        json={
+            "fulfilled_by_name": "Janeth Arvizu Animas",
+            "sent_date": "2026-06-26",
+            "sent_lines": {"1301": "9"},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["status"] == "completed"
+    assert db.get(FreshFoodOrder, 13).status == "completed"
+    assert db.get(FreshFoodOrderLine, 1301).sent_qty == 9
+    assert db.get(FreshFoodOrderLine, 1302).sent_qty is None
+    assert db.get(FreshFoodOrderLine, 1303).sent_qty is None
 
 
 def test_store_scope_blocks_other_store_dashboard(dashboard_app):

@@ -1,7 +1,7 @@
 {% extends "base_dashboard.html" %}
 {% set ff_tab = ff_tab|default('history') %}
 {% set active = 'fresh_food_fulfill_order' if ff_tab == 'fulfill' else ('fresh_food_complete_order' if ff_tab == 'complete' else 'fresh_food_recent_orders') %}
-{% set ff_title = 'Fullfill Order' if ff_tab == 'fulfill' else ('Complete Order' if ff_tab == 'complete' else 'History') %}
+{% set ff_title = 'Fullfill' if ff_tab == 'fulfill' else ('Complete' if ff_tab == 'complete' else 'History') %}
 {% block title %}Fresh Food - {{ ff_title }} - Cenas Kitchen{% endblock %}
 {# Page header is an inline hero inside the content block (ck #8:44) —
    base page_title/page_subtitle emptied so there's no stacked title row.
@@ -562,14 +562,10 @@
 </style>
 
 <div class="ffro-page">
-  <div class="ffh-hero">
-    <h1 class="ffh-title">Fresh Food <span class="ffh-title-accent">Ordering</span></h1>
-    <span class="ffh-store">{{ (g.current_location or 'both')|title }}</span>
-  </div>
   <div class="ff-tabs">
-    <a class="ff-tab" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
-    <a class="ff-tab{% if ff_tab == 'fulfill' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill Order</a>
-    <a class="ff-tab{% if ff_tab == 'complete' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_complete_order') }}">Complete Order</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_place_order') }}">Place</a>
+    <a class="ff-tab{% if ff_tab == 'fulfill' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill</a>
+    <a class="ff-tab{% if ff_tab == 'complete' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_complete_order') }}">Complete</a>
     <a class="ff-tab{% if ff_tab == 'history' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
   </div>
@@ -835,7 +831,7 @@
       </div>
     {% else %}
       <div class="ffro-empty">
-        No orders yet. Place one from <a href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>.
+        No orders yet. Place one from <a href="{{ url_for('store.fresh_food_place_order') }}">Place</a>.
       </div>
     {% endif %}
   </div>

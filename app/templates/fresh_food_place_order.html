@@ -1,6 +1,6 @@
 {% extends "base_dashboard.html" %}
 {% set active = 'fresh_food_place_order' %}
-{% block title %}Fresh Food — Place Order — Cenas Kitchen{% endblock %}
+{% block title %}Fresh Food — Place — Cenas Kitchen{% endblock %}
 {# The shared title row is suppressed so the Fresh Food tool starts directly
    at its working tabs and order controls. #}
 {% block topbar %}{% endblock %}
@@ -279,9 +279,9 @@
 
 <div class="ffpo-page">
   <div class="ff-tabs">
-    <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_place_order') }}">Place Order</a>
-    <a class="ff-tab" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill Order</a>
-    <a class="ff-tab" href="{{ url_for('store.fresh_food_complete_order') }}">Complete Order</a>
+    <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_place_order') }}">Place</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_complete_order') }}">Complete</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
   </div>

@@ -16,7 +16,7 @@
 html,body{overflow-x:hidden}.hero{padding:0}.hero-grid>*{min-width:0}.brand img{width:58px;height:58px}.lang-toggle{gap:6px;padding:6px 8px;font-size:13px;letter-spacing:0}.lang-toggle button{padding:8px 10px}.driver-app-cta{margin-bottom:28px}.driver-app-button{min-width:300px;flex-direction:column;padding:18px 30px;font-size:21px;line-height:1.12;gap:5px}.driver-app-button span{display:block;font-size:13px;font-weight:800;line-height:1.2;opacity:.82}.photo{aspect-ratio:950/635;min-height:0;background-color:#160506;background-image:linear-gradient(180deg,rgba(43,9,12,.03),rgba(43,9,12,.22)),url("{{ url_for('static', filename='brand/banners/cenas-store-night.png') }}");background-size:cover;background-position:center}.ad-toggle{border:1px solid rgba(243,231,209,.35);background:rgba(255,255,255,.08);color:var(--bone);border-radius:999px;padding:10px 14px;font-weight:900;line-height:1;cursor:pointer}.ad-toggle.active{background:var(--gold);border-color:var(--gold);color:#351108}.ad-panel{position:fixed;left:50%;bottom:18px;z-index:30;display:none;width:min(520px,calc(100vw - 28px));transform:translateX(-50%);align-items:center;gap:12px;background:rgba(22,5,6,.94);border:1px solid rgba(233,162,59,.5);box-shadow:0 18px 60px rgba(0,0,0,.45);border-radius:8px;padding:13px 15px 17px;color:var(--bone)}body.ad-mode .ad-panel{display:flex}.ad-step-badge{width:36px;height:36px;border-radius:999px;background:var(--gold);color:#351108;display:grid;place-items:center;font-weight:900;flex:none}.ad-copy b{display:block;font-family:Fraunces,Georgia,serif;font-size:19px;line-height:1.05}.ad-copy span{display:block;font-size:13px;color:rgba(243,231,209,.76);line-height:1.3;margin-top:3px}.ad-progress{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(243,231,209,.16);overflow:hidden;border-radius:0 0 8px 8px}.ad-progress i{display:block;height:100%;width:0;background:var(--gold);transition:width .25s ease}.ad-spotlight{position:relative;z-index:1;box-shadow:0 0 0 4px rgba(233,162,59,.34),0 18px 70px rgba(233,162,59,.2);border-radius:10px;transition:box-shadow .2s ease}.guidelines{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.guideline-num{font-family:Fraunces,Georgia,serif;font-size:34px;color:var(--gold);font-weight:900;line-height:1;margin-bottom:12px}@media(max-width:860px){.guidelines{grid-template-columns:1fr}.photo{background-size:contain;background-repeat:no-repeat;background-position:center}}@media(max-width:560px){.announce{font-size:12px;line-height:1.35}.nav{height:76px;gap:8px}.brand{gap:8px;font-size:14px;min-width:0}.brand img{width:50px;height:50px}.brand div{display:none}.header-actions{justify-content:flex-end;margin-left:auto;gap:7px}.ad-toggle{padding:8px 9px;font-size:12px}.lang-toggle{padding:5px 7px;font-size:12px}.lang-toggle button{padding:7px 9px}.hero-grid{gap:22px;padding-top:12px;padding-bottom:36px}.lead{font-size:18px;max-width:100%}.driver-app-button{min-width:270px;max-width:calc(100vw - 44px);padding:17px 24px;font-size:20px}.driver-app-button span{font-size:12px}.ad-panel{bottom:10px;padding:12px 12px 16px}.ad-copy b{font-size:17px}}
 </style>
 <style>
-body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{animation:adButtonBeat 1.15s ease-in-out infinite}.ad-panel{width:min(650px,calc(100vw - 28px));overflow:hidden}.ad-panel::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent,rgba(233,162,59,.18),transparent);transform:translateX(-120%);animation:adSweep 2.4s linear infinite;pointer-events:none}.ad-copy{position:relative;z-index:1}.ad-copy small{display:block;color:var(--gold);font-size:11px;font-weight:900;text-transform:uppercase;line-height:1;margin-bottom:4px}.ad-copy b{font-size:clamp(19px,3vw,28px)}.ad-copy span{font-size:clamp(13px,2vw,15px)}.ad-step-badge{position:relative;z-index:1;box-shadow:0 0 0 0 rgba(233,162,59,.5);animation:adBadgePulse 1.3s ease-out infinite}.ad-spotlight{overflow:visible}.ad-spotlight .section-head h2,.ad-spotlight .form-top h3{color:var(--gold);text-shadow:0 8px 28px rgba(233,162,59,.34);animation:adHeadlinePop 1.1s ease both}.ad-spotlight .section-head p,.ad-spotlight .lead{animation:adCopyLift .9s ease both}.ad-spotlight .delivery,.ad-spotlight .pay-card,.ad-spotlight .calc,.ad-spotlight .card,.ad-spotlight .form-shell,.ad-spotlight .qr-card,.ad-spotlight.final-scan{animation:adCardLift .9s ease both}.ad-spotlight .delivery:nth-child(2),.ad-spotlight .card:nth-child(2){animation-delay:.08s}.ad-spotlight .delivery:nth-child(3),.ad-spotlight .card:nth-child(3){animation-delay:.16s}.ad-spotlight .pay,.ad-spotlight .amt,.ad-spotlight .calc-total .n,.ad-spotlight .guideline-num{animation:adMoneyPulse .9s ease-in-out infinite alternate}.scan-section{background:linear-gradient(135deg,#160506 0,#4b1218 52%,#2b090c 100%);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.scan-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:36px;align-items:center}.scan-kicker{margin:0 0 10px;color:var(--gold);font-weight:900;text-transform:uppercase}.scan-copy h2{font-size:clamp(38px,6vw,72px)}.scan-copy p{font-size:19px;color:rgba(243,231,209,.78);max-width:560px}.qr-card{position:relative;justify-self:center;width:min(360px,100%);border-radius:8px;background:rgba(251,245,232,.96);padding:12px;box-shadow:0 22px 70px rgba(0,0,0,.36),0 0 0 1px rgba(233,162,59,.45)}.qr-card img{display:block;width:100%;height:auto;border-radius:7px}.qr-card::after{content:"";position:absolute;inset:-8px;border:2px solid rgba(233,162,59,.78);border-radius:12px;pointer-events:none}.qr-note{margin:14px 0 0;text-align:center;color:rgba(243,231,209,.72);font-weight:800}.final-scan{display:grid;grid-template-columns:1fr 240px;gap:22px;align-items:center;margin:0 auto 24px;max-width:860px;background:linear-gradient(135deg,#5c1a21,#2b090c);color:var(--bone);border-radius:8px;padding:20px;border:1px solid rgba(233,162,59,.45);box-shadow:0 16px 60px rgba(0,0,0,.22)}.final-scan h3{font-size:30px}.final-scan p{margin:8px 0 0;color:rgba(243,231,209,.78)}.final-scan img{width:240px;border-radius:8px;background:#fbf5e8}.final-scan .btn{margin-top:14px}body[data-ad-step="scan"] #scan .qr-card,body[data-ad-step="final-scan"] #scan-final img{animation:qrPulse 1.2s ease-in-out infinite alternate}body[data-ad-step="pay"] #pay .calc-total .n{font-size:58px}body[data-ad-step="live"] #live .delivery .pay{font-size:40px}body[data-ad-step="apply"] #apply .section-head h2{font-size:clamp(42px,7vw,70px)}@keyframes adButtonBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}@keyframes adSweep{to{transform:translateX(120%)}}@keyframes adBadgePulse{0%{box-shadow:0 0 0 0 rgba(233,162,59,.5)}100%{box-shadow:0 0 0 12px rgba(233,162,59,0)}}@keyframes adHeadlinePop{0%{transform:scale(.94);filter:brightness(1)}55%{transform:scale(1.08);filter:brightness(1.28)}100%{transform:scale(1.02);filter:brightness(1.1)}}@keyframes adCopyLift{0%{transform:translateY(10px);opacity:.72}100%{transform:translateY(0);opacity:1}}@keyframes adCardLift{0%{transform:translateY(18px);filter:brightness(.9)}100%{transform:translateY(0);filter:brightness(1.08)}}@keyframes adMoneyPulse{from{transform:scale(1);text-shadow:0 0 0 rgba(233,162,59,0)}to{transform:scale(1.12);text-shadow:0 8px 28px rgba(233,162,59,.4)}}@keyframes qrPulse{from{transform:scale(1);box-shadow:0 18px 60px rgba(0,0,0,.24)}to{transform:scale(1.06);box-shadow:0 24px 86px rgba(233,162,59,.36)}}@media(max-width:860px){.scan-grid{grid-template-columns:1fr}.scan-copy{text-align:center}.scan-copy p{margin-left:auto;margin-right:auto}.qr-card{width:min(340px,100%)}.final-scan{grid-template-columns:1fr;text-align:center}.final-scan img{justify-self:center;width:min(260px,80vw)}}@media(max-width:560px){body[data-ad-step="live"] #live .delivery .pay{font-size:34px}body[data-ad-step="pay"] #pay .calc-total .n{font-size:48px}.scan-copy h2{font-size:40px}.ad-spotlight .section-head h2{font-size:42px}}@media(prefers-reduced-motion:reduce){.ad-toggle.active,.ad-panel::before,.ad-step-badge,.ad-spotlight .section-head h2,.ad-spotlight .form-top h3,.ad-spotlight .section-head p,.ad-spotlight .lead,.ad-spotlight .delivery,.ad-spotlight .pay-card,.ad-spotlight .calc,.ad-spotlight .card,.ad-spotlight .form-shell,.ad-spotlight .qr-card,.ad-spotlight.final-scan,.ad-spotlight .pay,.ad-spotlight .amt,.ad-spotlight .calc-total .n,.ad-spotlight .guideline-num,body[data-ad-step="scan"] #scan .qr-card,body[data-ad-step="final-scan"] #scan-final img{animation:none!important;transform:none!important}}
+body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{animation:adButtonBeat 1.15s ease-in-out infinite}.ad-panel{width:min(650px,calc(100vw - 28px));overflow:hidden}.ad-panel::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent,rgba(233,162,59,.18),transparent);transform:translateX(-120%);animation:adSweep 2.4s linear infinite;pointer-events:none}.ad-copy{position:relative;z-index:1}.ad-copy small{display:block;color:var(--gold);font-size:11px;font-weight:900;text-transform:uppercase;line-height:1;margin-bottom:4px}.ad-copy b{font-size:clamp(19px,3vw,28px)}.ad-copy span{font-size:clamp(13px,2vw,15px)}.ad-step-badge{position:relative;z-index:1;box-shadow:0 0 0 0 rgba(233,162,59,.5);animation:adBadgePulse 1.3s ease-out infinite}.ad-spotlight{overflow:visible}.ad-spotlight .section-head h2,.ad-spotlight .form-top h3{color:var(--gold);text-shadow:0 8px 28px rgba(233,162,59,.34);animation:adHeadlinePop 1.1s ease both}.ad-spotlight .section-head p,.ad-spotlight .lead{animation:adCopyLift .9s ease both}.ad-spotlight .delivery,.ad-spotlight .pay-card,.ad-spotlight .calc,.ad-spotlight .card,.ad-spotlight .form-shell,.ad-spotlight .qr-card,.ad-spotlight.final-scan{animation:adCardLift .9s ease both}.ad-spotlight .delivery:nth-child(2),.ad-spotlight .card:nth-child(2){animation-delay:.08s}.ad-spotlight .delivery:nth-child(3),.ad-spotlight .card:nth-child(3){animation-delay:.16s}.ad-spotlight .pay,.ad-spotlight .amt,.ad-spotlight .calc-total .n,.ad-spotlight .guideline-num{animation:adMoneyPulse .9s ease-in-out infinite alternate}.scroller.ad-sweeping{scroll-snap-type:none}.scroller.ad-sweeping .delivery{box-shadow:0 0 0 2px rgba(233,162,59,.22),0 16px 50px rgba(0,0,0,.22)}.scan-section{background:linear-gradient(135deg,#160506 0,#4b1218 52%,#2b090c 100%);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.scan-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:36px;align-items:center}.scan-kicker{margin:0 0 10px;color:var(--gold);font-weight:900;text-transform:uppercase}.scan-copy h2{font-size:clamp(38px,6vw,72px)}.scan-copy p{font-size:19px;color:rgba(243,231,209,.78);max-width:560px}.qr-card{position:relative;justify-self:center;width:min(360px,100%);border-radius:8px;background:rgba(251,245,232,.96);padding:12px;box-shadow:0 22px 70px rgba(0,0,0,.36),0 0 0 1px rgba(233,162,59,.45)}.qr-card img{display:block;width:100%;height:auto;border-radius:7px}.qr-card::after{content:"";position:absolute;inset:-8px;border:2px solid rgba(233,162,59,.78);border-radius:12px;pointer-events:none}.qr-note{margin:14px 0 0;text-align:center;color:rgba(243,231,209,.72);font-weight:800}.final-scan{display:grid;grid-template-columns:1fr 240px;gap:22px;align-items:center;margin:0 auto 24px;max-width:860px;background:linear-gradient(135deg,#5c1a21,#2b090c);color:var(--bone);border-radius:8px;padding:20px;border:1px solid rgba(233,162,59,.45);box-shadow:0 16px 60px rgba(0,0,0,.22)}.final-scan h3{font-size:30px}.final-scan p{margin:8px 0 0;color:rgba(243,231,209,.78)}.final-scan img{width:240px;border-radius:8px;background:#fbf5e8}.final-scan .btn{margin-top:14px}body[data-ad-step="scan"] #scan .qr-card,body[data-ad-step="final-scan"] #scan-final img{animation:qrPulse 1.2s ease-in-out infinite alternate}body[data-ad-step="pay"] #pay .calc-total .n{font-size:58px}body[data-ad-step="live"] #live .delivery .pay{font-size:40px}body[data-ad-step="apply"] #apply .section-head h2{font-size:clamp(42px,7vw,70px)}@keyframes adButtonBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}@keyframes adSweep{to{transform:translateX(120%)}}@keyframes adBadgePulse{0%{box-shadow:0 0 0 0 rgba(233,162,59,.5)}100%{box-shadow:0 0 0 12px rgba(233,162,59,0)}}@keyframes adHeadlinePop{0%{transform:scale(.94);filter:brightness(1)}55%{transform:scale(1.08);filter:brightness(1.28)}100%{transform:scale(1.02);filter:brightness(1.1)}}@keyframes adCopyLift{0%{transform:translateY(10px);opacity:.72}100%{transform:translateY(0);opacity:1}}@keyframes adCardLift{0%{transform:translateY(18px);filter:brightness(.9)}100%{transform:translateY(0);filter:brightness(1.08)}}@keyframes adMoneyPulse{from{transform:scale(1);text-shadow:0 0 0 rgba(233,162,59,0)}to{transform:scale(1.12);text-shadow:0 8px 28px rgba(233,162,59,.4)}}@keyframes qrPulse{from{transform:scale(1);box-shadow:0 18px 60px rgba(0,0,0,.24)}to{transform:scale(1.06);box-shadow:0 24px 86px rgba(233,162,59,.36)}}@media(max-width:860px){.scan-grid{grid-template-columns:1fr}.scan-copy{text-align:center}.scan-copy p{margin-left:auto;margin-right:auto}.qr-card{width:min(340px,100%)}.final-scan{grid-template-columns:1fr;text-align:center}.final-scan img{justify-self:center;width:min(260px,80vw)}}@media(max-width:560px){body[data-ad-step="live"] #live .delivery .pay{font-size:34px}body[data-ad-step="pay"] #pay .calc-total .n{font-size:48px}.scan-copy h2{font-size:40px}.ad-spotlight .section-head h2{font-size:42px}}@media(prefers-reduced-motion:reduce){.ad-toggle.active,.ad-panel::before,.ad-step-badge,.ad-spotlight .section-head h2,.ad-spotlight .form-top h3,.ad-spotlight .section-head p,.ad-spotlight .lead,.ad-spotlight .delivery,.ad-spotlight .pay-card,.ad-spotlight .calc,.ad-spotlight .card,.ad-spotlight .form-shell,.ad-spotlight .qr-card,.ad-spotlight.final-scan,.ad-spotlight .pay,.ad-spotlight .amt,.ad-spotlight .calc-total .n,.ad-spotlight .guideline-num,body[data-ad-step="scan"] #scan .qr-card,body[data-ad-step="final-scan"] #scan-final img{animation:none!important;transform:none!important}}
 </style>
 </head>
 <body>
@@ -393,7 +393,9 @@ const adSteps = [
     selector: '#live',
     kicker: {en: 'Live delivery board', es: 'Panel de entregas'},
     title: {en: 'Real orders. Real payouts.', es: 'Ordenes reales. Pagos reales.'},
-    subtitle: {en: 'The cards move like opportunities, with payout numbers big enough to catch a driver eye.', es: 'Las tarjetas se sienten como oportunidades, con pagos grandes y faciles de ver.'}
+    subtitle: {en: 'Watch the board slide through delivery cards before the next step.', es: 'Mira como el panel muestra las tarjetas antes del siguiente paso.'},
+    duration: 10800,
+    sweepScroller: true
   },
   {
     key: 'scan',
@@ -443,6 +445,8 @@ const adSteps = [
 let adRunning = false;
 let adIndex = 0;
 let adTimer = null;
+let liveSweepFrame = null;
+let liveSweepStartTimer = null;
 
 function currentDriverLang(){
   return document.documentElement.getAttribute('lang') === 'es' ? 'es' : 'en';
@@ -461,12 +465,52 @@ function clearAdSpotlight(){
   document.querySelectorAll('.ad-spotlight').forEach((el) => el.classList.remove('ad-spotlight'));
 }
 
+function clearLiveDeliverySweep(){
+  if (liveSweepFrame !== null) {
+    window.cancelAnimationFrame(liveSweepFrame);
+    liveSweepFrame = null;
+  }
+  if (liveSweepStartTimer !== null) {
+    window.clearTimeout(liveSweepStartTimer);
+    liveSweepStartTimer = null;
+  }
+  const scroller = document.querySelector('#live .scroller');
+  if (scroller) scroller.classList.remove('ad-sweeping');
+}
+
+function startLiveDeliverySweep(duration){
+  clearLiveDeliverySweep();
+  const scroller = document.querySelector('#live .scroller');
+  if (!scroller) return;
+  const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+  if (maxScroll < 16) return;
+  scroller.scrollLeft = 0;
+  scroller.classList.add('ad-sweeping');
+  const sweepDuration = Math.max(4200, Math.min(8200, duration - 1800));
+  liveSweepStartTimer = window.setTimeout(() => {
+    liveSweepStartTimer = null;
+    const started = window.performance.now();
+    const animate = (now) => {
+      const progress = Math.min(1, (now - started) / sweepDuration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      scroller.scrollLeft = Math.round(maxScroll * eased);
+      if (progress < 1 && adRunning && document.body.getAttribute('data-ad-step') === 'live') {
+        liveSweepFrame = window.requestAnimationFrame(animate);
+      } else {
+        liveSweepFrame = null;
+      }
+    };
+    liveSweepFrame = window.requestAnimationFrame(animate);
+  }, 900);
+}
+
 function showAdStep(index){
   const cycleIndex = index % adSteps.length;
   const step = adSteps[cycleIndex];
   const target = document.querySelector(step.selector);
   if (!target || !adTitle || !adSubtitle || !adStepBadge || !adProgress) return;
   const lang = currentDriverLang();
+  clearLiveDeliverySweep();
   clearAdSpotlight();
   document.body.setAttribute('data-ad-step', step.key || '');
   target.classList.add('ad-spotlight');
@@ -476,6 +520,7 @@ function showAdStep(index){
   adStepBadge.textContent = String(cycleIndex + 1);
   adProgress.style.width = (((cycleIndex + 1) / adSteps.length) * 100) + '%';
   target.scrollIntoView({behavior: 'smooth', block: 'center'});
+  if (step.sweepScroller) startLiveDeliverySweep(step.duration || 5400);
 }
 
 function stopAdMode(){
@@ -484,6 +529,7 @@ function stopAdMode(){
   adTimer = null;
   document.body.classList.remove('ad-mode');
   document.body.removeAttribute('data-ad-step');
+  clearLiveDeliverySweep();
   clearAdSpotlight();
   if (adProgress) adProgress.style.width = '0';
   syncAdButtonLabel();

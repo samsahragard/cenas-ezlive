@@ -113,6 +113,8 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert "driverapp-qr.png" in html
     assert "Scan while this is on screen" in html
     assert "Final scan moment" in html
+    assert "startLiveDeliverySweep" in html
+    assert "sweepScroller" in html
     assert "Aplicar ahora" in html
     assert "Como se te paga" in html
     assert "How You Get Paid" in html

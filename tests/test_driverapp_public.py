@@ -106,6 +106,10 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert 'id="langEnglish"' in html
     assert 'id="langSpanish"' in html
     assert 'data-lang-button="es"' in html
+    assert 'id="adToggle"' in html
+    assert "Real orders, real payouts." in html
+    assert "Driver Guidelines" in html
+    assert "cenas-store-night.png" in html
     assert "Aplicar ahora" in html
     assert "Como se te paga" in html
     assert "How You Get Paid" in html

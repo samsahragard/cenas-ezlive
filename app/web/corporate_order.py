@@ -314,6 +314,22 @@ def _shop_store_key() -> str:
     return slug or "corporate"
 
 
+def _current_category() -> str:
+    selected_category = (request.values.get("category") or "").strip()
+    return LEGACY_CATEGORY_ALIASES.get(selected_category, selected_category)
+
+
+def _catalog_redirect(category: str | None = None):
+    category = (category or "").strip()
+    if category:
+        return redirect(url_for(
+            "corporate_order.view",
+            store_slug=g.current_store,
+            category=category,
+        ))
+    return redirect(url_for("corporate_order.view", store_slug=g.current_store))
+
+
 def _send_corporate_order_email(order: dict) -> tuple[bool, str]:
     """Email Sam + any additional recipients about a newly-placed corporate order.
     Returns (sent_ok, error_or_blank)."""
@@ -423,8 +439,7 @@ def view():
     except Exception:
         log.exception("corporate_order: catalog seed check failed")
 
-    selected_category = (request.args.get("category") or "").strip()
-    selected_category = LEGACY_CATEGORY_ALIASES.get(selected_category, selected_category)
+    selected_category = _current_category()
     products = corporate_shop.list_products(category=selected_category or None)
     categories = corporate_shop.list_categories()
 
@@ -595,7 +610,33 @@ def update_stock(product_id):
         flash(f"Product #{product_id}: in_stock set to {new_stock}.", "success")
     else:
         flash(f"Product #{product_id} not found.", "error")
-    return redirect(url_for("corporate_order.view", store_slug=g.current_store))
+    return _catalog_redirect(_current_category())
+
+
+@corp_order.route("/corporate-order/admin/products/order", methods=["POST"])
+def update_product_order():
+    """Admin-only: save display order for one department."""
+    if not _is_admin():
+        abort(403)
+    category = _current_category()
+    raw_ids = request.form.get("product_order") or ""
+    product_ids = []
+    for raw in raw_ids.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            product_ids.append(int(raw))
+        except ValueError:
+            continue
+    try:
+        count = corporate_shop.update_product_order(category, product_ids)
+    except Exception as ex:
+        log.exception("corporate_order: update product order failed")
+        flash(f"Could not save item order: {ex}", "error")
+        return _catalog_redirect(category)
+    flash(f"{category}: saved display order for {count} item{'s' if count != 1 else ''}.", "success")
+    return _catalog_redirect(category)
 
 
 @corp_order.route("/corporate-order/admin/product/add", methods=["POST"])
@@ -616,9 +657,9 @@ def add_product():
         )
     except Exception as ex:
         flash(f"Could not add item: {ex}", "error")
-        return redirect(url_for("corporate_order.view", store_slug=g.current_store))
+        return _catalog_redirect(_current_category())
     flash(f"Added {product['name']} to the corporate catalog.", "success")
-    return redirect(url_for("corporate_order.view", store_slug=g.current_store))
+    return _catalog_redirect(category)
 
 
 @corp_order.route("/corporate-order/admin/product/<int:product_id>/delete", methods=["POST"])
@@ -631,4 +672,4 @@ def delete_product(product_id):
         flash(f"Product #{product_id} removed from the corporate catalog.", "success")
     else:
         flash(f"Product #{product_id} not found.", "error")
-    return redirect(url_for("corporate_order.view", store_slug=g.current_store))
+    return _catalog_redirect(_current_category())

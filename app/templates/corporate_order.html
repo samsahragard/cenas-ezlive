@@ -104,6 +104,60 @@
     background: rgba(0, 0, 0, 0.30);
     padding: 12px;
   }
+  .corp-card.is-dragging {
+    opacity: 0.48;
+  }
+  .corp-card.drag-over {
+    outline: 2px solid rgba(232, 122, 62, 0.72);
+    outline-offset: 2px;
+  }
+  .corp-organize-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(232, 122, 62, 0.32);
+    border-radius: 8px;
+    background: rgba(232, 122, 62, 0.10);
+  }
+  .corp-organize-title {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+  }
+  .corp-organize-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .corp-reorder-tools {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 8px;
+  }
+  .corp-move-button {
+    width: 34px;
+    min-height: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.86);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 800;
+  }
+  .corp-move-button:hover {
+    border-color: rgba(232, 122, 62, 0.62);
+    color: #fff;
+  }
+  .corp-move-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.36;
+  }
   .corp-photo {
     width: 100%;
     height: 112px;
@@ -441,6 +495,13 @@
     html.is-framed .corp-orders {
       margin-bottom: 96px;
     }
+    .corp-organize-bar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .corp-organize-actions .corp-small-button {
+      width: 100%;
+    }
   }
   @media (max-width: 520px) {
     .corp-grid { grid-template-columns: minmax(0, 1fr); }
@@ -492,6 +553,7 @@
       Image URL
       <input type="text" name="picture" maxlength="1000">
     </label>
+    <input type="hidden" name="category_return" value="{{ selected_category or '' }}">
     <button class="corp-small-button" type="submit">Add Item</button>
   </form>
   <datalist id="corpCategories">
@@ -519,13 +581,35 @@
     {% endif %}
 
     {% if products %}
+      {% if is_admin and selected_category %}
+      <form id="corpSortForm" method="POST" action="{{ url_for('corporate_order.update_product_order') }}">
+        <input type="hidden" name="category" value="{{ selected_category }}">
+        <input type="hidden" name="product_order" id="corpProductOrder">
+      </form>
+      <section class="corp-organize-bar" aria-label="Organize department">
+        <span class="corp-organize-title">Organize {{ selected_category }}</span>
+        <div class="corp-organize-actions">
+          <button class="corp-small-button" type="submit" form="corpSortForm">Save Order</button>
+        </div>
+      </section>
+      {% endif %}
       {% if not is_admin %}
       <form method="POST" action="{{ url_for('corporate_order.submit') }}" id="corpOrderForm">
       {% endif %}
 
       <div class="corp-grid" id="corpProductGrid">
         {% for p in products %}
-        <section class="corp-card" data-product-card data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}">
+        <section class="corp-card" data-product-card data-product-id="{{ p.id }}"
+                 data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}"
+                 {% if is_admin and selected_category %}draggable="true"{% endif %}>
+          {% if is_admin and selected_category %}
+          <div class="corp-reorder-tools" aria-label="Move {{ p.name }}">
+            <button class="corp-move-button" type="button" data-move="up"
+                    aria-label="Move {{ p.name }} up" title="Move up">^</button>
+            <button class="corp-move-button" type="button" data-move="down"
+                    aria-label="Move {{ p.name }} down" title="Move down">v</button>
+          </div>
+          {% endif %}
           {% if p.picture_url %}
           <div class="corp-photo">
             <img src="{{ p.picture_url }}" alt="{{ p.name }}" loading="lazy">
@@ -547,6 +631,7 @@
               <div class="corp-product-tools">
                 <form class="corp-admin-stock" method="POST"
                       action="{{ url_for('corporate_order.update_stock', product_id=p.id) }}">
+                  <input type="hidden" name="category" value="{{ selected_category or '' }}">
                   <label for="stock_{{ p.id }}">Stock</label>
                   <input type="number" min="0" name="in_stock" id="stock_{{ p.id }}" value="{{ p.in_stock }}">
                   <button class="corp-small-button" type="submit">Save</button>
@@ -554,6 +639,7 @@
                 <form method="POST"
                       action="{{ url_for('corporate_order.delete_product', product_id=p.id) }}"
                       onsubmit="return confirm('Remove this item from the corporate order catalog?');">
+                  <input type="hidden" name="category" value="{{ selected_category or '' }}">
                   <button class="corp-danger-button" type="submit">Remove</button>
                 </form>
               </div>
@@ -668,13 +754,90 @@
 <script>
 (() => {
   const search = document.getElementById('corpSearch');
+  const grid = document.getElementById('corpProductGrid');
   const cards = Array.from(document.querySelectorAll('[data-product-card]'));
+  const orderInput = document.getElementById('corpProductOrder');
+  function syncOrderInput() {
+    if (!orderInput) return;
+    orderInput.value = Array.from(document.querySelectorAll('[data-product-card]'))
+      .map((card) => card.dataset.productId)
+      .filter(Boolean)
+      .join(',');
+  }
+  function syncMoveButtons() {
+    const visibleCards = Array.from(document.querySelectorAll('[data-product-card]'))
+      .filter((card) => !card.hidden);
+    visibleCards.forEach((card, idx) => {
+      const up = card.querySelector('[data-move="up"]');
+      const down = card.querySelector('[data-move="down"]');
+      if (up) up.disabled = idx === 0;
+      if (down) down.disabled = idx === visibleCards.length - 1;
+    });
+  }
   if (search) {
     search.addEventListener('input', () => {
       const q = search.value.trim().toLowerCase();
       cards.forEach((card) => {
         card.hidden = q && !card.dataset.search.includes(q);
       });
+      syncMoveButtons();
+    });
+  }
+  if (grid && orderInput) {
+    grid.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-move]');
+      if (!button) return;
+      const card = button.closest('[data-product-card]');
+      if (!card) return;
+      const visibleCards = Array.from(grid.querySelectorAll('[data-product-card]'))
+        .filter((item) => !item.hidden);
+      const idx = visibleCards.indexOf(card);
+      if (idx === -1) return;
+      if (button.dataset.move === 'up' && idx > 0) {
+        grid.insertBefore(card, visibleCards[idx - 1]);
+      }
+      if (button.dataset.move === 'down' && idx < visibleCards.length - 1) {
+        const next = visibleCards[idx + 1];
+        grid.insertBefore(next, card);
+      }
+      syncOrderInput();
+      syncMoveButtons();
+    });
+    let dragged = null;
+    grid.addEventListener('dragstart', (event) => {
+      const card = event.target.closest('[data-product-card]');
+      if (!card || card.hidden) return;
+      dragged = card;
+      card.classList.add('is-dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', card.dataset.productId || '');
+      }
+    });
+    grid.addEventListener('dragend', () => {
+      if (dragged) dragged.classList.remove('is-dragging');
+      dragged = null;
+      document.querySelectorAll('.drag-over').forEach((card) => card.classList.remove('drag-over'));
+      syncOrderInput();
+      syncMoveButtons();
+    });
+    grid.addEventListener('dragover', (event) => {
+      if (!dragged) return;
+      const target = event.target.closest('[data-product-card]');
+      if (!target || target === dragged || target.hidden) return;
+      event.preventDefault();
+      target.classList.add('drag-over');
+      const rect = target.getBoundingClientRect();
+      const after = event.clientY > rect.top + rect.height / 2;
+      if (after) {
+        grid.insertBefore(dragged, target.nextSibling);
+      } else {
+        grid.insertBefore(dragged, target);
+      }
+    });
+    grid.addEventListener('dragleave', (event) => {
+      const card = event.target.closest('[data-product-card]');
+      if (card) card.classList.remove('drag-over');
     });
   }
 
@@ -687,6 +850,8 @@
     if (button) button.disabled = picked === 0;
   }
   inputs.forEach((input) => input.addEventListener('input', updateCount));
+  syncOrderInput();
+  syncMoveButtons();
   updateCount();
 })();
 </script>

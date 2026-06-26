@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, ForeignKey, create_engine,
-    inspect, text,
+    case, func, inspect, text,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -65,6 +65,7 @@ class Product(CorporateBase):
     in_stock = Column(Integer, nullable=False)
     product_picture = Column(String(1000), nullable=False)
     category = Column(String(100), nullable=False)
+    sort_order = Column(Integer)
     date_added = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
@@ -140,6 +141,14 @@ def _ensure_schema() -> None:
     if "fulfilled_quantity" not in order_item_cols:
         with _engine.begin() as conn:
             conn.execute(text("ALTER TABLE order_item ADD COLUMN fulfilled_quantity INTEGER"))
+    try:
+        product_cols = {c["name"] for c in insp.get_columns("product")}
+    except Exception:
+        product_cols = set()
+    if "sort_order" not in product_cols:
+        with _engine.begin() as conn:
+            conn.execute(text("ALTER TABLE product ADD COLUMN sort_order INTEGER"))
+    _backfill_sort_order()
     _schema_checked = True
 
 
@@ -174,6 +183,80 @@ def _picture_url(picture: str | None) -> str:
     if raw.startswith("/"):
         return "https://cenaskitchen.com" + quote(raw, safe="/:%?=&%")
     return f"{_MEDIA_BASE_URL}/{quote(raw, safe='-_.~%')}"
+
+
+def _product_ordering():
+    return (
+        Product.category.asc(),
+        case((Product.sort_order.is_(None), 1), else_=0).asc(),
+        Product.sort_order.asc(),
+        Product.product_name.asc(),
+        Product.id.asc(),
+    )
+
+
+def _category_ordering():
+    return (
+        case((Product.sort_order.is_(None), 1), else_=0).asc(),
+        Product.sort_order.asc(),
+        Product.product_name.asc(),
+        Product.id.asc(),
+    )
+
+
+def _backfill_sort_order() -> int:
+    """Give existing rows a stable initial order without disturbing custom order."""
+    if _engine is None:
+        return 0
+    with _engine.begin() as conn:
+        rows = conn.execute(text(
+            """
+            SELECT id, category, product_name, sort_order
+            FROM product
+            ORDER BY category ASC,
+                     CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END ASC,
+                     sort_order ASC,
+                     product_name ASC,
+                     id ASC
+            """
+        )).mappings().all()
+        by_category: dict[str, list[dict]] = {}
+        for row in rows:
+            by_category.setdefault(row["category"] or "", []).append(row)
+        updated = 0
+        for category_rows in by_category.values():
+            for idx, row in enumerate(category_rows, start=1):
+                if row["sort_order"] is not None:
+                    continue
+                conn.execute(
+                    text("UPDATE product SET sort_order = :sort_order WHERE id = :id"),
+                    {"sort_order": idx * 10, "id": row["id"]},
+                )
+                updated += 1
+        return updated
+
+
+def _normalize_category_sort_orders(s, category: str) -> list[Product]:
+    rows = (
+        s.query(Product)
+        .filter(Product.category == category)
+        .order_by(*_category_ordering())
+        .all()
+    )
+    for idx, product in enumerate(rows, start=1):
+        wanted = idx * 10
+        if product.sort_order != wanted:
+            product.sort_order = wanted
+    return rows
+
+
+def _next_sort_order(s, category: str) -> int:
+    max_order = (
+        s.query(func.max(Product.sort_order))
+        .filter(Product.category == category)
+        .scalar()
+    )
+    return int(max_order or 0) + 10
 
 
 def load_catalog_seed() -> dict:
@@ -214,6 +297,7 @@ def sync_catalog_from_seed(
                     in_stock=max(0, stock),
                     product_picture=item.get("picture") or "",
                     category=category,
+                    sort_order=_next_sort_order(s, category),
                 )
                 s.add(product)
                 s.flush()
@@ -272,7 +356,7 @@ def list_products(category: str | None = None) -> list[dict]:
     """Catalog query — returns a render-friendly dict per product."""
     _ensure_engine()
     with session() as s:
-        q = s.query(Product).order_by(Product.category.asc(), Product.product_name.asc())
+        q = s.query(Product).order_by(*_product_ordering())
         if category:
             q = q.filter(Product.category == category)
         rows = q.all()
@@ -283,6 +367,7 @@ def list_products(category: str | None = None) -> list[dict]:
             "picture": p.product_picture,
             "picture_url": _picture_url(p.product_picture),
             "category": p.category,
+            "sort_order": p.sort_order,
             "date_added": p.date_added,
         } for p in rows]
 
@@ -370,6 +455,7 @@ def add_product(
             in_stock=max(0, int(in_stock or 0)),
             product_picture=picture or "",
             category=clean_category,
+            sort_order=_next_sort_order(s, clean_category),
         )
         s.add(product)
         s.commit()
@@ -379,6 +465,36 @@ def add_product(
             "category": clean_category,
             "in_stock": product.in_stock,
         }
+
+
+def update_product_order(category: str, product_ids: list[int]) -> int:
+    """Corporate admin: persist the display order for one department."""
+    _ensure_engine()
+    clean_category = _clean_product_name(category)
+    if not clean_category:
+        raise ValueError("category is required")
+    seen: set[int] = set()
+    ordered_ids: list[int] = []
+    for pid in product_ids:
+        try:
+            pid = int(pid)
+        except (TypeError, ValueError):
+            continue
+        if pid in seen:
+            continue
+        seen.add(pid)
+        ordered_ids.append(pid)
+    with session() as s:
+        current = _normalize_category_sort_orders(s, clean_category)
+        by_id = {p.id: p for p in current}
+        new_order = [by_id[pid] for pid in ordered_ids if pid in by_id]
+        new_order.extend(p for p in current if p.id not in seen)
+        if not new_order:
+            return 0
+        for idx, product in enumerate(new_order, start=1):
+            product.sort_order = idx * 10
+        s.commit()
+        return len(new_order)
 
 
 def delete_product(product_id: int) -> bool:

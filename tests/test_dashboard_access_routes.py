@@ -205,6 +205,7 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
             "picture": "",
             "picture_url": "https://cenaskitchen.com/media/Bleach.webp",
             "category": "Cleaning Supplies",
+            "sort_order": 10,
             "date_added": None,
         }],
     )
@@ -285,6 +286,7 @@ def test_corporate_order_public_pin_gate_opens_store_portal(dashboard_app, monke
             "in_stock": 15,
             "picture": "",
             "category": "Cleaning Supplies",
+            "sort_order": 10,
             "date_added": None,
         }],
     )
@@ -366,6 +368,7 @@ def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboa
             "in_stock": 15,
             "picture": "",
             "category": "Cleaning Supplies",
+            "sort_order": 10,
             "date_added": None,
         }],
     )
@@ -402,6 +405,62 @@ def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboa
     assert 'name="fulfilled_10"' in html
     assert 'value="4"' in html
     assert "ordered 12" in html
+
+
+def test_corporate_admin_can_save_department_product_order(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    corp = _seed_actor(db, uid=127, role="corporate", position="GM")
+    client = _client_as(flask_app, corp)
+    _grant_corporate_order_scope(client, "corporate")
+
+    from app.services import corporate_shop
+
+    saved = {}
+
+    monkeypatch.setattr(corporate_shop, "is_configured", lambda: True)
+    monkeypatch.setattr(corporate_shop, "ensure_catalog_seeded", lambda: {"added": 0})
+    monkeypatch.setattr(
+        corporate_shop,
+        "list_products",
+        lambda category=None: [{
+            "id": 42,
+            "name": "Bleach (6/case)",
+            "in_stock": 15,
+            "picture": "",
+            "picture_url": "https://cenaskitchen.com/media/Bleach.webp",
+            "category": category or "Cleaning Supplies",
+            "sort_order": 10,
+            "date_added": None,
+        }],
+    )
+    monkeypatch.setattr(corporate_shop, "list_categories", lambda: ["BOH"])
+    monkeypatch.setattr(corporate_shop, "list_orders", lambda *args, **kwargs: [])
+
+    def _save(category, product_ids):
+        saved["category"] = category
+        saved["product_ids"] = product_ids
+        return len(product_ids)
+
+    monkeypatch.setattr(corporate_shop, "update_product_order", _save)
+
+    page = client.get("/corporate/corporate-order?category=BOH")
+    html = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert "Organize BOH" in html
+    assert 'id="corpSortForm"' in html
+    assert 'data-product-id="42"' in html
+
+    resp = client.post(
+        "/corporate/corporate-order/admin/products/order",
+        data={"category": "BOH", "product_order": "42,99"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith(
+        "/corporate/corporate-order?category=BOH"
+    )
+    assert saved == {"category": "BOH", "product_ids": [42, 99]}
 
 
 def test_km_gets_manager_and_full_operations_tabs(dashboard_app):

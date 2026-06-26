@@ -172,3 +172,89 @@ def test_list_orders_filters_store_before_limit(monkeypatch):
 
     assert len(rows) == 1
     assert rows[0]["customer_email"] == corporate_shop.STORE_CUSTOMER_EMAIL["copperfield"]
+
+
+def test_list_products_uses_custom_sort_order(monkeypatch):
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
+    corporate_shop.CorporateBase.metadata.create_all(engine)
+    monkeypatch.setattr(corporate_shop, "_engine", engine)
+    monkeypatch.setattr(corporate_shop, "_Session", Session)
+    monkeypatch.setattr(corporate_shop, "_schema_checked", True)
+
+    with Session() as s:
+        s.add_all([
+            corporate_shop.Product(
+                product_name="Second",
+                in_stock=1,
+                product_picture="",
+                category="FOH",
+                sort_order=20,
+            ),
+            corporate_shop.Product(
+                product_name="First",
+                in_stock=1,
+                product_picture="",
+                category="FOH",
+                sort_order=10,
+            ),
+        ])
+        s.commit()
+
+    rows = corporate_shop.list_products(category="FOH")
+
+    assert [row["name"] for row in rows] == ["First", "Second"]
+
+
+def test_update_product_order_persists_department_order(monkeypatch):
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
+    corporate_shop.CorporateBase.metadata.create_all(engine)
+    monkeypatch.setattr(corporate_shop, "_engine", engine)
+    monkeypatch.setattr(corporate_shop, "_Session", Session)
+    monkeypatch.setattr(corporate_shop, "_schema_checked", True)
+
+    with Session() as s:
+        s.add_all([
+            corporate_shop.Product(
+                id=1,
+                product_name="A",
+                in_stock=1,
+                product_picture="",
+                category="FOH",
+                sort_order=10,
+            ),
+            corporate_shop.Product(
+                id=2,
+                product_name="B",
+                in_stock=1,
+                product_picture="",
+                category="FOH",
+                sort_order=20,
+            ),
+            corporate_shop.Product(
+                id=3,
+                product_name="C",
+                in_stock=1,
+                product_picture="",
+                category="FOH",
+                sort_order=30,
+            ),
+            corporate_shop.Product(
+                id=4,
+                product_name="Salt",
+                in_stock=1,
+                product_picture="",
+                category="BOH",
+                sort_order=10,
+            ),
+        ])
+        s.commit()
+
+    count = corporate_shop.update_product_order("FOH", [3, 1, 2])
+    foh_rows = corporate_shop.list_products(category="FOH")
+    boh_rows = corporate_shop.list_products(category="BOH")
+
+    assert count == 3
+    assert [row["name"] for row in foh_rows] == ["C", "A", "B"]
+    assert [row["name"] for row in boh_rows] == ["Salt"]

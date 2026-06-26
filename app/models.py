@@ -2896,6 +2896,26 @@ class UniformIssue(Base):
     manager_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
+class ManagerReportEdit(Base):
+    """Audit row for a manager correction made from Manager Reports."""
+    __tablename__ = "manager_report_edit"
+    __table_args__ = (
+        Index("ix_manager_report_edit_target", "target_type", "target_id"),
+        Index("ix_manager_report_edit_created", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False)
+    target_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    target_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    manager_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 # ============================================================
 # PREP LIST v3 — kitchen's daily prep board (Sam, dck build).
 # PrepItem = the stable master list (hot/cold/chop × item/sauce).

@@ -265,6 +265,186 @@
     white-space: nowrap;
   }
   .mgrrep-strong { color: var(--cream); font-weight: 800; }
+  .mgrrep-datecell {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+  }
+  .mgrrep-updated {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+    border: 0.5px solid rgba(91,202,197,0.42);
+    background: rgba(91,202,197,0.12);
+    color: #5BCAC5;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 900;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .mgrrep-edit {
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 7px;
+    border: 0.5px solid var(--border-active);
+    background: rgba(228,179,64,0.10);
+    color: var(--gold-bright);
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .mgrrep-audit-row.hidden { display: none; }
+  .mgrrep-audit {
+    padding: 10px 12px 12px;
+    background: rgba(0,0,0,0.18);
+  }
+  .mgrrep-audit-entry {
+    border: 0.5px solid rgba(91,202,197,0.20);
+    border-radius: 9px;
+    padding: 9px 10px;
+    margin-bottom: 8px;
+  }
+  .mgrrep-audit-entry:last-child { margin-bottom: 0; }
+  .mgrrep-audit-head {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--cream-faint);
+    margin-bottom: 7px;
+  }
+  .mgrrep-change {
+    display: grid;
+    grid-template-columns: 92px 1fr 1fr;
+    gap: 8px;
+    padding: 5px 0;
+    border-top: 0.5px solid rgba(250,246,236,0.06);
+    font-size: 11px;
+  }
+  .mgrrep-change:first-of-type { border-top: 0; }
+  .mgrrep-change .lbl {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--cream-meta);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 9px;
+  }
+  .mgrrep-change .old { color: rgba(250,246,236,0.48); }
+  .mgrrep-change .new { color: var(--cream); font-weight: 800; }
+  .mgrrep-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1600;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 8vh 16px 18px;
+    background: rgba(8,4,2,0.72);
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--cream);
+  }
+  .mgrrep-modal.show { display: flex; }
+  .mgrrep-sheet {
+    width: 480px;
+    max-width: 100%;
+    max-height: 86vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 0.5px solid var(--border-active);
+    border-radius: 14px;
+    background: #2e1a0d;
+  }
+  .mgrrep-sheet-h {
+    padding: 15px 17px;
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mgrrep-sheet-h h2 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--cream);
+  }
+  .mgrrep-x {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.3);
+    border: 0.5px solid var(--border);
+    color: var(--cream-dim);
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .mgrrep-sheet-b {
+    padding: 16px 17px;
+    overflow-y: auto;
+  }
+  .mgrrep-editgrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 11px;
+  }
+  .mgrrep-editfield {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .mgrrep-editfield.full { grid-column: 1 / -1; }
+  .mgrrep-editfield span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--cream-meta);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 900;
+  }
+  .mgrrep-editfield input,
+  .mgrrep-editfield select,
+  .mgrrep-editfield textarea {
+    width: 100%;
+    border-radius: 8px;
+    border: 0.5px solid var(--border);
+    background: var(--surface);
+    color: var(--cream);
+    padding: 9px 10px;
+    font: inherit;
+    font-size: 13px;
+  }
+  .mgrrep-editfield textarea { min-height: 76px; resize: vertical; }
+  .mgrrep-sheet-f {
+    padding: 13px 17px;
+    border-top: 0.5px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+  }
+  .mgrrep-cancel,
+  .mgrrep-save {
+    min-height: 38px;
+    border-radius: 8px;
+    padding: 0 15px;
+    cursor: pointer;
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 900;
+  }
+  .mgrrep-cancel {
+    background: transparent;
+    border: 0.5px solid var(--border);
+    color: var(--cream-dim);
+  }
+  .mgrrep-save {
+    border: 0.5px solid var(--red-bright);
+    background: linear-gradient(135deg, var(--red), var(--red-deep));
+    color: var(--cream);
+  }
   .mgrrep-empty {
     padding: 44px 20px;
     border: 0.5px solid var(--border);
@@ -279,6 +459,8 @@
     .mgrrep-controls { align-items: stretch; }
     .mgrrep-field, .mgrrep-field input, .mgrrep-staff,
     .mgrrep-staffbtn, .mgrrep-run { width: 100%; }
+    .mgrrep-change { grid-template-columns: 1fr; }
+    .mgrrep-editgrid { grid-template-columns: 1fr; }
   }
 </style>
 
@@ -360,17 +542,62 @@
                     <th>Issue</th>
                     <th>Detail</th>
                     <th>Logged By</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for row in group.rows %}
                   <tr>
-                    <td class="mgrrep-mono">{{ row.date }}</td>
+                    <td class="mgrrep-mono">
+                      <span class="mgrrep-datecell">
+                        <span>{{ row.date }}</span>
+                        {% if row.audit_history %}
+                          <button type="button"
+                                  class="mgrrep-updated"
+                                  data-audit-toggle="audit-attendance-{{ row.id }}">Updated</button>
+                        {% endif %}
+                      </span>
+                    </td>
                     <td class="mgrrep-mono">{{ row.time }}</td>
                     <td class="mgrrep-strong">{{ row.issue }}</td>
                     <td>{{ row.detail or "-" }}</td>
                     <td>{{ row.logged_by }}</td>
+                    <td>
+                      <button type="button"
+                              class="mgrrep-edit"
+                              data-edit-report
+                              data-target-type="attendance"
+                              data-target-id="{{ row.id }}"
+                              data-staff="{{ row.staff|e }}"
+                              data-date="{{ row.date_iso|e }}"
+                              data-time="{{ row.time_value|e }}"
+                              data-issue-kind="{{ row.issue_kind|e }}"
+                              data-detail="{{ row.detail|e }}"
+                              data-logged-by="{{ row.logged_by|e }}">Edit</button>
+                    </td>
                   </tr>
+                  {% if row.audit_history %}
+                  <tr class="mgrrep-audit-row hidden" id="audit-attendance-{{ row.id }}">
+                    <td colspan="6">
+                      <div class="mgrrep-audit">
+                        {% for audit in row.audit_history %}
+                          <div class="mgrrep-audit-entry">
+                            <div class="mgrrep-audit-head">
+                              Updated {{ audit.changed_at }} by {{ audit.manager_name }}
+                            </div>
+                            {% for change in audit.changes %}
+                              <div class="mgrrep-change">
+                                <span class="lbl">{{ change.label }}</span>
+                                <span class="old">Before: {{ change.before }}</span>
+                                <span class="new">Updated: {{ change.after }}</span>
+                              </div>
+                            {% endfor %}
+                          </div>
+                        {% endfor %}
+                      </div>
+                    </td>
+                  </tr>
+                  {% endif %}
                   {% endfor %}
                 </tbody>
               </table>
@@ -407,16 +634,60 @@
                     <th>Time</th>
                     <th>Item</th>
                     <th>Logged By</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for row in group.rows %}
                   <tr>
-                    <td class="mgrrep-mono">{{ row.date }}</td>
+                    <td class="mgrrep-mono">
+                      <span class="mgrrep-datecell">
+                        <span>{{ row.date }}</span>
+                        {% if row.audit_history %}
+                          <button type="button"
+                                  class="mgrrep-updated"
+                                  data-audit-toggle="audit-uniform-{{ row.id }}">Updated</button>
+                        {% endif %}
+                      </span>
+                    </td>
                     <td class="mgrrep-mono">{{ row.time }}</td>
                     <td class="mgrrep-strong">{{ row.item }}</td>
                     <td>{{ row.logged_by }}</td>
+                    <td>
+                      <button type="button"
+                              class="mgrrep-edit"
+                              data-edit-report
+                              data-target-type="uniform"
+                              data-target-id="{{ row.id }}"
+                              data-staff="{{ row.staff|e }}"
+                              data-date="{{ row.date_iso|e }}"
+                              data-time="{{ row.time_value|e }}"
+                              data-item-key="{{ row.item_key|e }}"
+                              data-logged-by="{{ row.logged_by|e }}">Edit</button>
+                    </td>
                   </tr>
+                  {% if row.audit_history %}
+                  <tr class="mgrrep-audit-row hidden" id="audit-uniform-{{ row.id }}">
+                    <td colspan="5">
+                      <div class="mgrrep-audit">
+                        {% for audit in row.audit_history %}
+                          <div class="mgrrep-audit-entry">
+                            <div class="mgrrep-audit-head">
+                              Updated {{ audit.changed_at }} by {{ audit.manager_name }}
+                            </div>
+                            {% for change in audit.changes %}
+                              <div class="mgrrep-change">
+                                <span class="lbl">{{ change.label }}</span>
+                                <span class="old">Before: {{ change.before }}</span>
+                                <span class="new">Updated: {{ change.after }}</span>
+                              </div>
+                            {% endfor %}
+                          </div>
+                        {% endfor %}
+                      </div>
+                    </td>
+                  </tr>
+                  {% endif %}
                   {% endfor %}
                 </tbody>
               </table>
@@ -428,6 +699,74 @@
       <div class="mgrrep-empty">No uniform items for this date range.</div>
     {% endif %}
   {% endif %}
+</div>
+
+<div class="mgrrep-modal" id="mgrrepEditModal">
+  <form class="mgrrep-sheet" method="POST" action="{{ url_for('store.manager_page_create', page=page_slug) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+    <input type="hidden" name="form_action" value="edit_report_item">
+    <input type="hidden" name="target_type" id="editTargetType">
+    <input type="hidden" name="target_id" id="editTargetId">
+    <input type="hidden" name="return_report" value="{{ report_kind }}">
+    <input type="hidden" name="return_from" value="{{ date_from }}">
+    <input type="hidden" name="return_to" value="{{ date_to }}">
+    {% for name in selected_staff %}
+      <input type="hidden" name="return_staff" value="{{ name }}">
+    {% endfor %}
+
+    <div class="mgrrep-sheet-h">
+      <h2>Edit Report Item</h2>
+      <button type="button" class="mgrrep-x" id="mgrrepEditClose">&times;</button>
+    </div>
+    <div class="mgrrep-sheet-b">
+      <div class="mgrrep-editgrid">
+        <label class="mgrrep-editfield full">
+          <span>Staff</span>
+          <select name="employee_name" id="editStaffName">
+            {% for opt in staff_options %}
+              <option value="{{ opt.name }}">{{ opt.name }}{% if opt.role %} - {{ opt.role }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="mgrrep-editfield">
+          <span>Date</span>
+          <input type="date" name="entry_date" id="editDate">
+        </label>
+        <label class="mgrrep-editfield">
+          <span>Time</span>
+          <input type="time" name="entry_time" id="editTime">
+        </label>
+        <label class="mgrrep-editfield full" id="editIssueWrap">
+          <span>Issue</span>
+          <select name="issue_kind" id="editIssueKind">
+            {% for opt in attendance_issue_options %}
+              <option value="{{ opt.key }}">{{ opt.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="mgrrep-editfield full" id="editItemWrap">
+          <span>Uniform Item</span>
+          <select name="item_key" id="editItemKey">
+            {% for opt in uniform_item_options %}
+              <option value="{{ opt.key }}">{{ opt.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="mgrrep-editfield full" id="editDetailWrap">
+          <span>Detail</span>
+          <textarea name="detail" id="editDetail"></textarea>
+        </label>
+        <label class="mgrrep-editfield full">
+          <span>Logged By</span>
+          <input type="text" name="logged_by" id="editLoggedBy">
+        </label>
+      </div>
+    </div>
+    <div class="mgrrep-sheet-f">
+      <button type="button" class="mgrrep-cancel" id="mgrrepEditCancel">Cancel</button>
+      <button type="submit" class="mgrrep-save">Save Correction</button>
+    </div>
+  </form>
 </div>
 {% endblock %}
 
@@ -496,6 +835,80 @@
     });
   }
   updateLabel();
+})();
+
+(function () {
+  "use strict";
+  function setSelectValue(sel, value){
+    if (!sel) return;
+    var found = Array.prototype.some.call(sel.options, function(opt){
+      return opt.value === value;
+    });
+    if (!found && value) {
+      var opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      sel.appendChild(opt);
+    }
+    sel.value = value || "";
+  }
+
+  document.querySelectorAll("[data-audit-toggle]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var row = document.getElementById(btn.dataset.auditToggle);
+      if (row) row.classList.toggle("hidden");
+    });
+  });
+
+  var modal = document.getElementById("mgrrepEditModal");
+  if (!modal) return;
+  var targetType = document.getElementById("editTargetType");
+  var targetId = document.getElementById("editTargetId");
+  var staff = document.getElementById("editStaffName");
+  var date = document.getElementById("editDate");
+  var time = document.getElementById("editTime");
+  var issueWrap = document.getElementById("editIssueWrap");
+  var issue = document.getElementById("editIssueKind");
+  var itemWrap = document.getElementById("editItemWrap");
+  var item = document.getElementById("editItemKey");
+  var detailWrap = document.getElementById("editDetailWrap");
+  var detail = document.getElementById("editDetail");
+  var loggedBy = document.getElementById("editLoggedBy");
+
+  function closeModal(){ modal.classList.remove("show"); }
+  function openModal(btn){
+    var type = btn.dataset.targetType || "";
+    targetType.value = type;
+    targetId.value = btn.dataset.targetId || "";
+    setSelectValue(staff, btn.dataset.staff || "");
+    date.value = btn.dataset.date || "";
+    time.value = btn.dataset.time || "";
+    loggedBy.value = btn.dataset.loggedBy || "";
+    var isAttendance = type === "attendance";
+    issueWrap.style.display = isAttendance ? "" : "none";
+    detailWrap.style.display = isAttendance ? "" : "none";
+    itemWrap.style.display = isAttendance ? "none" : "";
+    if (isAttendance) {
+      setSelectValue(issue, btn.dataset.issueKind || "note");
+      detail.value = btn.dataset.detail || "";
+    } else {
+      setSelectValue(item, btn.dataset.itemKey || "");
+      detail.value = "";
+    }
+    modal.classList.add("show");
+  }
+
+  document.querySelectorAll("[data-edit-report]").forEach(function(btn){
+    btn.addEventListener("click", function(){ openModal(btn); });
+  });
+  document.getElementById("mgrrepEditClose").addEventListener("click", closeModal);
+  document.getElementById("mgrrepEditCancel").addEventListener("click", closeModal);
+  modal.addEventListener("click", function(ev){
+    if (ev.target === modal) closeModal();
+  });
+  document.addEventListener("keydown", function(ev){
+    if (ev.key === "Escape") closeModal();
+  });
 })();
 </script>
 {% endblock %}

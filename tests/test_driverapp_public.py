@@ -115,6 +115,9 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert "Final scan moment" in html
     assert "startLiveDeliverySweep" in html
     assert "sweepScroller" in html
+    assert "const adLanguages = ['en','es']" in html
+    assert "function totalAdPhases()" in html
+    assert "persist: false" in html
     assert 'id="adDriverRail"' in html
     assert "For Uber and DoorDash drivers" in html
     assert "minimum of <em>$35</em>" in html

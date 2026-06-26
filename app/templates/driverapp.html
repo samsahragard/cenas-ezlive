@@ -368,7 +368,12 @@ function calculatePay(){
 });
 calculatePay();
 
+let preferredDriverLang = 'en';
+
 function setDriverLanguage(lang){
+  const options = arguments[1] || {};
+  const persist = options.persist !== false;
+  const rerenderAd = options.rerenderAd !== false;
   const next = lang === 'es' ? 'es' : 'en';
   document.documentElement.setAttribute('lang', next);
   document.querySelectorAll('[data-lang-button]').forEach((button) => {
@@ -388,13 +393,16 @@ function setDriverLanguage(lang){
     const value = el.getAttribute('data-placeholder-' + next);
     if (value !== null) el.setAttribute('placeholder', value);
   });
-  try {
-    window.localStorage.setItem('driverapp_lang', next);
-  } catch (error) {
-    // Some embedded browsers block localStorage; the toggle should still work.
+  if (persist) {
+    preferredDriverLang = next;
+    try {
+      window.localStorage.setItem('driverapp_lang', next);
+    } catch (error) {
+      // Some embedded browsers block localStorage; the toggle should still work.
+    }
   }
   syncAdButtonLabel();
-  if (adRunning) showAdStep((adIndex + adSteps.length - 1) % adSteps.length);
+  if (adRunning && rerenderAd) showAdStep((adIndex + totalAdPhases() - 1) % totalAdPhases());
 }
 
 const adToggle = document.getElementById('adToggle');
@@ -403,6 +411,7 @@ const adTitle = document.getElementById('adTitle');
 const adSubtitle = document.getElementById('adSubtitle');
 const adStepBadge = document.getElementById('adStepBadge');
 const adProgress = document.getElementById('adProgress');
+const adLanguages = ['en','es'];
 const adSteps = [
   {
     key: 'live',
@@ -464,6 +473,10 @@ let adTimer = null;
 let liveSweepFrame = null;
 let liveSweepStartTimer = null;
 
+function totalAdPhases(){
+  return adSteps.length * adLanguages.length;
+}
+
 function currentDriverLang(){
   return document.documentElement.getAttribute('lang') === 'es' ? 'es' : 'en';
 }
@@ -521,11 +534,13 @@ function startLiveDeliverySweep(duration){
 }
 
 function showAdStep(index){
-  const cycleIndex = index % adSteps.length;
-  const step = adSteps[cycleIndex];
+  const phaseIndex = ((index % totalAdPhases()) + totalAdPhases()) % totalAdPhases();
+  const slideIndex = Math.floor(phaseIndex / adLanguages.length) % adSteps.length;
+  const lang = adLanguages[phaseIndex % adLanguages.length];
+  const step = adSteps[slideIndex];
   const target = document.querySelector(step.selector);
   if (!target || !adTitle || !adSubtitle || !adStepBadge || !adProgress) return;
-  const lang = currentDriverLang();
+  setDriverLanguage(lang, {persist: false, rerenderAd: false});
   clearLiveDeliverySweep();
   clearAdSpotlight();
   document.body.setAttribute('data-ad-step', step.key || '');
@@ -533,8 +548,8 @@ function showAdStep(index){
   if (adKicker) adKicker.textContent = step.kicker[lang];
   adTitle.textContent = step.title[lang];
   adSubtitle.textContent = step.subtitle[lang];
-  adStepBadge.textContent = String(cycleIndex + 1);
-  adProgress.style.width = (((cycleIndex + 1) / adSteps.length) * 100) + '%';
+  adStepBadge.textContent = String(slideIndex + 1);
+  adProgress.style.width = (((phaseIndex + 1) / totalAdPhases()) * 100) + '%';
   target.scrollIntoView({behavior: 'smooth', block: 'center'});
   if (step.sweepScroller) startLiveDeliverySweep(step.duration || 5400);
 }
@@ -548,21 +563,24 @@ function stopAdMode(){
   clearLiveDeliverySweep();
   clearAdSpotlight();
   if (adProgress) adProgress.style.width = '0';
+  setDriverLanguage(preferredDriverLang, {persist: false, rerenderAd: false});
   syncAdButtonLabel();
 }
 
 function runAdStep(){
   if (!adRunning) return;
-  const cycleIndex = adIndex % adSteps.length;
-  const step = adSteps[cycleIndex];
-  showAdStep(cycleIndex);
-  adIndex = (cycleIndex + 1) % adSteps.length;
+  const phaseIndex = adIndex % totalAdPhases();
+  const slideIndex = Math.floor(phaseIndex / adLanguages.length) % adSteps.length;
+  const step = adSteps[slideIndex];
+  showAdStep(phaseIndex);
+  adIndex = (phaseIndex + 1) % totalAdPhases();
   adTimer = window.setTimeout(runAdStep, step.duration || 5400);
 }
 
 function startAdMode(){
   adRunning = true;
   adIndex = 0;
+  preferredDriverLang = currentDriverLang();
   document.body.classList.add('ad-mode');
   syncAdButtonLabel();
   runAdStep();
@@ -592,7 +610,8 @@ try {
 } catch (error) {
   savedLang = 'en';
 }
-setDriverLanguage(savedLang);
+preferredDriverLang = savedLang === 'es' ? 'es' : 'en';
+setDriverLanguage(preferredDriverLang, {persist: false, rerenderAd: false});
 </script>
 </body>
 </html>

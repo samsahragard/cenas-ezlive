@@ -1947,6 +1947,31 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("users seed failed (non-fatal)")
 
+    # Idempotent requested Team access backfill (Sam, 2026-06-26): store
+    # switch badges for named managers/partners. Runs after the users table is
+    # available and skips any missing names; never creates accounts/passcodes.
+    try:
+        from app.db import SessionLocal
+        from app.services.access_bootstrap import apply_requested_access_scopes
+        if SessionLocal is not None:
+            db = SessionLocal()
+            try:
+                changed = apply_requested_access_scopes(db)
+                if changed:
+                    db.commit()
+                    logging.getLogger(__name__).info(
+                        "users: applied requested access bootstrap to %d row(s)", changed)
+                else:
+                    db.rollback()
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "requested access bootstrap failed (non-fatal)")
+
     # Idempotent column backfill for legal_matters.key_dates (added
     # 2026-05-13 Phase 0 Block 3 follow-up). create_all only creates
     # missing tables, not new columns on existing ones.

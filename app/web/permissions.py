@@ -67,8 +67,9 @@ SCOPE_TO_SLUG = {
 
 def accessible_store_slugs(user) -> list[str]:
     """Return the store slugs ('dos' / 'uno' / 'corporate' / 'partner') this
-    user can access. Partner and corporate see everything via their own
-    slug; store-scoped roles (gm, manager, km, assistant_km, corporate_chef,
+    user can access. Partners can use the two single-store views, the combined
+    both-store view, and the full Partner view. Corporate users use their
+    Corporate slug. Store-scoped roles (gm, manager, km, assistant_km, corporate_chef,
     prep_manager, foh_manager, expo, driver, corporate-driver) get one entry
     per assigned store, derived from the User.store_scope CSV. A store-scoped
     user assigned to both concrete stores also gets the corporate slug as the
@@ -78,7 +79,7 @@ def accessible_store_slugs(user) -> list[str]:
         return []
     level = user.permission_level
     if level == "partner":
-        return ["partner"]
+        return ["dos", "uno", "corporate", "partner"]
     if level == "corporate":
         return ["corporate"]
     if level == "corporate-driver":

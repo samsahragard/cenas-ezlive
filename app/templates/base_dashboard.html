@@ -531,7 +531,7 @@
 {% set _user_slugs = current_user_stores() %}
 {% set store_slug = g.current_store or session.get('last_store_slug') or (_user_slugs[0][0] if _user_slugs else None) or 'dos' %}
 {% set _current_perm = (g.current_user.permission_level if g.current_user else '') %}
-{% set _corporate_label = 'Corporate' if _current_perm in ['partner', 'corporate'] else 'Both' %}
+{% set _corporate_label = 'Corporate' if _current_perm == 'corporate' else 'Both' %}
 {% set _slug_labels = {'dos': 'Tomball', 'uno': 'Copperfield', 'corporate': _corporate_label, 'partner': 'Partner'} %}
 {% set store_label = _slug_labels.get(store_slug, 'Tomball') if store_slug == 'corporate' else (g.store_label or _slug_labels.get(store_slug, 'Tomball')) %}
 {% set _accessible = current_user_stores() %}

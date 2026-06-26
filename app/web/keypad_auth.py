@@ -75,6 +75,8 @@ def _landing_for_user(u) -> str:
 
     if u.permission_level == "corporate-driver":
         return "/driver/portal"
+    if u.permission_level == "partner":
+        return "/partner/today"
     slugs = accessible_store_slugs(u)
     if not slugs:
         return "/"
@@ -1000,7 +1002,7 @@ def install(app):
         stores = []
         for slug in slugs:
             label = STORE_LABELS.get(slug, slug.title())
-            if slug == "corporate" and role not in ("partner", "corporate"):
+            if slug == "corporate" and role != "corporate":
                 label = "Both"
             stores.append((slug, label))
         return stores

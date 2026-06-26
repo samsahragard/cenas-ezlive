@@ -815,6 +815,36 @@ def test_both_store_user_gets_combined_store_switch_option(dashboard_app):
     assert 'data-src="/uno/schedules-v2/?embed=1"' in team_html
 
 
+def test_partner_gets_single_store_both_and_partner_switch_options(dashboard_app):
+    flask_app, db = dashboard_app
+    partner = _seed_actor(db, uid=106, role="partner", position="Partner")
+    partner.store_scope = None
+    db.commit()
+    client = _client_as(flask_app, partner)
+    with client.session_transaction() as sess:
+        sess["partner_auth_ok"] = True
+
+    resp = client.get("/partner/today")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert re.search(r'href="/dos/today"[^>]*>\s*Tomball\s*</a>', html)
+    assert re.search(r'href="/uno/today"[^>]*>\s*Copperfield\s*</a>', html)
+    assert re.search(r'href="/corporate/today"[^>]*>\s*Both\s*</a>', html)
+    assert re.search(
+        r'class="ck-sb-store-link active"[^>]*href="/partner/today"[^>]*>\s*Partner\s*</a>',
+        html,
+    )
+
+    combined = client.get("/corporate/today")
+    assert combined.status_code == 200
+    combined_html = combined.get_data(as_text=True)
+    assert re.search(
+        r'class="ck-sb-store-link active"[^>]*href="/corporate/today"[^>]*>\s*Both\s*</a>',
+        combined_html,
+    )
+    assert not re.search(r'href="/corporate/today"[^>]*>\s*Corporate\s*</a>', combined_html)
+
+
 @pytest.mark.parametrize(
     ("uid", "role", "position"),
     [

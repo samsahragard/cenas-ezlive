@@ -120,7 +120,10 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert "persist: false" in html
     assert 'id="adDriverRail"' in html
     assert "For Uber and DoorDash drivers" in html
-    assert "minimum of <em>$35</em>" in html
+    assert "Make a minimum of <em>$35</em> per delivery." in html
+    assert 'class="rail-qr"' in html
+    assert "Keep your flexible schedule" not in html
+    assert "Base pay plus live tracking starts at $35" not in html
     assert "uber-logo.svg" in html
     assert "doordash-logo.svg" in html
     assert "Aplicar ahora" in html

@@ -240,6 +240,7 @@
   var PASSCODE_LEN  = {{ passcode_len|default(5) }};
   var CODE_LEN      = {{ code_len|default(5) }};
   var PREFILL_ID    = {{ (prefill_identifier|default(''))|tojson }};
+  var PREFILL_CODE  = {{ (prefill_code|default(''))|tojson }};
 
   var form     = document.getElementById('setup-form');
   var idInput  = document.getElementById('identifier');
@@ -253,6 +254,21 @@
   var busy = false;
   var PASS_RE = new RegExp('^[0-9]{' + PASSCODE_LEN + '}$');
   var CODE_RE = new RegExp('^[0-9]{' + CODE_LEN + '}$');
+  var SETUP_ID_KEY = 'ck-setup-identifier-v1';
+  var SETUP_CODE_KEY = 'ck-setup-code-v1';
+
+  function readSetupPrefill(key){
+    try{ return sessionStorage.getItem(key) || ''; } catch(e){ return ''; }
+  }
+  function clearSetupPrefill(){
+    try{
+      sessionStorage.removeItem(SETUP_ID_KEY);
+      sessionStorage.removeItem(SETUP_CODE_KEY);
+    } catch(e){}
+  }
+  function onlyDigits(v){
+    return String(v || '').replace(/\D/g, '');
+  }
 
   function flashToast(msg){
     toast.textContent = msg; toast.classList.add('show');
@@ -304,6 +320,7 @@
         return;
       }
       // Success -- the shared token is consumed; land on the dashboard.
+      clearSetupPrefill();
       window.location.replace(data.next || DASHBOARD_URL);
     }).catch(function(){
       setBusy(false);
@@ -323,9 +340,23 @@
     if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggleVisibility(); }
   });
 
-  // Prefill the identifier from a server value (e.g. linked from an email).
-  if (PREFILL_ID){
-    idInput.value = PREFILL_ID;
+  // Prefill from the verified reset-code login. sessionStorage keeps the
+  // temporary code off the URL and is cleared after a successful setup.
+  var setupIdentifier = (PREFILL_ID || '') || readSetupPrefill(SETUP_ID_KEY);
+  var setupCode = (PREFILL_CODE || '') || readSetupPrefill(SETUP_CODE_KEY);
+  if (setupIdentifier){
+    idInput.value = setupIdentifier;
+    var idDigits = onlyDigits(setupIdentifier);
+    if (idDigits.length === 10 && !phoneInput.value){
+      phoneInput.value = idDigits;
+    }
+  }
+  if (setupCode){
+    codeInput.value = setupCode;
+  }
+  if (setupIdentifier && setupCode){
+    setTimeout(function(){ phoneInput.focus(); }, 60);
+  } else if (setupIdentifier){
     setTimeout(function(){ codeInput.focus(); }, 60);
   } else {
     setTimeout(function(){ idInput.focus(); }, 60);

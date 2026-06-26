@@ -1,10 +1,11 @@
 """Dual-channel PIN reset (Sam 2026-06-07): the Team Roster PIN-reset mints ONE
 single-use EmployeeSetupToken that backs BOTH the emailed LINK and a short
-MANAGER-DISPLAYED 6-digit CODE. Whichever the employee uses FIRST sets the PIN;
-the OTHER stops working. No SMS (retired in the 2026-05-30 email pivot).
+MANAGER-DISPLAYED 5-digit CODE. Whichever the employee uses FIRST to choose a
+new PIN consumes the token; the OTHER stops working. No SMS (retired in the
+2026-05-30 email pivot).
 
 This suite proves the shared-token invariants:
-  * reset returns a 6-digit setup_code;
+  * reset returns a 5-digit setup_code;
   * FIRST-WINS A: completing via the LINK kills the CODE (same reset);
   * FIRST-WINS B: completing via the CODE kills the LINK (same reset);
   * a wrong code is rejected; after MAX_LOGIN_ATTEMPTS the token locks (429);
@@ -90,9 +91,9 @@ def _live_token(db, emp_id):
 
 
 # ============================================================
-# 1. Reset returns a 6-digit code (and stores only its hash)
+# 1. Reset returns a 5-digit code (and stores only its hash)
 # ============================================================
-def test_send_setup_invite_returns_six_digit_code(app_bound):
+def test_send_setup_invite_returns_five_digit_code(app_bound):
     _flask, db = app_bound
     emp = _make_employee(db)
 
@@ -111,7 +112,7 @@ def test_send_setup_invite_returns_six_digit_code(app_bound):
 
 
 def test_reset_endpoint_includes_setup_code(app_bound):
-    """POST .../reset-pin returns ok + a 6-digit setup_code for the manager."""
+    """POST .../reset-pin returns ok + a 5-digit setup_code for the manager."""
     flask_app, db = app_bound
     emp = _make_employee(db)
     client = flask_app.test_client()
@@ -287,30 +288,55 @@ def test_code_is_identifier_scoped_no_cross_employee(app_bound):
 
 
 # ============================================================
-# 7. LOGIN WITH THE CODE (Sam 2026-06-07): the employee enters email/phone + the
-#    manager's reset CODE at /employee/login/passcode and is signed in.
+# 7. LOGIN WITH THE CODE: the employee enters email/phone + the manager's reset
+#    CODE and is sent to choose their own PIN.
 # ============================================================
-def test_login_with_reset_code_signs_in_and_consumes_token(app_bound):
-    """A valid reset code logs the employee in (no separate page needed), becomes
-    their passcode, and consumes the shared token so the emailed link dies."""
+def test_login_with_reset_code_requires_pin_setup_without_consuming_token(app_bound):
+    """A valid reset code is temporary: it opens setup, but does not become the
+    passcode and does not consume the token until the employee chooses a PIN."""
+    from werkzeug.security import check_password_hash
     flask_app, db = app_bound
     emp = _make_employee(db, full_name="Cara C", email="cara@test.local",
                          phone="2815550133")
     code = setup_mod.send_setup_invite(emp.id)["code"]
     assert _live_token(db, emp.id) is not None  # a live token exists pre-login
+    new_pin = "86420" if code != "86420" else "86421"
 
     c = flask_app.test_client()
     r = c.post("/employee/login/passcode",
                json={"identifier": "cara@test.local", "passcode": code})
     assert r.status_code == 200, r.get_data(as_text=True)
-    assert r.get_json().get("ok") is True
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["needs_pin_setup"] is True
+    assert body["next"] == "/employee/setup-code"
+    assert body["identifier"] == "cara@test.local"
+    assert body["setup_code"] == code
 
-    # the shared token is now consumed -> the emailed setup link is dead (first-wins)
+    # The token is still live because the employee has not chosen their PIN yet.
+    assert _live_token(db, emp.id) is not None
+    e_mid = db.query(Employee).filter_by(id=emp.id).one()
+    assert e_mid.passcode_hash is None or not check_password_hash(e_mid.passcode_hash, code)
+
+    r2 = c.post("/employee/setup/code/complete",
+                json={"identifier": emp.email, "code": code,
+                      "passcode": new_pin, "phone": emp.phone,
+                      "full_name": emp.full_name})
+    assert r2.status_code == 200, r2.get_data(as_text=True)
     assert _live_token(db, emp.id) is None
-    # the code is now the employee's passcode -> logging in with it again works
-    r2 = c.post("/employee/login/passcode",
-                json={"identifier": "cara@test.local", "passcode": code})
-    assert r2.status_code == 200
+    e_done = db.query(Employee).filter_by(id=emp.id).one()
+    assert check_password_hash(e_done.passcode_hash, new_pin)
+    assert not check_password_hash(e_done.passcode_hash, code)
+
+    # The reset code is spent; the chosen PIN is the credential now.
+    r3 = flask_app.test_client().post("/employee/login/passcode",
+                                      json={"identifier": emp.email,
+                                            "passcode": code})
+    assert r3.status_code == 401
+    r4 = flask_app.test_client().post("/employee/login/passcode",
+                                      json={"identifier": emp.email,
+                                            "passcode": new_pin})
+    assert r4.status_code == 200
 
 
 def test_employee_passcode_login_for_km_returns_manager_profile(app_bound):
@@ -357,11 +383,10 @@ def test_login_wrong_value_rejected(app_bound):
 
 
 # ============================================================
-# 8. MANAGER reset (Sam 2026-06-07): a roster employee linked to a manager User
-#    must get the code set as the passcode on the LINKED USER too, since managers
-#    sign in via /keypad-login against User.passcode (not Employee.passcode).
+# 8. MANAGER reset: a linked manager's old Employee/User PINs are invalidated,
+#    then the chosen setup PIN is saved to both rows.
 # ============================================================
-def test_reset_sets_code_as_passcode_on_employee_and_linked_user(app_bound):
+def test_reset_code_is_temporary_for_employee_and_linked_user(app_bound):
     from werkzeug.security import check_password_hash
     flask_app, db = app_bound
     # partner (id=1) FIRST so it owns id=1 (the session below sets user_id=1).
@@ -394,21 +419,36 @@ def test_reset_sets_code_as_passcode_on_employee_and_linked_user(app_bound):
     r = client.post("/dos/schedules-v2/employees/%d/reset-pin" % emp.id)
     assert r.status_code == 200, r.get_data(as_text=True)
     code = r.get_json()["setup_code"]
+    new_pin = "22222" if code != "22222" else "33333"
 
     u = db.query(User).filter_by(id=mgr_user.id).one()
     e = db.query(Employee).filter_by(id=emp.id).one()
-    # the code is now the passcode on BOTH the linked User and the Employee...
-    assert check_password_hash(u.passcode_hash, code), "code must work at keypad (User.passcode)"
-    assert check_password_hash(e.passcode_hash, code)
-    # ...and the OLD pin is dead (the reset actually reset).
+    # The reset kills the old PIN, but the code is not the saved PIN.
+    assert not check_password_hash(u.passcode_hash, code)
+    assert not check_password_hash(e.passcode_hash, code)
     assert not check_password_hash(u.passcode_hash, "11111")
+    assert not check_password_hash(e.passcode_hash, "11111")
+    assert u.first_login_done is False
+
+    r2 = client.post("/employee/setup/code/complete",
+                     json={"identifier": emp.email, "code": code,
+                           "passcode": new_pin, "phone": emp.phone,
+                           "full_name": emp.full_name})
+    assert r2.status_code == 200, r2.get_data(as_text=True)
+    u_done = db.query(User).filter_by(id=mgr_user.id).one()
+    e_done = db.query(Employee).filter_by(id=emp.id).one()
+    assert check_password_hash(u_done.passcode_hash, new_pin)
+    assert check_password_hash(e_done.passcode_hash, new_pin)
+    assert not check_password_hash(u_done.passcode_hash, code)
+    assert _live_token(db, emp.id) is None
 
 
 # ============================================================
-# 9. KEYPAD login with the reset code (Sam 2026-06-07): a NO-User, never-set-up
-#    employee (e.g. Gina) signs in at the NUMBER-PAD keypad with phone + the code.
+# 9. KEYPAD reset code: phone + reset code opens PIN setup instead of saving the
+#    code as the employee's permanent PIN.
 # ============================================================
 def test_keypad_login_with_reset_code_for_no_user_employee(app_bound):
+    from werkzeug.security import check_password_hash
     flask_app, db = app_bound
     db.add(User(id=1, full_name="P", email="p@test.local",
                 passcode_hash=generate_password_hash("12345"),
@@ -429,21 +469,41 @@ def test_keypad_login_with_reset_code_for_no_user_employee(app_bound):
     r = client.post("/dos/schedules-v2/employees/%d/reset-pin" % emp.id)
     assert r.status_code == 200, r.get_data(as_text=True)
     code = r.get_json()["setup_code"]
+    new_pin = "24680" if code != "24680" else "24681"
 
-    # NUMBER-PAD keypad: phone + the reset code -> signed in (Path 4 code path).
+    # NUMBER-PAD keypad: phone + the reset code -> PIN setup, not sign-in.
     fresh = flask_app.test_client()
     r2 = fresh.post("/keypad-login", json={"phone": "4752769760", "pin": code})
     assert r2.status_code == 200, r2.get_data(as_text=True)
-    assert r2.get_json().get("ok") is True
+    body = r2.get_json()
+    assert body["ok"] is True
+    assert body["needs_pin_setup"] is True
+    assert body["next"] == "/employee/setup-code"
+    assert body["identifier"] == "4752769760"
+    assert body["setup_code"] == code
+    with fresh.session_transaction() as s:
+        assert s.get("employee_id") is None
+        assert s.get("driver_id") is None
     # a wrong value at the keypad is still rejected.
     bad = flask_app.test_client()
     r3 = bad.post("/keypad-login", json={"phone": "4752769760", "pin": "99999"})
     assert r3.status_code == 401
 
+    r4 = fresh.post("/employee/setup/code/complete",
+                    json={"identifier": "4752769760", "code": code,
+                          "passcode": new_pin, "phone": "4752769760",
+                          "full_name": emp.full_name})
+    assert r4.status_code == 200, r4.get_data(as_text=True)
+    e_done = db.query(Employee).filter_by(id=emp.id).one()
+    assert check_password_hash(e_done.passcode_hash, new_pin)
+    assert not check_password_hash(e_done.passcode_hash, code)
+    with fresh.session_transaction() as s:
+        assert s.get("employee_id") == emp.id
+
 
 def test_keypad_employee_reset_code_works_when_driver_same_phone_is_locked(app_bound):
-    """Gina regression: the main keypad must not let a stale/locked Driver row
-    with the same phone block a valid Team Roster employee reset code."""
+    """Gina regression: a locked same-phone Driver row must not block a valid
+    Team Roster employee reset code from opening PIN setup."""
     flask_app, db = app_bound
     db.add(User(id=1, full_name="P", email="p@test.local",
                 passcode_hash=generate_password_hash("12345"),
@@ -470,11 +530,21 @@ def test_keypad_employee_reset_code_works_when_driver_same_phone_is_locked(app_b
     r = client.post("/dos/schedules-v2/employees/%d/reset-pin" % emp.id)
     assert r.status_code == 200, r.get_data(as_text=True)
     code = r.get_json()["setup_code"]
+    new_pin = "13579" if code != "13579" else "13570"
 
     fresh = flask_app.test_client()
     r2 = fresh.post("/keypad-login", json={"phone": "4752769760", "pin": code})
     assert r2.status_code == 200, r2.get_data(as_text=True)
-    assert r2.get_json().get("ok") is True
+    assert r2.get_json()["needs_pin_setup"] is True
+    with fresh.session_transaction() as s:
+        assert s.get("employee_id") is None
+        assert s.get("driver_id") is None
+
+    r3 = fresh.post("/employee/setup/code/complete",
+                    json={"identifier": "4752769760", "code": code,
+                          "passcode": new_pin, "phone": "4752769760",
+                          "full_name": emp.full_name})
+    assert r3.status_code == 200, r3.get_data(as_text=True)
     with fresh.session_transaction() as s:
         assert s.get("employee_id") == emp.id
         assert s.get("driver_id") is None

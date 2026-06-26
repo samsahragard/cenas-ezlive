@@ -425,6 +425,14 @@
   function clearPersistedPhone() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
   }
+  const SETUP_ID_KEY = 'ck-setup-identifier-v1';
+  const SETUP_CODE_KEY = 'ck-setup-code-v1';
+  function writeSetupPrefill(identifier, code) {
+    try {
+      sessionStorage.setItem(SETUP_ID_KEY, String(identifier || ''));
+      sessionStorage.setItem(SETUP_CODE_KEY, String(code || ''));
+    } catch (_) {}
+  }
 
   // /driver/logout redirects here with ?_clear=1 to wipe the device.
   // Same param survives a back-button into the keypad.
@@ -538,6 +546,13 @@
       const data = await r.json();
       if (!r.ok || !data.ok){
         showError(data.error || `Sign-in failed (${r.status}).`, 'pin');
+        return;
+      }
+      if (data.needs_pin_setup){
+        writePersistedPhone(phoneDigits);
+        writeSetupPrefill(data.identifier || phoneDigits, data.setup_code || pin);
+        pin = ''; renderDots();
+        window.location.replace(data.next || '/employee/setup-code');
         return;
       }
       if (Array.isArray(data.choices) && data.choices.length){

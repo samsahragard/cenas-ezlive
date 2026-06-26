@@ -268,6 +268,14 @@
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: String(id), lastUsedTs: Date.now() })); } catch(e){}
   }
   function clearPersistedId(){ try{ localStorage.removeItem(STORAGE_KEY); } catch(e){} }
+  var SETUP_ID_KEY = 'ck-setup-identifier-v1';
+  var SETUP_CODE_KEY = 'ck-setup-code-v1';
+  function writeSetupPrefill(identifier, code){
+    try{
+      sessionStorage.setItem(SETUP_ID_KEY, String(identifier || ''));
+      sessionStorage.setItem(SETUP_CODE_KEY, String(code || ''));
+    } catch(e){}
+  }
 
   // /employee/logout can redirect here with ?_clear=1 to wipe the device.
   var urlParams = new URLSearchParams(window.location.search);
@@ -331,6 +339,13 @@
       }
       // Success - remember the identifier.
       writePersistedId(identifier);
+      if (data.needs_pin_setup){
+        setBusy(false);
+        writeSetupPrefill(data.identifier || identifier, data.setup_code || passcode);
+        passInput.value = '';
+        window.location.replace(data.next || '/employee/setup-code');
+        return;
+      }
       // Both-store people pick their store before landing (ckai Lane B:
       // {needs_store_pick, stores:[{key,label}], next:'/employee/select-store'}).
       if (data.needs_store_pick && data.stores && data.stores.length){

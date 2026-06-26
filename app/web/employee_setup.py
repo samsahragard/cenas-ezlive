@@ -102,7 +102,7 @@ def _resolve_setup_by_code(db, identifier: str, code: str):
         Employee A's code can NEVER set employee B's passcode (no cross-employee use).
       * VALID = used=False AND expires_at>now (so a consumed link -> code dead, and
         an expired/superseded token never matches).
-      * BRUTE-FORCE CAP: a 6-digit code is guessable, so each wrong code increments
+      * BRUTE-FORCE CAP: a 5-digit code is guessable, so each wrong code increments
         the row's code_attempts; once >= MAX_LOGIN_ATTEMPTS the token is rejected
         (returns (None,None)) even for the right code -- the manager must re-issue.
         The increment is committed so the cap survives across requests.
@@ -147,9 +147,9 @@ def send_setup_invite(employee_id, *, base_url: str | None = None) -> dict | Non
     channels -- the emailed link AND a short MANAGER-DISPLAYED code -- and email
     the link via the orders@ SMTP.
 
-    Dual-channel (Sam 2026-06-07): the link token and the 6-digit code live on the
+    Dual-channel (Sam 2026-06-07): the link token and the 5-digit code live on the
     SAME single-use EmployeeSetupToken row, so whichever the employee uses FIRST
-    consumes the row (used=True) and the OTHER stops working. Before inserting the
+    to choose a new PIN consumes the row (used=True) and the OTHER stops working. Before inserting the
     new row, all prior UNUSED tokens for this employee are invalidated (used=True)
     so only the newest reset is live (an old link + old code both die).
 
@@ -209,12 +209,9 @@ def login_passcode():
     """Email-or-phone + 5-digit passcode -> isolated employee session. 5-attempt
     lockout (15 min). Generic failure messages (anti-enumeration).
 
-    Sam 2026-06-07: a manager-issued RESET CODE also logs the employee in here --
-    they enter their email/phone + the code (instead of a PIN) and are signed in;
-    the code BECOMES their passcode (changeable later in their profile). This is
-    why the reset gives a code: the employee logs in with it directly (no separate
-    page needed). It consumes the shared single-use setup token, so the emailed
-    setup link stops working -- whichever they use FIRST wins."""
+    Sam 2026-06-25: a manager-issued RESET CODE is now temporary. If the employee
+    types that code here, the app sends them to the setup-code page to choose their
+    own new PIN; the code is never stored as the permanent passcode."""
     data = request.get_json(silent=True) or {}
     ident = (data.get("identifier") or "").strip()
     passcode = (data.get("passcode") or "").strip()
@@ -238,22 +235,18 @@ def login_passcode():
                 return manager_resp
             stores = _establish_employee_session(emp)
             return _post_login_response(stores)   # Lane B: both-store -> picker, else dashboard
-        # 2) RESET-CODE login: a valid manager-issued code (identifier-scoped +
-        #    brute-force-capped in _resolve_setup_by_code) signs them in and becomes
-        #    their passcode; consumes the shared token so the emailed link is dead.
-        emp_c, row = _resolve_setup_by_code(db, ident, passcode)
+        # 2) RESET-CODE verification: a valid manager-issued code (identifier-scoped
+        #    + brute-force-capped in _resolve_setup_by_code) sends them to choose
+        #    their own new PIN. Do not consume the token or store the code as a PIN.
+        emp_c, _row = _resolve_setup_by_code(db, ident, passcode)
         if emp_c is not None:
-            emp_c.passcode_hash = generate_password_hash(passcode)
-            emp_c.failed_attempts = 0
-            emp_c.lockout_until = None
-            emp_c.session_version = (emp_c.session_version or 0) + 1
-            row.used = True   # consume the shared single-use token -> emailed link now dead
-            db.commit()
-            manager_resp = _management_employee_json_response(db, emp_c)
-            if manager_resp is not None:
-                return manager_resp
-            stores = _establish_employee_session(emp_c)
-            return _post_login_response(stores)
+            return jsonify({
+                "ok": True,
+                "needs_pin_setup": True,
+                "next": "/employee/setup-code",
+                "identifier": ident,
+                "setup_code": passcode,
+            }), 200
         # 3) Neither a matching passcode nor a valid code -> count the failure.
         emp.failed_attempts = (emp.failed_attempts or 0) + 1
         if emp.failed_attempts >= MAX_LOGIN_ATTEMPTS:

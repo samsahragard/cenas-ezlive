@@ -299,25 +299,21 @@ def sv2_employee_reset_pin(emp_id):
     from app.web.employee_setup import send_setup_invite
     invite = send_setup_invite(emp_id)
     setup_code = (invite or {}).get("code")
-    # Dual-channel (Sam 2026-06-07): the SAME single-use token backs BOTH the
-    # emailed link AND this manager-displayed code. Whichever the employee uses
-    # FIRST sets the PIN; the other stops working. Surface the code so the manager
-    # can read it out; omit it gracefully if no invite (e.g. no email on file).
-    #
-    # Sam 2026-06-07: make the CODE a working login PIN IMMEDIATELY, on the Employee
-    # AND (critically) the linked manager User. Managers/partners sign in via
-    # /keypad-login against User.passcode -- so without setting it on the User, a
-    # manager (e.g. a KM) could never log in with the code and her OLD pin kept
-    # working. Setting it here overwrites the old pin and bumps session_version on
-    # both -> her session is killed and the code IS the new pin (changeable later).
+    # Dual-channel: the SAME single-use token backs BOTH the emailed link AND this
+    # manager-displayed code. Either channel lets the employee VERIFY the reset and
+    # choose their own new PIN; the code itself is not the permanent PIN. Once a
+    # reset code exists, overwrite the old Employee/User hashes with an unknown
+    # random value so the old PIN dies immediately while the setup token remains
+    # the only way to finish the reset.
     if setup_code:
         from werkzeug.security import generate_password_hash as _genhash
         from app.models import User as _User
+        import secrets as _secrets
         _db2 = SessionLocal()
         try:
             _emp = _db2.query(Employee).filter_by(id=emp_id).first()
             if _emp is not None:
-                _emp.passcode_hash = _genhash(setup_code)
+                _emp.passcode_hash = _genhash(_secrets.token_urlsafe(24))
                 _emp.failed_attempts = 0
                 _emp.lockout_until = None
                 _emp.session_version = (_emp.session_version or 0) + 1
@@ -325,7 +321,9 @@ def sv2_employee_reset_pin(emp_id):
                 if _uid:
                     _u = _db2.query(_User).filter_by(id=_uid).first()
                     if _u is not None:
-                        _u.passcode_hash = _genhash(setup_code)
+                        _u.passcode_hash = _genhash(_secrets.token_urlsafe(24))
+                        if hasattr(_u, "first_login_done"):
+                            _u.first_login_done = False
                         if hasattr(_u, "failed_attempts"):
                             _u.failed_attempts = 0
                         if hasattr(_u, "lockout_until"):
@@ -336,8 +334,8 @@ def sv2_employee_reset_pin(emp_id):
             _db2.close()
     resp = {"ok": True,
             "message": "We emailed a link AND generated a code. Give the code to the "
-                       "employee, or they can use the link. Whichever they use first "
-                       "sets the PIN; the other stops working."}
+                       "employee, or they can use the link. Either one lets them choose "
+                       "their own new PIN; the other stops working after setup."}
     if setup_code:
         resp["setup_code"] = setup_code
     else:

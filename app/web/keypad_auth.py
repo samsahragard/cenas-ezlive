@@ -733,18 +733,15 @@ def login_submit():
                 return _emp_signed_in()
 
             from app.web.employee_setup import _resolve_setup_by_code
-            emp_c, row = _resolve_setup_by_code(db, digits, passcode)
+            emp_c, _row = _resolve_setup_by_code(db, digits, passcode)
             if emp_c is not None and emp_c.id == emp.id:
-                emp.passcode_hash = generate_password_hash(passcode)
-                emp.failed_attempts = 0
-                emp.lockout_until = None
-                emp.session_version = (emp.session_version or 0) + 1
-                row.used = True
-                manager_login = _manager_signed_in()
-                if manager_login is not None:
-                    return manager_login
-                db.commit()
-                return _emp_signed_in()
+                return jsonify({
+                    "ok": True,
+                    "needs_pin_setup": True,
+                    "next": "/employee/setup-code",
+                    "identifier": digits,
+                    "setup_code": passcode,
+                }), 200
             _bump_failed(emp)
             return jsonify({
                 "ok": False,

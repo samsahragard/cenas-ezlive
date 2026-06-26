@@ -1698,7 +1698,7 @@
 
     if (act === "reset-pin") {
       var pm = msgEl(editEl, "pin");
-      if (!window.confirm("Reset this team member's passcode? They'll be emailed a setup link AND you'll get a code to hand over (either one sets their PIN); they'll be signed out of any current session.")) return;
+      if (!window.confirm("Reset this team member's passcode? They'll be emailed a setup link AND you'll get a code to hand over so they can choose a new PIN; they'll be signed out of any current session.")) return;
       setMsg(pm, "Resetting...", true);
       btn.disabled = true;
       // hide any code from a prior reset in this panel before re-requesting
@@ -1722,7 +1722,7 @@
             var digitsEl2 = codeBox.querySelector("[data-pin-digits]");
             var noteEl = codeBox.querySelector("[data-pin-note]");
             if (digitsEl2) digitsEl2.textContent = String(d.setup_code);
-            if (noteEl) noteEl.textContent = "Give this code to " + nm + ", or they can use the emailed link. Whichever they use first sets their PIN; the other stops working.";
+            if (noteEl) noteEl.textContent = "Give this code to " + nm + ", or they can use the emailed link. Either one lets them choose a new PIN; the other stops working after setup.";
             codeBox.classList.add("show");
             setMsg(pm, "Setup link emailed and code generated. Their old session is signed out.", true);
           } else {

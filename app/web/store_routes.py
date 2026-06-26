@@ -7301,14 +7301,10 @@ def _operations_dash_full_url(tab_key):
     slug from the current request. Falls back to "" on an unknown key so
     an iframe src is never wrong."""
     if tab_key == "team":
-        # The unified workspace is per-store (its Schedule/Market iframes need a
-        # real store). Partner/corporate-level Operations have no single store --
-        # url_for'ing /partner|/corporate/team would (a) collide with the legacy
-        # team.team_page (the OLD user-list, which then shadows it) and (b) give
-        # the per-store iframes no real store. So default those to a real store;
-        # the roster still shows ALL stores (team_roster location=all). Real-store
-        # views (dos/uno) open their own workspace. (Sam #2352-2359.)
-        _ws_store = "dos" if g.current_store in ("partner", "corporate") else g.current_store
+        # Keep the workspace scoped to the sidebar selection. The /partner/team
+        # exact route is owned by the legacy user-admin page, so partner-level
+        # Operations uses /corporate/team for the combined two-store workspace.
+        _ws_store = "corporate" if g.current_store == "partner" else g.current_store
         return url_for("store.team_workspace", store_slug=_ws_store)
     if tab_key == "sales":
         return url_for("store.sales")
@@ -7326,7 +7322,10 @@ def _operations_dash_full_url(tab_key):
     if tab_key == "schedule-reports":
         return url_for("store.schedule")        # the OLD date-range report - kept, just relabeled so it is not mistaken for scheduling
     if tab_key == "corp-order":
-        return url_for("corporate_order_public.entry")
+        return url_for(
+            "corporate_order_public.entry",
+            store_context=getattr(g, "current_store", "") or "",
+        )
     return ""   # 'forecasts' (not built) or any unknown key
 
 
@@ -7418,17 +7417,17 @@ def team_workspace():
     finally:
         _db.close()
 
-    # Schedule store selector (Sam #2589): the Schedule sub-tab embeds the Week
-    # Builder per CONCRETE store (schedules are stored by location key tomball/
-    # copperfield -> served at /dos/ + /uno/; /partner/ + /corporate/ map to
-    # 'both' and have NO schedule rows). So a user with reach to BOTH stores needs
-    # to pick which store's schedule to build. Derive the concrete options from
-    # the user's accessible stores: partner/corporate (or any mix covering both)
-    # -> Tomball + Copperfield; a single-store manager -> just their store.
+    # Inner store scope mirrors the sidebar selection: /dos shows only Tomball,
+    # /uno shows only Copperfield, /corporate and partner-level combined views
+    # show both. The per-store gate still verifies the user may reach the chosen
+    # slug before this route renders.
     from app.web.permissions import accessible_store_slugs
     _acc = accessible_store_slugs(getattr(g, "current_user", None))
     _CONCRETE = [("dos", "Tomball"), ("uno", "Copperfield")]
-    if ("partner" in _acc) or ("corporate" in _acc):
+    _cur = getattr(g, "current_store", None)
+    if _cur in ("dos", "uno"):
+        _concrete_slugs = [_cur]
+    elif _cur in ("partner", "corporate"):
         _concrete_slugs = ["dos", "uno"]
     else:
         _concrete_slugs = [s for s in ("dos", "uno") if s in _acc]
@@ -7438,11 +7437,11 @@ def team_workspace():
         # iframe request, so an out-of-scope pick just renders the friendly notice.
         _concrete_slugs = ["dos", "uno"]
     schedule_stores = [{"slug": s, "label": dict(_CONCRETE)[s]} for s in _concrete_slugs]
-    # Default the embedded schedule to the URL's store when it's already concrete
-    # (/dos/team or /uno/team), else the first option (a both-store user lands on
-    # Tomball but can switch). g.current_store is the slug the page loaded under.
-    _cur = getattr(g, "current_store", None)
+    # Default the embedded schedule to the URL's concrete store, else the first
+    # option in the combined view.
     schedule_store_default = _cur if _cur in _concrete_slugs else _concrete_slugs[0]
+    _roster_location_by_slug = {"dos": "tomball", "uno": "copperfield"}
+    roster_location = _roster_location_by_slug.get(_cur, "all")
 
     # Sam #2675: only the partner (owner) may confirm Cena<->Toast links -> pass a flag so
     # the Link tab shows Verify/Unlink to the partner only (the endpoints are partner-gated too).
@@ -7468,6 +7467,7 @@ def team_workspace():
         schedule_stores=schedule_stores,
         schedule_store_default=schedule_store_default,
         link_store_default=schedule_store_default,
+        roster_location=roster_location,
         schedule_reports_url=url_for("store.schedule", store_slug=_reports_store),
         is_partner=is_partner,
     ))

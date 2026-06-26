@@ -86,21 +86,36 @@ def test_team_pages_render_and_roster_is_section_grouped(app_with_partner):
     assert _add(client, db, "uno", "copperfield", "Kara KM", "KM", "management").status_code == 200
     assert _add(client, db, "uno", "copperfield", "Cody Cook", "Cook", "hourly").status_code == 200
 
-    # 1) Both team pages render (shell + S7 frames + S8 wiring).
-    for slug in ("uno", "dos"):
+    # 1) Single-store team pages render scoped to their selected sidebar store.
+    expected = {
+        "uno": {
+            "own": "uno",
+            "other": "dos",
+            "location": "copperfield",
+        },
+        "dos": {
+            "own": "dos",
+            "other": "uno",
+            "location": "tomball",
+        },
+    }
+    for slug, spec in expected.items():
         r = client.get(f"/{slug}/team")
         assert r.status_code == 200, r.get_data(as_text=True)[:500]
         html = r.get_data(as_text=True)
         for sub in ("team", "schedule", "market", "link", "schedule-reports"):
             assert f'data-sub="{sub}"' in html, f"missing tab {sub} on /{slug}/team"
-        for key in ("week-uno", "week-dos", "market-uno", "market-dos"):
-            assert key in html, f"missing per-store frame {key} on /{slug}/team"
-        assert 'data-src="/uno/schedules-v2/?embed=1"' in html
-        assert 'data-src="/dos/schedules-v2/?embed=1"' in html
+        assert f'data-roster-location="{spec["location"]}"' in html
+        assert f'week-{spec["own"]}' in html
+        assert f'market-{spec["own"]}' in html
+        assert f'week-{spec["other"]}' not in html
+        assert f'market-{spec["other"]}' not in html
+        assert f'data-src="/{spec["own"]}/schedules-v2/?embed=1"' in html
+        assert f'data-src="/{spec["other"]}/schedules-v2/?embed=1"' not in html
         assert 'data-src="/uno/?embed=1"' not in html
         assert 'data-src="/dos/?embed=1"' not in html
-        assert 'data-src="/uno/schedules-v2/marketplace?embed=1"' in html
-        assert 'data-src="/dos/schedules-v2/marketplace?embed=1"' in html
+        assert f'data-src="/{spec["own"]}/schedules-v2/marketplace?embed=1"' in html
+        assert f'data-src="/{spec["other"]}/schedules-v2/marketplace?embed=1"' not in html
         assert 'data-embed-frame="schedule-reports"' in html
         assert 'data-src="/partner/schedule?embed=1"' in html
         assert "data-add-section" in html, f"missing section +Add wiring on /{slug}/team"
@@ -111,6 +126,16 @@ def test_team_pages_render_and_roster_is_section_grouped(app_with_partner):
         sched_html = sched.get_data(as_text=True)
         assert "Week Builder" in sched_html
         assert "Sales mix" not in sched_html
+
+    # The combined sidebar state renders both stores in the inner workspace.
+    combined = client.get("/corporate/team")
+    assert combined.status_code == 200
+    combined_html = combined.get_data(as_text=True)
+    assert 'data-roster-location="all"' in combined_html
+    for key in ("week-uno", "week-dos", "market-uno", "market-dos"):
+        assert key in combined_html, f"missing combined frame {key}"
+    assert 'data-src="/uno/schedules-v2/?embed=1"' in combined_html
+    assert 'data-src="/dos/schedules-v2/?embed=1"' in combined_html
 
     # 2) team-roster JSON is section-grouped per store.
     rj = client.get("/dos/schedules-v2/team-roster")

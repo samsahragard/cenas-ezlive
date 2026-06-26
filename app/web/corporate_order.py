@@ -71,6 +71,12 @@ ORDER_PORTAL_PROFILES = {
         "hash": "57bff3d61f312f22ff2bb9eb5f69f8547f6bf41f52290a40f6938b262ca538fb",
     },
 }
+ORDER_PROFILE_SCOPES_BY_CONTEXT = {
+    "dos": ("corporate", "tomball"),
+    "uno": ("corporate", "copperfield"),
+    "corporate": ("corporate", "tomball", "copperfield"),
+    "partner": ("corporate", "tomball", "copperfield"),
+}
 PIN_SCOPE_BY_SLUG = {
     profile["store_slug"]: scope
     for scope, profile in ORDER_PORTAL_PROFILES.items()
@@ -108,6 +114,23 @@ def _profile_for_slug(slug: str | None) -> dict | None:
 def _corp_order_url_for_scope(scope: str) -> str:
     profile = ORDER_PORTAL_PROFILES[scope]
     return url_for("corporate_order.view", store_slug=profile["store_slug"])
+
+
+def _portal_profiles_for_context(store_context: str | None, target: str | None = None) -> dict:
+    """Return the PIN cards visible for the selected Operations store scope."""
+    context = (store_context or "").strip().lower()
+    if context not in ORDER_PROFILE_SCOPES_BY_CONTEXT:
+        if target == "tomball":
+            context = "dos"
+        elif target == "copperfield":
+            context = "uno"
+        elif target == "corporate":
+            context = "corporate"
+    scopes = ORDER_PROFILE_SCOPES_BY_CONTEXT.get(
+        context,
+        tuple(ORDER_PORTAL_PROFILES.keys()),
+    )
+    return {scope: ORDER_PORTAL_PROFILES[scope] for scope in scopes}
 
 
 def _valid_platform_session(slug: str | None) -> bool:
@@ -159,17 +182,21 @@ def entry():
     target = (request.args.get("target") or "").strip().lower()
     if target not in ORDER_PORTAL_PROFILES:
         target = ""
-    if not target and request.args.get("switch") != "1":
+    store_context = (request.args.get("store_context") or "").strip().lower()
+    if store_context not in ORDER_PROFILE_SCOPES_BY_CONTEXT:
+        store_context = ""
+    if not target and request.args.get("switch") != "1" and not store_context:
         active_slug = session.get("corporate_order_scope")
         for scope, profile in ORDER_PORTAL_PROFILES.items():
             if profile["store_slug"] == active_slug:
                 return redirect(_corp_order_url_for_scope(scope))
     return render_template(
         "corporate_order_entry.html",
-        profiles=ORDER_PORTAL_PROFILES,
+        profiles=_portal_profiles_for_context(store_context, target),
         selected=target,
         error=None,
         next_url=request.args.get("next") or "",
+        store_context=store_context,
     )
 
 
@@ -178,6 +205,9 @@ def portal_login():
     scope = (request.form.get("scope") or "").strip().lower()
     pin = (request.form.get("pin") or "").strip()
     nxt = (request.form.get("next") or "").strip()
+    store_context = (request.form.get("store_context") or "").strip().lower()
+    if store_context not in ORDER_PROFILE_SCOPES_BY_CONTEXT:
+        store_context = ""
     profile = ORDER_PORTAL_PROFILES.get(scope)
     if (
         profile is None
@@ -187,10 +217,11 @@ def portal_login():
     ):
         return render_template(
             "corporate_order_entry.html",
-            profiles=ORDER_PORTAL_PROFILES,
+            profiles=_portal_profiles_for_context(store_context, scope),
             selected=scope if scope in ORDER_PORTAL_PROFILES else "",
             error="That code did not match. Try again.",
             next_url=nxt,
+            store_context=store_context,
         ), 401
 
     session["corporate_order_scope"] = profile["store_slug"]

@@ -317,6 +317,27 @@ def test_corporate_order_public_pin_gate_opens_store_portal(dashboard_app, monke
     assert switch.status_code == 200
     assert "Corporate order login choices" in switch.get_data(as_text=True)
 
+    tomball_choices = client.get("/corporate-order?store_context=dos")
+    assert tomball_choices.status_code == 200
+    tomball_html = tomball_choices.get_data(as_text=True)
+    assert "<h2>Corporate</h2>" in tomball_html
+    assert "<h2>Tomball</h2>" in tomball_html
+    assert "<h2>Copperfield</h2>" not in tomball_html
+
+    copperfield_choices = client.get("/corporate-order?store_context=uno")
+    assert copperfield_choices.status_code == 200
+    copperfield_html = copperfield_choices.get_data(as_text=True)
+    assert "<h2>Corporate</h2>" in copperfield_html
+    assert "<h2>Copperfield</h2>" in copperfield_html
+    assert "<h2>Tomball</h2>" not in copperfield_html
+
+    combined_choices = client.get("/corporate-order?store_context=corporate")
+    assert combined_choices.status_code == 200
+    combined_html = combined_choices.get_data(as_text=True)
+    assert "<h2>Corporate</h2>" in combined_html
+    assert "<h2>Tomball</h2>" in combined_html
+    assert "<h2>Copperfield</h2>" in combined_html
+
     page = client.get("/dos/corporate-order")
     html = page.get_data(as_text=True)
     assert page.status_code == 200
@@ -525,8 +546,14 @@ def test_operations_dashboard_groups_analytics_and_keeps_team_default(dashboard_
     assert _operations_frame_src(html, "team") == "/dos/team"
 
 
-@pytest.mark.parametrize("path", ["/dos/operations?tab=corp-order", "/partner/operations?tab=corp-order"])
-def test_operations_corp_order_tab_embeds_public_pin_portal(dashboard_app, path):
+@pytest.mark.parametrize(
+    ("path", "src"),
+    [
+        ("/dos/operations?tab=corp-order", "/corporate-order?store_context=dos"),
+        ("/partner/operations?tab=corp-order", "/corporate-order?store_context=partner"),
+    ],
+)
+def test_operations_corp_order_tab_embeds_public_pin_portal(dashboard_app, path, src):
     flask_app, db = dashboard_app
     user = _seed_actor(
         db,
@@ -544,7 +571,7 @@ def test_operations_corp_order_tab_embeds_public_pin_portal(dashboard_app, path)
     html = resp.get_data(as_text=True)
     assert _active_operations_group(html) == "corp-order"
     assert "hidden" not in _operations_panel_class(html, "corp-order")
-    assert _operations_frame_src(html, "corp-order") == "/corporate-order"
+    assert _operations_frame_src(html, "corp-order") == src
 
 
 @pytest.mark.parametrize(
@@ -773,6 +800,19 @@ def test_both_store_user_gets_combined_store_switch_option(dashboard_app):
         r'class="ck-sb-store-link active"[^>]*href="/corporate/today"[^>]*>\s*Both\s*</a>',
         combined_html,
     )
+
+    ops = client.get("/corporate/operations")
+    assert ops.status_code == 200
+    ops_html = ops.get_data(as_text=True)
+    assert _operations_frame_src(ops_html, "team") == "/corporate/team"
+    assert _operations_frame_src(ops_html, "corp-order") == "/corporate-order?store_context=corporate"
+
+    team = client.get("/corporate/team")
+    assert team.status_code == 200
+    team_html = team.get_data(as_text=True)
+    assert 'data-roster-location="all"' in team_html
+    assert 'data-src="/dos/schedules-v2/?embed=1"' in team_html
+    assert 'data-src="/uno/schedules-v2/?embed=1"' in team_html
 
 
 @pytest.mark.parametrize(

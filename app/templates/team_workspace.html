@@ -348,7 +348,8 @@
 
 <div class="tws team-active" id="tws-root"
      data-roster-url="/{{ store_slug }}/schedules-v2/team-roster"
-     data-schedule-url="/{{ store_slug }}/schedules-v2/?embed=1">
+     data-schedule-url="/{{ store_slug }}/schedules-v2/?embed=1"
+     data-roster-location="{{ roster_location|default('all') }}">
 
   <div class="tws-stickybar" id="tws-stickybar">
     {# sub-tabs: real anchors (?sub=KEY) so it works without JS; JS swaps in place #}
@@ -393,8 +394,9 @@
   {# ---- SCHEDULE panel: location tabs first, then Week | Time off | Availability for that store. ---- #}
   <div class="tws-panel" id="tws-panel-schedule" data-sub-panel="schedule" role="tabpanel">
     <div class="tws-store-tabs tws-schedule-storebar" role="tablist" aria-label="Schedule location">
-      <button class="tws-store-tab active" type="button" role="tab" data-sched-store-tab="uno">Copperfield</button>
-      <button class="tws-store-tab" type="button" role="tab" data-sched-store-tab="dos">Tomball</button>
+      {% for st in schedule_stores %}
+        <button class="tws-store-tab{% if st.slug == schedule_store_default %} active{% endif %}" type="button" role="tab" data-sched-store-tab="{{ st.slug }}">{{ st.label }}</button>
+      {% endfor %}
     </div>
     <div class="tws-sched-toolbar">
       <div class="tws-subbar" role="tablist">
@@ -403,56 +405,40 @@
         <button class="tws-subtab" data-sub2="availability" type="button" role="tab">Availability</button>
       </div>
     </div>
-    <div class="tws-store-shell active" data-sched-store-panel="uno">
-      <div class="tws-sub2panel active" data-sub2-panel="week" data-sched-store="uno">
-        <div class="tws-sched-storehead">Copperfield</div>
-        <div class="tws-embed-loading" data-embed-loading="week-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Week Builder</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="week-uno" data-src="/uno/schedules-v2/?embed=1" title="Copperfield Week Builder" loading="lazy"></iframe>
+    {% for st in schedule_stores %}
+      <div class="tws-store-shell{% if st.slug == schedule_store_default %} active{% endif %}" data-sched-store-panel="{{ st.slug }}">
+        <div class="tws-sub2panel active" data-sub2-panel="week" data-sched-store="{{ st.slug }}">
+          <div class="tws-sched-storehead">{{ st.label }}</div>
+          <div class="tws-embed-loading" data-embed-loading="week-{{ st.slug }}"><span class="tws-embed-dot"></span><span>Loading {{ st.label }} Week Builder</span></div>
+          <iframe class="tws-embed-frame" data-embed-frame="week-{{ st.slug }}" data-src="/{{ st.slug }}/schedules-v2/?embed=1" title="{{ st.label }} Week Builder" loading="lazy"></iframe>
+        </div>
+        <div class="tws-sub2panel" data-sub2-panel="timeoff" data-sched-store="{{ st.slug }}">
+          <div class="tws-sched-storehead">{{ st.label }}</div>
+          <div class="tws-embed-loading" data-embed-loading="timeoff-{{ st.slug }}"><span class="tws-embed-dot"></span><span>Loading {{ st.label }} Time off</span></div>
+          <iframe class="tws-embed-frame" data-embed-frame="timeoff-{{ st.slug }}" data-src="/{{ st.slug }}/schedules-v2/time-off?embed=1" title="{{ st.label }} Time off" loading="lazy"></iframe>
+        </div>
+        <div class="tws-sub2panel" data-sub2-panel="availability" data-sched-store="{{ st.slug }}">
+          <div class="tws-sched-storehead">{{ st.label }}</div>
+          <div class="tws-embed-loading" data-embed-loading="availability-{{ st.slug }}"><span class="tws-embed-dot"></span><span>Loading {{ st.label }} Availability</span></div>
+          <iframe class="tws-embed-frame" data-embed-frame="availability-{{ st.slug }}" data-src="/{{ st.slug }}/schedules-v2/availability?embed=1" title="{{ st.label }} Availability" loading="lazy"></iframe>
+        </div>
       </div>
-      <div class="tws-sub2panel" data-sub2-panel="timeoff" data-sched-store="uno">
-        <div class="tws-sched-storehead">Copperfield</div>
-        <div class="tws-embed-loading" data-embed-loading="timeoff-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Time off</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="timeoff-uno" data-src="/uno/schedules-v2/time-off?embed=1" title="Copperfield Time off" loading="lazy"></iframe>
-      </div>
-      <div class="tws-sub2panel" data-sub2-panel="availability" data-sched-store="uno">
-        <div class="tws-sched-storehead">Copperfield</div>
-        <div class="tws-embed-loading" data-embed-loading="availability-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Availability</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="availability-uno" data-src="/uno/schedules-v2/availability?embed=1" title="Copperfield Availability" loading="lazy"></iframe>
-      </div>
-    </div>
-    <div class="tws-store-shell" data-sched-store-panel="dos">
-      <div class="tws-sub2panel active" data-sub2-panel="week" data-sched-store="dos">
-        <div class="tws-sched-storehead">Tomball</div>
-        <div class="tws-embed-loading" data-embed-loading="week-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Week Builder</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="week-dos" data-src="/dos/schedules-v2/?embed=1" title="Tomball Week Builder" loading="lazy"></iframe>
-      </div>
-      <div class="tws-sub2panel" data-sub2-panel="timeoff" data-sched-store="dos">
-        <div class="tws-sched-storehead">Tomball</div>
-        <div class="tws-embed-loading" data-embed-loading="timeoff-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Time off</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="timeoff-dos" data-src="/dos/schedules-v2/time-off?embed=1" title="Tomball Time off" loading="lazy"></iframe>
-      </div>
-      <div class="tws-sub2panel" data-sub2-panel="availability" data-sched-store="dos">
-        <div class="tws-sched-storehead">Tomball</div>
-        <div class="tws-embed-loading" data-embed-loading="availability-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Availability</span></div>
-        <iframe class="tws-embed-frame" data-embed-frame="availability-dos" data-src="/dos/schedules-v2/availability?embed=1" title="Tomball Availability" loading="lazy"></iframe>
-      </div>
-    </div>
+    {% endfor %}
   </div>
 
   {# ---- MARKET panel: the B9 manager approval queue, split by location tabs. ---- #}
   <div class="tws-panel" id="tws-panel-market" data-sub-panel="market" role="tabpanel">
     <div class="tws-store-tabs tws-market-storebar" role="tablist" aria-label="Market location">
-      <button class="tws-store-tab active" type="button" role="tab" data-market-store-tab="uno">Copperfield</button>
-      <button class="tws-store-tab" type="button" role="tab" data-market-store-tab="dos">Tomball</button>
+      {% for st in schedule_stores %}
+        <button class="tws-store-tab{% if st.slug == schedule_store_default %} active{% endif %}" type="button" role="tab" data-market-store-tab="{{ st.slug }}">{{ st.label }}</button>
+      {% endfor %}
     </div>
-    <div class="tws-store-shell active" data-market-store-panel="uno">
-      <div class="tws-embed-loading" data-embed-loading="market-uno"><span class="tws-embed-dot"></span><span>Loading Copperfield Market</span></div>
-      <iframe class="tws-embed-frame" data-embed-frame="market-uno" data-src="/uno/schedules-v2/marketplace?embed=1" title="Copperfield Market" loading="lazy"></iframe>
-    </div>
-    <div class="tws-store-shell" data-market-store-panel="dos">
-      <div class="tws-embed-loading" data-embed-loading="market-dos"><span class="tws-embed-dot"></span><span>Loading Tomball Market</span></div>
-      <iframe class="tws-embed-frame" data-embed-frame="market-dos" data-src="/dos/schedules-v2/marketplace?embed=1" title="Tomball Market" loading="lazy"></iframe>
-    </div>
+    {% for st in schedule_stores %}
+      <div class="tws-store-shell{% if st.slug == schedule_store_default %} active{% endif %}" data-market-store-panel="{{ st.slug }}">
+        <div class="tws-embed-loading" data-embed-loading="market-{{ st.slug }}"><span class="tws-embed-dot"></span><span>Loading {{ st.label }} Market</span></div>
+        <iframe class="tws-embed-frame" data-embed-frame="market-{{ st.slug }}" data-src="/{{ st.slug }}/schedules-v2/marketplace?embed=1" title="{{ st.label }} Market" loading="lazy"></iframe>
+      </div>
+    {% endfor %}
   </div>
 
   {# ---- LINK panel (Sam #2629): match Cena team members <-> Toast employees; you verify each. The Toast side wires up once the Toast API lands (samai). ----
@@ -562,6 +548,13 @@
   var root = document.getElementById("tws-root");
   if (!root) return;
   var ROSTER_URL = root.getAttribute("data-roster-url");
+  var ROSTER_LOCATION = root.getAttribute("data-roster-location") || "all";
+  var SCHEDULE_STORES = {{ (schedule_stores or [])|tojson }};
+  var STORE_SLUGS = SCHEDULE_STORES.map(function (s) { return s.slug; });
+  var SCHEDULE_STORE_DEFAULT = {{ (schedule_store_default or 'dos')|tojson }};
+  if (STORE_SLUGS.indexOf(SCHEDULE_STORE_DEFAULT) === -1) {
+    SCHEDULE_STORE_DEFAULT = STORE_SLUGS[0] || "dos";
+  }
   var IS_PARTNER = {{ (is_partner|default(false))|tojson }};   // Sam #2675: only the owner confirms Toast links
 
   /* ---------------- sub-tab switching + iframe lazy-load ---------------- */
@@ -647,11 +640,11 @@
     loadFrame("market-" + activeMarketStore);
   }
   var activeSub2 = "week";
-  var activeSchedStore = "uno";
-  var activeMarketStore = "uno";
+  var activeSchedStore = SCHEDULE_STORE_DEFAULT;
+  var activeMarketStore = SCHEDULE_STORE_DEFAULT;
 
   function setScheduleStore(slug) {
-    activeSchedStore = slug || "uno";
+    activeSchedStore = slug || SCHEDULE_STORE_DEFAULT;
     root.querySelectorAll("[data-sched-store-tab]").forEach(function (t) {
       t.classList.toggle("active", t.getAttribute("data-sched-store-tab") === activeSchedStore);
     });
@@ -667,7 +660,7 @@
   }
 
   function setMarketStore(slug) {
-    activeMarketStore = slug || "uno";
+    activeMarketStore = slug || SCHEDULE_STORE_DEFAULT;
     root.querySelectorAll("[data-market-store-tab]").forEach(function (t) {
       t.classList.toggle("active", t.getAttribute("data-market-store-tab") === activeMarketStore);
     });
@@ -691,14 +684,15 @@
     t.addEventListener("click", function (e) { e.preventDefault(); show(t.getAttribute("data-sub")); });
   });
 
-  // ---- Time-off policy settings (Sam 2026-06-13). One company policy saved to
-  // BOTH stores; the cutoff blocks the employee's date picker for N days.
-  var TOP_STORES = ["/uno", "/dos"];
+  // ---- Time-off policy settings (Sam 2026-06-13). Save to the store scope
+  // selected in the sidebar; Both saves the same policy to both concrete stores.
+  var TOP_STORES = STORE_SLUGS.map(function (slug) { return "/" + slug; });
   function _topEl(id){ return document.getElementById(id); }
   function _topStatus(msg, ok){ var s=_topEl("tws-set-status"); if(s){ s.textContent=msg||""; s.style.color = ok===false ? "#e06666" : ok===true ? "#5bd6a0" : "var(--tws-cream-meta,#b9ad97)"; } }
   function _topDaysRow(){ var on=_topEl("tws-set-cutoff") && _topEl("tws-set-cutoff").checked; var row=_topEl("tws-set-days-row"); if(row) row.style.opacity = on ? "1" : ".45"; var inp=_topEl("tws-set-days"); if(inp) inp.disabled = !on; }
   function loadTimeoffPolicy(){
-    fetch("/uno/schedules-v2/time-off/policy", {credentials:"same-origin", headers:{Accept:"application/json"}})
+    if (!TOP_STORES.length) { _topStatus("No store selected.", false); return; }
+    fetch(TOP_STORES[0] + "/schedules-v2/time-off/policy", {credentials:"same-origin", headers:{Accept:"application/json"}})
       .then(function(r){ return r.json(); })
       .then(function(j){ var p=(j&&j.policy)||{};
         if(_topEl("tws-set-approval")) _topEl("tws-set-approval").checked = (p.require_approval !== false);
@@ -745,7 +739,7 @@
   /* ---------------- Team roster: fetch + render against the contract ---------------- */
   // position is the MULTI-SELECT filter (Sam #2585): an ARRAY of selected
   // canonical names; empty array = "All positions" (no filter).
-  var state = { filter: "all", location: "all", position: [], include_inactive: false, board: null, activeStore: "", storeMeta: {} };
+  var state = { filter: "all", location: ROSTER_LOCATION, position: [], include_inactive: false, board: null, activeStore: "", storeMeta: {} };
   var elRoster = document.getElementById("tws-roster");
   var elStoreTabs = document.getElementById("tws-team-storetabs");
   var elStoreMeta = document.getElementById("tws-team-storemeta");
@@ -938,7 +932,7 @@
   var linkLoaded = false;
   var LINK_DEFAULT_STORE = {{ (link_store_default or schedule_store_default or 'dos')|tojson }};
   var linkActiveStore = LINK_DEFAULT_STORE || null;        // which store tab is showing (Copperfield-only / Tomball-only)
-  var LINK_STORES = [{ slug: "dos", label: "Tomball" }, { slug: "uno", label: "Copperfield" }];
+  var LINK_STORES = SCHEDULE_STORES.slice();
   function _ljson(r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d || {} }; }); }
   function linkCtrl(isLinked) {
     // Sam #2675: only the partner (owner) confirms. Managers see verified state read-only.

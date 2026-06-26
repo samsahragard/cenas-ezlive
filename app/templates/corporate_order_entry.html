@@ -69,7 +69,7 @@
     }
     .profiles {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 12px;
       width: 100%;
       margin-top: 20px;
@@ -156,6 +156,7 @@
           <form class="pin-form" method="POST" action="{{ url_for('corporate_order_public.portal_login') }}">
             <input type="hidden" name="scope" value="{{ scope }}">
             <input type="hidden" name="next" value="{{ next_url }}">
+            <input type="hidden" name="store_context" value="{{ store_context or '' }}">
             <input
               type="password"
               name="pin"

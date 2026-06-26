@@ -176,6 +176,15 @@
   }
   .sv2-posfilter-opt:hover { background: var(--sk-bg-card-hi); }
   .sv2-posfilter-opt input { accent-color: var(--sk-red); margin: 0; }
+  .sv2-posfilter-area {
+    color: var(--sk-gold-bright); font-weight: 900; text-transform: uppercase;
+    letter-spacing: .08em; background: rgba(228,179,64,.08);
+  }
+  .sv2-posfilter-role { padding-left: 24px; }
+  .sv2-posfilter-heading {
+    padding: 8px 8px 4px; font-size: 10.5px; color: var(--sk-cream-dim);
+    font-weight: 900; text-transform: uppercase; letter-spacing: .12em;
+  }
   .sv2-posfilter-sep { height: 1px; background: var(--sk-border-subtle); margin: 4px 2px; }
   .sv2-filter-create {
     display: grid; grid-template-columns: 1fr auto; gap: 6px; padding: 6px 2px 2px;
@@ -732,6 +741,10 @@
 
   var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var POSITION_AREAS = [
+    { key: "boh", label: "BOH", names: ["Assistant KM", "Cook", "Corporate Chef", "Dishwasher", "KM"] },
+    { key: "foh", label: "FOH", names: ["Bartender", "Busser", "Cashier", "Corporate", "Expo", "FOH Manager", "GM", "Host", "Partner", "Prep", "Server", "Training", "Well"] }
+  ];
   // Schedule week begins on this weekday (0=Sun..6=Sat), so the columns run Sun..Sat.
   var WEEK_START_DOW = 0;
   var VIEW_OPTIONS_KEY = "sv2-week-view-options-v1";
@@ -947,15 +960,82 @@
     allLab.appendChild(allCk); allLab.appendChild(document.createTextNode(" All positions"));
     elPosPop.appendChild(allLab);
     var sep = document.createElement("div"); sep.className = "sv2-posfilter-sep"; elPosPop.appendChild(sep);
-    positions.forEach(function (p) {
-      var id = String(p.id);
-      var lab = document.createElement("label"); lab.className = "sv2-posfilter-opt";
-      var ck = document.createElement("input"); ck.type = "checkbox"; ck.className = "sv2-pf-pos"; ck.value = id;
-      ck.checked = (state.posFilter.indexOf(id) !== -1);
-      lab.appendChild(ck); lab.appendChild(document.createTextNode(" " + (p.name || ("#" + id))));
-      elPosPop.appendChild(lab);
+    var rendered = {};
+    POSITION_AREAS.forEach(function (area, idx) {
+      var areaPositions = positionsForArea(positions, area);
+      if (!areaPositions.length) return;
+      if (idx > 0) {
+        var areaSep = document.createElement("div"); areaSep.className = "sv2-posfilter-sep"; elPosPop.appendChild(areaSep);
+      }
+      renderAreaFilter(area, areaPositions);
+      areaPositions.forEach(function (p) {
+        rendered[String(p.id)] = true;
+        renderPositionFilterOption(p, "sv2-posfilter-role");
+      });
     });
+    var other = positions.filter(function (p) { return !rendered[String(p.id)]; });
+    if (other.length) {
+      var otherSep = document.createElement("div"); otherSep.className = "sv2-posfilter-sep"; elPosPop.appendChild(otherSep);
+      var head = document.createElement("div"); head.className = "sv2-posfilter-heading"; head.textContent = "Other";
+      elPosPop.appendChild(head);
+      other.forEach(function (p) { renderPositionFilterOption(p, ""); });
+    }
     updatePosFilterLabel();
+  }
+
+  function normPositionName(name) {
+    return String(name || "").trim().toLowerCase();
+  }
+  function positionsForArea(positions, area) {
+    var byName = {};
+    positions.forEach(function (p) { byName[normPositionName(p.name)] = p; });
+    var out = [];
+    area.names.forEach(function (name) {
+      var p = byName[normPositionName(name)];
+      if (p) out.push(p);
+    });
+    return out;
+  }
+  function renderAreaFilter(area, areaPositions) {
+    var ids = areaPositions.map(function (p) { return String(p.id); });
+    var selected = ids.filter(function (id) { return state.posFilter.indexOf(id) !== -1; }).length;
+    var lab = document.createElement("label"); lab.className = "sv2-posfilter-opt sv2-posfilter-area";
+    var ck = document.createElement("input"); ck.type = "checkbox"; ck.className = "sv2-pf-area";
+    ck.value = area.key; ck.setAttribute("data-pos-ids", ids.join(","));
+    ck.checked = ids.length > 0 && selected === ids.length && state.posFilter.length > 0;
+    ck.indeterminate = selected > 0 && selected < ids.length;
+    lab.appendChild(ck); lab.appendChild(document.createTextNode(" " + area.label));
+    elPosPop.appendChild(lab);
+  }
+  function renderPositionFilterOption(p, extraClass) {
+    var id = String(p.id);
+    var lab = document.createElement("label");
+    lab.className = "sv2-posfilter-opt" + (extraClass ? " " + extraClass : "");
+    var ck = document.createElement("input"); ck.type = "checkbox"; ck.className = "sv2-pf-pos"; ck.value = id;
+    ck.checked = (state.posFilter.indexOf(id) !== -1);
+    lab.appendChild(ck); lab.appendChild(document.createTextNode(" " + (p.name || ("#" + id))));
+    elPosPop.appendChild(lab);
+  }
+  function allPositionIds() {
+    return ((state.board && state.board.positions) || []).map(function (p) { return String(p.id); });
+  }
+  function normalizePosFilterSelection() {
+    var ids = allPositionIds();
+    if (ids.length && state.posFilter.length >= ids.length) {
+      var chosen = {}; state.posFilter.forEach(function (id) { chosen[id] = true; });
+      var allChosen = ids.every(function (id) { return !!chosen[id]; });
+      if (allChosen) state.posFilter = [];
+    }
+  }
+  function selectedAreaLabel() {
+    if (!state.posFilter.length || !state.board) return null;
+    var selected = {}; state.posFilter.forEach(function (id) { selected[id] = true; });
+    for (var i = 0; i < POSITION_AREAS.length; i++) {
+      var area = POSITION_AREAS[i], ids = positionsForArea(state.board.positions || [], area).map(function (p) { return String(p.id); });
+      if (!ids.length || ids.length !== state.posFilter.length) continue;
+      if (ids.every(function (id) { return !!selected[id]; })) return area.label;
+    }
+    return null;
   }
 
   function buildTagFilter() {
@@ -1001,8 +1081,10 @@
 
   function updatePosFilterLabel() {
     var n = state.posFilter.length, label = "All positions";
+    var areaLabel = selectedAreaLabel();
+    if (areaLabel) label = areaLabel;
     if (n === 1) { var p = posById(state.posFilter[0]); label = p ? p.name : "1 position"; }
-    else if (n > 1) { label = n + " positions"; }
+    else if (!areaLabel && n > 1) { label = n + " positions"; }
     elPosBtn.textContent = label;
   }
 
@@ -1801,12 +1883,21 @@
     if (t.id === "sv2-pf-all") {
       state.posFilter = [];                 // "All positions" -> clear the filter
       buildPosFilter();
+    } else if (t.classList && t.classList.contains("sv2-pf-area")) {
+      var ids = (t.getAttribute("data-pos-ids") || "").split(",").filter(Boolean);
+      ids.forEach(function (id) {
+        var i = state.posFilter.indexOf(id);
+        if (t.checked && i === -1) state.posFilter.push(id);
+        else if (!t.checked && i !== -1) state.posFilter.splice(i, 1);
+      });
+      normalizePosFilterSelection();
+      buildPosFilter();
     } else if (t.classList && t.classList.contains("sv2-pf-pos")) {
       var id = t.value, i = state.posFilter.indexOf(id);
       if (t.checked && i === -1) state.posFilter.push(id);
       else if (!t.checked && i !== -1) state.posFilter.splice(i, 1);
-      var allCk = $("sv2-pf-all"); if (allCk) allCk.checked = (state.posFilter.length === 0);
-      updatePosFilterLabel();
+      normalizePosFilterSelection();
+      buildPosFilter();
     }
     if (state.board) renderGrid();
   });

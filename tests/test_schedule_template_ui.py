@@ -82,6 +82,20 @@ def test_schedule_template_has_visible_shift_bulk_select_and_inline_position_tag
     assert template.index('id="sv2-selcount"') < template.index('id="sv2-sel-edit"')
 
 
+def test_schedule_position_filter_groups_roles_by_boh_and_foh():
+    template = _read("schedules_v2_week.html")
+
+    assert 'label: "BOH"' in template
+    assert '"Assistant KM", "Cook", "Corporate Chef", "Dishwasher", "KM"' in template
+    assert 'label: "FOH"' in template
+    assert '"Bartender", "Busser", "Cashier", "Corporate", "Expo", "FOH Manager", "GM", "Host", "Partner", "Prep", "Server", "Training", "Well"' in template
+    assert "function positionsForArea(positions, area)" in template
+    assert "function renderAreaFilter(area, areaPositions)" in template
+    assert "function selectedAreaLabel()" in template
+    assert "sv2-pf-area" in template
+    assert "sv2-posfilter-role" in template
+
+
 def test_schedule_controls_and_bulk_actions_are_inside_stickybar():
     template = _read("schedules_v2_week.html")
 

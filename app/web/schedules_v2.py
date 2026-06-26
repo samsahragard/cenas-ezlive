@@ -32,11 +32,13 @@ from app.models import (
     Employee,
     EmployeePosition,
     EmployeeStoreAssignment,
+    EmployeeUnavailabilityBlock,
     Position,
     Schedule,
     Shift,
     ShiftTag,
     Tag,
+    TimeOffRequest,
     User,
 )
 from app.services import scheduling_alarms, scheduling_availability, scheduling_timeoff
@@ -811,6 +813,41 @@ def sv2_board():
                 eligible_emp_ids.add(e.id)
                 roster.append({"id": e.id, "full_name": e.full_name, "active": e.active,
                                "position_ids": held})
+        week_end = week_start + timedelta(days=6)
+        week_start_dt = datetime(week_start.year, week_start.month, week_start.day)
+        week_end_excl = week_start_dt + timedelta(days=7)
+        time_off_requests = []
+        unavailability_blocks = []
+        if eligible_emp_ids:
+            for req in (db.query(TimeOffRequest)
+                          .filter(TimeOffRequest.employee_id.in_(eligible_emp_ids),
+                                  TimeOffRequest.status.in_(("pending", "approved")),
+                                  TimeOffRequest.start_date <= week_end,
+                                  TimeOffRequest.end_date >= week_start)
+                          .order_by(TimeOffRequest.start_date.asc(), TimeOffRequest.id.asc())
+                          .all()):
+                time_off_requests.append({
+                    "id": req.id,
+                    "employee_id": req.employee_id,
+                    "start_date": req.start_date.isoformat() if req.start_date else None,
+                    "end_date": req.end_date.isoformat() if req.end_date else None,
+                    "status": req.status,
+                    "reason": req.reason,
+                })
+            for block in (db.query(EmployeeUnavailabilityBlock)
+                            .filter(EmployeeUnavailabilityBlock.employee_id.in_(eligible_emp_ids),
+                                    EmployeeUnavailabilityBlock.start_at < week_end_excl,
+                                    EmployeeUnavailabilityBlock.end_at > week_start_dt)
+                            .order_by(EmployeeUnavailabilityBlock.start_at.asc(),
+                                      EmployeeUnavailabilityBlock.id.asc())
+                            .all()):
+                unavailability_blocks.append({
+                    "id": block.id,
+                    "employee_id": block.employee_id,
+                    "start_at": block.start_at.isoformat() if block.start_at else None,
+                    "end_at": block.end_at.isoformat() if block.end_at else None,
+                    "reason": block.reason,
+                })
 
         sched = _schedule_for_week(db, store, week_start)
         shifts = []
@@ -836,6 +873,8 @@ def sv2_board():
                           "published_at": sched.published_at.isoformat() if sched.published_at else None}
                          if sched else None),
             "shifts": shifts, "roster": roster, "positions": positions, "tags": tags,
+            "time_off_requests": time_off_requests,
+            "unavailability_blocks": unavailability_blocks,
         }), 200
     finally:
         db.close()

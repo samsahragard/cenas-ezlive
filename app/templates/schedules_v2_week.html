@@ -306,6 +306,21 @@
     background: rgba(228,179,64,.12); border: 1px solid rgba(228,179,64,.22);
   }
   .sv2-chip-open-tag { font-size: 10px; letter-spacing:.1em; text-transform:uppercase; color: var(--open); font-weight:700; }
+  .sv2-request-chip {
+    display: block; border-radius: 7px; padding: 5px 7px; margin-bottom: 4px;
+    cursor: default; background: rgba(190, 190, 190, .32);
+    border-left: 3px solid rgba(250,246,236,.48);
+    border-top: 1px solid rgba(250,246,236,.13);
+    border-right: 1px solid rgba(250,246,236,.10);
+    border-bottom: 1px solid rgba(250,246,236,.10);
+    color: var(--sk-cream);
+  }
+  .sv2-request-chip.pending { border-left-color: var(--sk-gold-bright); background: rgba(160,150,128,.32); }
+  .sv2-request-chip.approved { border-left-color: var(--sk-teal-bright); }
+  .sv2-request-chip.block { border-left-color: rgba(250,246,236,.55); }
+  .sv2-request-time { font-family:'JetBrains Mono',monospace; font-size: 11px; font-weight: 700; color: var(--sk-cream); }
+  .sv2-request-label { font-size: 10.5px; color: var(--sk-cream-dim); margin-top: 1px; font-weight: 700; }
+  .sv2-request-label .status { text-transform: capitalize; }
   /* B5 acceptance state on a manager chip (lights up once the board JSON carries `response`). */
   .sv2-chip.declined { border-left-color: var(--sk-red-bright) !important; background: rgba(232,88,82,.14); box-shadow: inset 0 0 0 1px rgba(232,88,82,.45); }
   .sv2-chip.declined .sv2-chip-time { color: var(--sk-red-bright); }
@@ -464,6 +479,41 @@
     color: var(--sk-gold-bright); border-radius: var(--sk-radius-sm); font-weight: 800;
     padding: 0 12px; cursor: pointer;
   }
+  .sv2-tagbox { position: relative; }
+  .sv2-tagbox-btn {
+    width: 100%; min-height: 38px; text-align: left; border-radius: var(--sk-radius-sm);
+    border: 1px solid var(--sk-border-subtle); background: var(--sk-bg-input);
+    color: var(--sk-cream); padding: 8px 34px 8px 11px; cursor: pointer;
+    font-family:'Manrope',sans-serif; font-size: 13px; font-weight: 700;
+    position: relative;
+  }
+  .sv2-tagbox-btn::after {
+    content: "\25BE"; position: absolute; right: 11px; top: 50%;
+    transform: translateY(-50%); opacity: .62; font-size: 11px;
+  }
+  .sv2-tagbox-btn.is-empty { color: var(--sk-cream-faint); font-weight: 600; }
+  .sv2-tagbox-menu {
+    position: absolute; left: 0; right: 0; top: calc(100% + 5px); z-index: 1100;
+    background: #1d1009; border: 1px solid var(--sk-border-active);
+    border-radius: var(--sk-radius-sm); padding: 9px; box-shadow: 0 14px 34px rgba(0,0,0,.62);
+  }
+  .sv2-tagbox-search { display: grid; grid-template-columns: 1fr auto; gap: 7px; margin-bottom: 8px; }
+  .sv2-tagbox-search input {
+    min-width: 0; background: var(--sk-bg-input); border: 1px solid var(--sk-border-subtle);
+    border-radius: var(--sk-radius-sm); color: var(--sk-cream); padding: 8px 10px; font-size: 13px;
+  }
+  .sv2-tagbox-search button {
+    border: 1px solid var(--sk-border-active); background: rgba(228,179,64,.12);
+    color: var(--sk-gold-bright); border-radius: var(--sk-radius-sm); font-weight: 800;
+    padding: 0 12px; cursor: pointer;
+  }
+  .sv2-tagbox-options { max-height: 190px; overflow-y: auto; display: grid; gap: 3px; }
+  .sv2-tag-option {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px;
+    border-radius: 7px; color: var(--sk-cream); cursor: pointer; font-size: 13px;
+  }
+  .sv2-tag-option:hover { background: var(--sk-bg-card-hi); }
+  .sv2-tag-option input { margin: 0; accent-color: var(--sk-gold-bright); }
   .sv2-modal-actions { display: flex; gap: 10px; margin-top: 18px; }
   .sv2-modal-actions .sv2-spacer { flex: 1; }
   .sv2-err { color: var(--sk-red-bright); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
@@ -636,10 +686,17 @@
 
       <div class="sv2-field" id="sv2-tagfield">
         <label>Tags</label>
-        <div class="sv2-tags" id="sv2-m-tags"></div>
-        <div class="sv2-tag-create">
-          <input class="sv2-input" id="sv2-m-tag-new" type="text" maxlength="120" placeholder="Add a tag">
-          <button type="button" id="sv2-m-tag-add">Add</button>
+        <div class="sv2-tagbox" id="sv2-m-tagbox">
+          <button type="button" class="sv2-tagbox-btn is-empty" id="sv2-m-tagbox-btn" aria-haspopup="true" aria-expanded="false">
+            <span id="sv2-m-tagbox-label">No tags selected</span>
+          </button>
+          <div class="sv2-tagbox-menu sv2-hidden" id="sv2-m-tagbox-menu" role="group" aria-label="Shift tags">
+            <div class="sv2-tagbox-search">
+              <input id="sv2-m-tag-new" type="text" maxlength="120" placeholder="Search or add tag" autocomplete="off">
+              <button type="button" id="sv2-m-tag-add">Add</button>
+            </div>
+            <div class="sv2-tagbox-options" id="sv2-m-tags"></div>
+          </div>
         </div>
       </div>
 
@@ -870,7 +927,7 @@
           show(elAccess);
         } else {
           // backend not ready yet / transient: show the empty grid shell
-          state.board = state.board || { schedule: null, shifts: [], roster: [], positions: [], tags: [] };
+          state.board = state.board || { schedule: null, shifts: [], roster: [], positions: [], tags: [], time_off_requests: [], unavailability_blocks: [] };
           buildTagFilter(); setStatus(); renderGrid();
           $("sv2-access-msg").textContent = "Could not load this week (the schedule service may still be deploying). Try again shortly.";
           show(elAccess);
@@ -1080,9 +1137,57 @@
     return shiftsFor(emp, isoDay).concat(conflictShiftsFor(emp, isoDay)).sort(sortShifts);
   }
 
+  function dayStartEnd(isoDay) {
+    var start = parseDateOnly(isoDay);
+    return { start: start, end: addDays(start, 1) };
+  }
+  function requestItemsFor(emp, isoDay) {
+    if (!emp || emp.id == null || emp.former) return [];
+    var out = [], empId = String(emp.id), bounds = dayStartEnd(isoDay);
+    ((state.board && state.board.time_off_requests) || []).forEach(function (r) {
+      if (String(r.employee_id) !== empId) return;
+      if (String(r.status || "") !== "pending" && String(r.status || "") !== "approved") return;
+      if (String(r.start_date || "") <= isoDay && String(r.end_date || "") >= isoDay) {
+        out.push({ kind: "timeoff", status: String(r.status || "pending"), reason: r.reason || "" });
+      }
+    });
+    ((state.board && state.board.unavailability_blocks) || []).forEach(function (b) {
+      if (String(b.employee_id) !== empId) return;
+      var s = parseISO(b.start_at), e = parseISO(b.end_at);
+      if (!s || !e) return;
+      if (s < bounds.end && e > bounds.start) {
+        out.push({ kind: "block", start_at: b.start_at, end_at: b.end_at, reason: b.reason || "" });
+      }
+    });
+    return out;
+  }
+  function requestChipHtml(item, isoDay) {
+    var cls = "sv2-request-chip ";
+    var timeText = "All day", label = "Unavailable", title = item.reason || "";
+    if (item.kind === "timeoff") {
+      cls += item.status === "approved" ? "approved" : "pending";
+      label = 'Time off - <span class="status">' + esc(item.status || "pending") + '</span>';
+      title = (item.status === "approved" ? "Approved" : "Pending") + " time off" + (title ? ": " + title : "");
+    } else {
+      cls += "block";
+      var bounds = dayStartEnd(isoDay), s = parseISO(item.start_at), e = parseISO(item.end_at);
+      if (s && e) {
+        if (s > bounds.start || e < bounds.end) {
+          timeText = fmtTime(s < bounds.start ? bounds.start : s) + " - " + fmtTime(e > bounds.end ? bounds.end : e);
+        }
+      }
+      title = "Unavailable" + (title ? ": " + title : "");
+    }
+    return '<div class="' + cls + '" title="' + esc(title) + '">' +
+             '<div class="sv2-request-time">' + esc(timeText) + '</div>' +
+             '<div class="sv2-request-label">' + label + '</div>' +
+           '</div>';
+  }
+
   function hasVisibleShifts(emp) {
     for (var i = 0; i < 7; i++) {
-      if (visibleShiftsFor(emp, isoDate(addDays(state.weekStart, i))).length) return true;
+      var iso = isoDate(addDays(state.weekStart, i));
+      if (visibleShiftsFor(emp, iso).length || requestItemsFor(emp, iso).length) return true;
     }
     return false;
   }
@@ -1281,10 +1386,11 @@
       conflictShiftsFor(emp, iso).forEach(function (s) { visible.push({ shift: s, conflict: true }); });
       visible.sort(function (a, b) { return sortShifts(a.shift, b.shift); });
       var chips = visible.map(function (item) { return chipHtml(item.shift, item.conflict ? { conflict: true } : null); }).join("");
+      var requestChips = requestItemsFor(emp, iso).map(function (item) { return requestChipHtml(item, iso); }).join("");
       var addable = (hasDraft && !isFormer) ? '<div class="sv2-addhint">+</div>' : "";
       tds += '<td class="sv2-cell ' + (isT ? "is-today" : "") + '" data-emp="' +
              (emp.id == null ? "" : emp.id) + '" data-date="' + iso + '">' +
-             chips + (chips ? "" : addable) + '</td>';
+             requestChips + chips + ((requestChips || chips) ? "" : addable) + '</td>';
     }
     return '<tr class="sv2-row ' + (isOpen ? "open" : "") + (isFormer ? " former" : "") + '">' + tds + '</tr>';
   }
@@ -1354,8 +1460,8 @@
       });
     }
     fillSelect(emp, assignable, "id", "full_name", "Open shift (unassigned)");
+    closeTagDropdown();
     fillTags(state.board.tags || []);
-    $("sv2-m-tag-new").value = "";
     emp.onchange = function () {
       var keep = pos.value;
       var allowed = fillPositionSelectForEmployee(emp.value, null);
@@ -1408,7 +1514,7 @@
     if (!d) return "";
     return DOW[(d.getDay() + 6) % 7] + " " + MON[d.getMonth()] + " " + d.getDate();
   }
-  function closeModal() { mb.classList.remove("show"); clearModalPlacement(); state.editing = null; }
+  function closeModal() { closeTagDropdown(); mb.classList.remove("show"); clearModalPlacement(); state.editing = null; }
 
   function fillSelect(sel, items, vkey, lkey, zeroLabel) {
     var cur = sel.value;
@@ -1450,29 +1556,76 @@
     return false;
   }
   function fillTags(tags) {
-    var wrap = $("sv2-m-tags"), tf = $("sv2-tagfield");
+    var tf = $("sv2-tagfield"), search = $("sv2-m-tag-new");
     tf.classList.remove("sv2-hidden");
-    wrap.innerHTML = "";
+    if (search) search.value = "";
+    renderModalTags();
+  }
+  function selectedTagNames() {
+    var out = [];
+    ((state.board && state.board.tags) || []).forEach(function (t) {
+      if (state.selTags[String(t.id)] || state.selTags[t.id]) out.push(t.name || ("#" + t.id));
+    });
+    return out;
+  }
+  function updateTagDropdownLabel() {
+    var btn = $("sv2-m-tagbox-btn"), lab = $("sv2-m-tagbox-label"), names = selectedTagNames();
+    if (!btn || !lab) return;
+    btn.classList.toggle("is-empty", names.length === 0);
+    lab.textContent = names.length === 0 ? "No tags selected"
+      : (names.length === 1 ? names[0] : names.length + " tags selected");
+  }
+  function renderModalTags() {
+    var wrap = $("sv2-m-tags"), search = $("sv2-m-tag-new");
+    if (!wrap) return;
+    var q = String((search && search.value) || "").trim().toLowerCase();
+    var tags = ((state.board && state.board.tags) || []).filter(function (t) {
+      return !q || String(t.name || "").toLowerCase().indexOf(q) !== -1;
+    });
     if (!tags.length) {
-      wrap.innerHTML = '<span class="sv2-tags-empty">No tags yet.</span>';
+      wrap.innerHTML = '<span class="sv2-tags-empty">' + (q ? "No matching tags." : "No tags yet.") + '</span>';
+      updateTagDropdownLabel();
       return;
     }
+    wrap.innerHTML = "";
     tags.forEach(function (t) {
-      var b = document.createElement("span");
-      b.className = "sv2-tag"; b.setAttribute("data-tag", t.id); b.textContent = t.name;
-      b.onclick = function () {
-        if (state.selTags[t.id]) delete state.selTags[t.id]; else state.selTags[t.id] = true;
-        paintTags();
-      };
-      wrap.appendChild(b);
+      var id = String(t.id);
+      var lab = document.createElement("label");
+      lab.className = "sv2-tag-option";
+      lab.innerHTML = '<input type="checkbox" data-modal-tag="' + esc(id) + '"><span></span>';
+      lab.querySelector("span").textContent = t.name || ("#" + id);
+      var ck = lab.querySelector("input");
+      ck.checked = !!(state.selTags[id] || state.selTags[t.id]);
+      wrap.appendChild(lab);
     });
+    updateTagDropdownLabel();
   }
   function paintTags() {
-    var nodes = document.querySelectorAll("#sv2-m-tags .sv2-tag");
+    var nodes = document.querySelectorAll("#sv2-m-tags input[data-modal-tag]");
     nodes.forEach(function (n) {
-      var id = n.getAttribute("data-tag");
-      if (state.selTags[id]) n.classList.add("on"); else n.classList.remove("on");
+      var id = n.getAttribute("data-modal-tag");
+      n.checked = !!(state.selTags[id] || state.selTags[+id]);
     });
+    updateTagDropdownLabel();
+  }
+  function openTagDropdown() {
+    var menu = $("sv2-m-tagbox-menu"), btn = $("sv2-m-tagbox-btn"), search = $("sv2-m-tag-new");
+    if (!menu || !btn) return;
+    menu.classList.remove("sv2-hidden");
+    btn.setAttribute("aria-expanded", "true");
+    renderModalTags();
+    setTimeout(function () { if (search) search.focus(); }, 40);
+  }
+  function closeTagDropdown() {
+    var menu = $("sv2-m-tagbox-menu"), btn = $("sv2-m-tagbox-btn");
+    if (!menu || !btn) return;
+    menu.classList.add("sv2-hidden");
+    btn.setAttribute("aria-expanded", "false");
+  }
+  function toggleTagDropdown() {
+    var menu = $("sv2-m-tagbox-menu");
+    if (menu && menu.classList.contains("sv2-hidden")) openTagDropdown();
+    else closeTagDropdown();
   }
   function sortTags() {
     if (!state.board) return;
@@ -1481,7 +1634,7 @@
     });
   }
   function addTagToBoard(tag) {
-    if (!state.board) state.board = { schedule: null, shifts: [], roster: [], positions: [], tags: [] };
+    if (!state.board) state.board = { schedule: null, shifts: [], roster: [], positions: [], tags: [], time_off_requests: [], unavailability_blocks: [] };
     var tags = state.board.tags || [];
     var found = false;
     for (var i = 0; i < tags.length; i++) {
@@ -1716,6 +1869,7 @@
     if (elViewPop && !elViewPop.classList.contains("sv2-hidden")) {
       elViewPop.classList.add("sv2-hidden"); elViewBtn.setAttribute("aria-expanded", "false");
     }
+    closeTagDropdown();
   });
   $("sv2-createdraft").onclick = createDraft;
   $("sv2-createdraft2").onclick = createDraft;
@@ -1729,6 +1883,15 @@
   $("sv2-m-save").onclick = function () { saveShift(false); };
   $("sv2-m-publish").onclick = function () { saveShift(true); };
   $("sv2-m-delete").onclick = deleteShift;
+  $("sv2-m-tagbox-btn").onclick = function (e) { e.stopPropagation(); toggleTagDropdown(); };
+  $("sv2-m-tagbox-menu").addEventListener("click", function (e) { e.stopPropagation(); });
+  $("sv2-m-tags").addEventListener("change", function (e) {
+    var ck = e.target && e.target.getAttribute && e.target.getAttribute("data-modal-tag");
+    if (!ck) return;
+    if (e.target.checked) state.selTags[ck] = true; else delete state.selTags[ck];
+    paintTags();
+  });
+  $("sv2-m-tag-new").addEventListener("input", renderModalTags);
   $("sv2-m-tag-add").onclick = function () { createTagFromInput($("sv2-m-tag-new"), true, false); };
   $("sv2-m-tag-new").addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
@@ -1741,6 +1904,8 @@
 
   // grid click delegation: chip -> edit, empty cell -> new
   elBody.onclick = function (e) {
+    var reqChip = e.target.closest ? e.target.closest(".sv2-request-chip") : null;
+    if (reqChip) { e.stopPropagation(); return; }
     // Phase 2d: a click on the chip's checkbox toggles selection (for bulk
     // edit / copy / delete) rather than opening the shift editor.
     var box = e.target.closest ? e.target.closest(".sv2-chip-check") : null;

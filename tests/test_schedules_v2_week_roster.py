@@ -10,9 +10,11 @@ from app.models import (
     Employee,
     EmployeePosition,
     EmployeeStoreAssignment,
+    EmployeeUnavailabilityBlock,
     Position,
     Schedule,
     Shift,
+    TimeOffRequest,
     User,
 )
 from app.services.schedule_import import _week_start
@@ -178,3 +180,79 @@ def test_week_board_reads_legacy_saturday_schedule_key(db_session, monkeypatch):
     assert data["schedule"]["week_start"] == "2026-06-06"
     assert [r["full_name"] for r in data["roster"]] == ["Linked Active"]
     assert {sh["employee_id"] for sh in data["shifts"]} == {20}
+
+
+def test_week_board_includes_time_off_and_unavailability_markers(db_session, monkeypatch):
+    from app import create_app
+    from app import db as appdb
+    from app.web import permissions as perm_mod
+    from app.web import schedules_v2 as sv2_mod
+    from app.web import store_routes as store_mod
+
+    db_session.add(User(
+        id=1,
+        full_name="Partner",
+        email="partner@test.local",
+        passcode_hash=generate_password_hash("12345"),
+        permission_level="partner",
+        store_scope=None,
+        active=True,
+        first_login_done=True,
+        session_version=1,
+    ))
+    _seed_position(db_session, 10, "Cook")
+    _seed_employee(db_session, 20, "Linked Active", active=True, position_id=10, linked=True)
+    db_session.add(Schedule(
+        id=100,
+        store_key="tomball",
+        week_start=date(2026, 6, 7),
+        status="draft",
+        created_by=1,
+    ))
+    db_session.add(TimeOffRequest(
+        employee_id=20,
+        start_date=date(2026, 6, 9),
+        end_date=date(2026, 6, 10),
+        status="pending",
+        reason="family",
+    ))
+    db_session.add(TimeOffRequest(
+        employee_id=20,
+        start_date=date(2026, 6, 12),
+        end_date=date(2026, 6, 12),
+        status="approved",
+        reason="appointment",
+    ))
+    db_session.add(TimeOffRequest(
+        employee_id=20,
+        start_date=date(2026, 6, 11),
+        end_date=date(2026, 6, 11),
+        status="denied",
+        reason="hidden",
+    ))
+    db_session.add(EmployeeUnavailabilityBlock(
+        employee_id=20,
+        start_at=datetime(2026, 6, 11, 10, 0),
+        end_at=datetime(2026, 6, 11, 16, 0),
+        reason="school",
+    ))
+    db_session.commit()
+
+    flask_app = create_app()
+    flask_app.config["TESTING"] = True
+    sess = lambda: db_session
+    for mod in (appdb, perm_mod, sv2_mod, store_mod):
+        if hasattr(mod, "SessionLocal"):
+            monkeypatch.setattr(mod, "SessionLocal", sess, raising=False)
+
+    response = _partner_client(flask_app).get("/dos/schedules-v2/board?week=2026-06-07")
+    assert response.status_code == 200, response.get_data(as_text=True)[:500]
+    data = response.get_json()
+
+    assert [r["status"] for r in data["time_off_requests"]] == ["pending", "approved"]
+    assert data["time_off_requests"][0]["start_date"] == "2026-06-09"
+    assert data["time_off_requests"][0]["end_date"] == "2026-06-10"
+    assert data["time_off_requests"][1]["start_date"] == "2026-06-12"
+    assert len(data["unavailability_blocks"]) == 1
+    assert data["unavailability_blocks"][0]["start_at"] == "2026-06-11T10:00:00"
+    assert data["unavailability_blocks"][0]["end_at"] == "2026-06-11T16:00:00"

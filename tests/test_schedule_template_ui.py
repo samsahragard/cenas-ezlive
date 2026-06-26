@@ -43,15 +43,32 @@ def test_schedule_template_has_sling_style_tag_filter_and_create_controls():
 
     assert 'id="sv2-tagfilter-btn"' in template
     assert 'id="sv2-tagfilter-pop"' in template
+    assert 'id="sv2-m-tagbox-btn"' in template
+    assert 'id="sv2-m-tagbox-menu"' in template
     assert 'id="sv2-m-tag-new"' in template
     assert 'id="sv2-m-tag-add"' in template
+    assert "Search or add tag" in template
     assert "state.tagFilter" in template
     assert "function buildTagFilter()" in template
+    assert "function renderModalTags()" in template
+    assert "function toggleTagDropdown()" in template
     assert "function createTagFromInput(input, selectInModal, selectInFilter)" in template
     assert "state.selTags[id] = true" in template
     assert "state.tagFilter.push(id)" in template
     assert "function shiftTags(s)" in template
     assert "sv2-chip-tag" in template
+
+
+def test_schedule_template_renders_time_off_markers_on_grid():
+    template = _read("schedules_v2_week.html")
+
+    assert "time_off_requests" in template
+    assert "unavailability_blocks" in template
+    assert "function requestItemsFor(emp, isoDay)" in template
+    assert "function requestChipHtml(item, isoDay)" in template
+    assert "sv2-request-chip" in template
+    assert "Time off -" in template
+    assert "Unavailable" in template
 
 
 def test_schedule_template_has_visible_shift_bulk_select_and_inline_position_tags():

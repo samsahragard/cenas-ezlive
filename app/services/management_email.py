@@ -442,7 +442,7 @@ def _default_accounts() -> list[MailAccount]:
                 names=["Javier", "Javier Cruz"],
             ),
             _siteground_account(
-                "angelic", "angelic@cenaskitchen.com", "ANGELIC_EMAIL_PWD",
+                "angelica", "angelica@cenaskitchen.com", "ANGELICA_EMAIL_PWD",
                 names=["Angelic", "Angelica", "Angelica Barton", "Angelica Truss"],
             ),
             _siteground_account(

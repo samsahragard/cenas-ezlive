@@ -1039,9 +1039,9 @@ def sv2_shift_delete(shift_id):
         db.close()
 
 
-@store_bp.route("/schedules-v2/shifts/delete-open-drafts", methods=["GET", "POST"])
+@store_bp.route("/schedules-v2/shifts/cleanup-open-drafts", methods=["GET", "POST"])
 @require_level("partner")
-def sv2_delete_open_draft_shifts():
+def sv2_cleanup_open_draft_shifts():
     """Partner cleanup for accidental copied open draft rows.
 
     This is deliberately narrow: it only deletes shifts in the current store and

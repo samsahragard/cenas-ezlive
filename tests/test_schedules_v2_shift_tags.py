@@ -273,7 +273,7 @@ def test_selected_shift_copy_to_week_skips_exact_duplicates(db_session, monkeypa
     assert len(rows) == 1
 
 
-def test_delete_open_draft_shifts_only_removes_accidental_open_unpublished_rows(db_session, monkeypatch):
+def test_cleanup_open_draft_shifts_only_removes_accidental_open_unpublished_rows(db_session, monkeypatch):
     flask_app = _bind_app(db_session, monkeypatch)
     client = _partner_client(flask_app)
 
@@ -329,12 +329,12 @@ def test_delete_open_draft_shifts_only_removes_accidental_open_unpublished_rows(
     ])
     db_session.commit()
 
-    missing_confirm = client.post("/dos/schedules-v2/shifts/delete-open-drafts", json={
+    missing_confirm = client.post("/dos/schedules-v2/shifts/cleanup-open-drafts", json={
         "week": "2026-06-14",
     })
     assert missing_confirm.status_code == 400
 
-    cleaned = client.post("/dos/schedules-v2/shifts/delete-open-drafts", json={
+    cleaned = client.post("/dos/schedules-v2/shifts/cleanup-open-drafts", json={
         "week": "2026-06-14",
         "confirm": "DELETE_OPEN_DRAFTS",
     })

@@ -65,6 +65,7 @@
     function open() {
       host.dataset.open = 'true';
       document.body.classList.add('ck-drawer-open');
+      document.body.classList.add('sidebar-open');
       if (trigger) trigger.setAttribute('aria-expanded', 'true');
       if (sidebar) sidebar.setAttribute('aria-hidden', 'false');
     }
@@ -72,6 +73,7 @@
     function close() {
       host.dataset.open = 'false';
       document.body.classList.remove('ck-drawer-open');
+      document.body.classList.remove('sidebar-open');
       if (trigger) trigger.setAttribute('aria-expanded', 'false');
       if (sidebar) sidebar.setAttribute('aria-hidden', 'true');
     }

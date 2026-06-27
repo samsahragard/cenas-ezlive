@@ -271,3 +271,78 @@ def test_selected_shift_copy_to_week_skips_exact_duplicates(db_session, monkeypa
     target_schedule = db_session.get(Schedule, first.get_json()["target_schedule_id"])
     rows = db_session.query(Shift).filter_by(schedule_id=target_schedule.id).all()
     assert len(rows) == 1
+
+
+def test_delete_open_draft_shifts_only_removes_accidental_open_unpublished_rows(db_session, monkeypatch):
+    flask_app = _bind_app(db_session, monkeypatch)
+    client = _partner_client(flask_app)
+
+    db_session.add(Schedule(
+        id=101,
+        store_key="tomball",
+        week_start=date(2026, 6, 14),
+        status="draft",
+        created_by=1,
+    ))
+    db_session.add_all([
+        Shift(
+            id=300,
+            schedule_id=101,
+            employee_id=None,
+            position_id=10,
+            start_at=datetime(2026, 6, 14, 9, 0),
+            end_at=datetime(2026, 6, 14, 15, 0),
+            status="open",
+            published_at=None,
+        ),
+        Shift(
+            id=301,
+            schedule_id=101,
+            employee_id=20,
+            position_id=10,
+            start_at=datetime(2026, 6, 14, 10, 0),
+            end_at=datetime(2026, 6, 14, 16, 0),
+            status="assigned",
+            published_at=None,
+        ),
+        Shift(
+            id=302,
+            schedule_id=101,
+            employee_id=None,
+            position_id=10,
+            start_at=datetime(2026, 6, 15, 9, 0),
+            end_at=datetime(2026, 6, 15, 15, 0),
+            status="open",
+            published_at=datetime(2026, 6, 1, 12, 0),
+        ),
+        Shift(
+            id=303,
+            schedule_id=101,
+            employee_id=None,
+            position_id=10,
+            start_at=datetime(2026, 6, 16, 9, 0),
+            end_at=datetime(2026, 6, 16, 15, 0),
+            status="open",
+            display_name="Former Person",
+            published_at=None,
+        ),
+    ])
+    db_session.commit()
+
+    missing_confirm = client.post("/dos/schedules-v2/shifts/delete-open-drafts", json={
+        "week": "2026-06-14",
+    })
+    assert missing_confirm.status_code == 400
+
+    cleaned = client.post("/dos/schedules-v2/shifts/delete-open-drafts", json={
+        "week": "2026-06-14",
+        "confirm": "DELETE_OPEN_DRAFTS",
+    })
+    assert cleaned.status_code == 200, cleaned.get_data(as_text=True)
+    body = cleaned.get_json()
+    assert body["deleted"] == 1
+    assert body["ids"] == [300]
+
+    db_session.expire_all()
+    remaining_ids = [row.id for row in db_session.query(Shift).filter_by(schedule_id=101).order_by(Shift.id).all()]
+    assert remaining_ids == [301, 302, 303]

@@ -1039,6 +1039,55 @@ def sv2_shift_delete(shift_id):
         db.close()
 
 
+@store_bp.route("/schedules-v2/shifts/delete-open-drafts", methods=["GET", "POST"])
+@require_level("partner")
+def sv2_delete_open_draft_shifts():
+    """Partner cleanup for accidental copied open draft rows.
+
+    This is deliberately narrow: it only deletes shifts in the current store and
+    target week that are open, unassigned, unpublished, and not former-staff
+    display rows.
+    """
+    data = request.get_json(silent=True) or {}
+    week_raw = (data.get("week") or request.values.get("week") or "").strip()
+    confirm = (data.get("confirm") or request.values.get("confirm") or "").strip()
+    if confirm != "DELETE_OPEN_DRAFTS":
+        return jsonify({"ok": False, "error": "confirmation required"}), 400
+    try:
+        week_start = _date.fromisoformat(week_raw)
+    except Exception:
+        return jsonify({"ok": False, "error": "week required (YYYY-MM-DD)"}), 400
+
+    db = SessionLocal()
+    try:
+        sched = _schedule_for_week(db, _store(), week_start)
+        if sched is None:
+            return jsonify({"ok": True, "deleted": 0, "store": _store(),
+                            "week_start": week_start.isoformat(),
+                            "schedule_id": None}), 200
+        targets = []
+        for sh in (db.query(Shift)
+                     .filter_by(schedule_id=sched.id, status="open")
+                     .filter(Shift.employee_id.is_(None),
+                             Shift.published_at.is_(None))
+                     .all()):
+            if (sh.display_name or "").strip():
+                continue
+            targets.append(sh)
+        ids = [sh.id for sh in targets]
+        if ids:
+            db.query(ShiftTag).filter(ShiftTag.shift_id.in_(ids)).delete(synchronize_session=False)
+            for sh in targets:
+                db.delete(sh)
+            sched.updated_at = datetime.utcnow()
+            db.commit()
+        return jsonify({"ok": True, "deleted": len(ids), "ids": ids,
+                        "store": _store(), "week_start": week_start.isoformat(),
+                        "schedule_id": sched.id}), 200
+    finally:
+        db.close()
+
+
 @store_bp.route("/schedules-v2/shifts/bulk-copy", methods=["POST"])
 @require_level(_MGR)
 def sv2_shift_bulk_copy():

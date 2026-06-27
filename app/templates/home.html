@@ -934,6 +934,7 @@
   var mailboxAccounts = [];
   var activeAccount = null;
   var activeMessageId = null;
+  var mailboxSyncing = false;
 
   var accountEl = document.getElementById("mailboxAccounts");
   var listEl = document.getElementById("mailboxList");
@@ -1005,6 +1006,7 @@
         btn.classList.add("is-active");
         renderImportStatus();
         loadMessages();
+        syncMailbox({auto: true});
       });
       accountEl.appendChild(btn);
     });
@@ -1021,6 +1023,7 @@
         renderAccounts(data.default_account);
         if ((activeAccountData() || {}).connected || Number((activeAccountData() || {}).cached_count || 0) > 0) {
           loadMessages();
+          syncMailbox({auto: true});
         } else {
           state(listEl, "This login does not have a connected mailbox yet.");
           state(detailEl, "Use your personal login to open the mailbox assigned to you.");
@@ -1032,14 +1035,25 @@
   }
 
   function runImport() {
-    if (!activeAccount || !importBtn) return;
-    importBtn.disabled = true;
-    if (importStatusEl) importStatusEl.textContent = "Syncing mailbox...";
+    syncMailbox({auto: false});
+  }
+
+  function syncMailbox(options) {
+    options = options || {};
+    if (!activeAccount || mailboxSyncing) return;
+    var syncAccountKey = activeAccount;
+    var selectedAccount = activeAccountData() || {};
+    if (!selectedAccount.connected) return;
+    mailboxSyncing = true;
+    if (importBtn) importBtn.disabled = true;
+    if (importStatusEl) {
+      importStatusEl.textContent = options.auto ? "Checking for new email..." : "Syncing mailbox...";
+    }
     fetch("/dashboard/email/sync", {
       method: "POST",
       credentials: "same-origin",
       headers: {"Content-Type": "application/json", "Accept": "application/json"},
-      body: JSON.stringify({account: activeAccount})
+      body: JSON.stringify({account: syncAccountKey})
     })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j; return j; }); })
       .then(function (data) {
@@ -1047,17 +1061,19 @@
         var inserted = Number(result.inserted || 0);
         var updated = Number(result.updated || 0);
         if (importStatusEl) {
-          importStatusEl.textContent = "Synced " + inserted.toLocaleString() +
-            " new, refreshed " + updated.toLocaleString() + ".";
+          importStatusEl.textContent = inserted || updated
+            ? "Synced " + inserted.toLocaleString() + " new, refreshed " + updated.toLocaleString() + "."
+            : "Mailbox is up to date.";
         }
-        var account = activeAccountData();
+        var account = mailboxAccounts.find(function (a) { return a.key === syncAccountKey; });
         if (account && result.cached_count != null) account.cached_count = result.cached_count;
-        loadMessages();
+        if (activeAccount === syncAccountKey) loadMessages();
       })
       .catch(function (err) {
-        if (importStatusEl) importStatusEl.textContent = (err && (err.detail || err.error)) || "Import failed.";
+        if (importStatusEl) importStatusEl.textContent = (err && (err.detail || err.error)) || "Sync failed.";
       })
       .finally(function () {
+        mailboxSyncing = false;
         var account = activeAccountData() || {};
         if (importBtn) importBtn.disabled = !account.connected;
       });
@@ -1225,13 +1241,17 @@
   }
 
   if (searchBtn) searchBtn.addEventListener("click", loadMessages);
-  if (refreshBtn) refreshBtn.addEventListener("click", loadMessages);
+  if (refreshBtn) refreshBtn.addEventListener("click", function () {
+    loadMessages();
+    syncMailbox({auto: true});
+  });
   if (importBtn) importBtn.addEventListener("click", runImport);
   if (searchEl) {
     searchEl.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter") loadMessages();
     });
   }
+  initMailbox();
 })();
 </script>
 {% endif %}

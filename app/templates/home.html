@@ -844,7 +844,7 @@
         <input type="search" id="mailboxSearch" placeholder="Search mail" autocomplete="off">
         <button type="button" class="mailbox-icon-btn" id="mailboxSearchBtn">Search</button>
         <button type="button" class="mailbox-icon-btn" id="mailboxRefreshBtn">Refresh</button>
-        <button type="button" class="mailbox-icon-btn" id="mailboxImportBtn">Import 60 days</button>
+        <button type="button" class="mailbox-icon-btn" id="mailboxImportBtn">Sync now</button>
       </div>
       <div class="mailbox-import-status" id="mailboxImportStatus"></div>
     </div>
@@ -973,8 +973,8 @@
         if ((activeAccountData() || {}).connected || Number((activeAccountData() || {}).cached_count || 0) > 0) {
           loadMessages();
         } else {
-          state(listEl, "sam@cenaskitchen.com is ready in the dashboard, but the mailbox secret is not connected yet.");
-          state(detailEl, "Add the mailbox OAuth or IMAP secret to connect this account.");
+          state(listEl, "This login does not have a connected mailbox yet.");
+          state(detailEl, "Use your personal login to open the mailbox assigned to you.");
         }
       })
       .catch(function (err) {
@@ -985,20 +985,20 @@
   function runImport() {
     if (!activeAccount || !importBtn) return;
     importBtn.disabled = true;
-    if (importStatusEl) importStatusEl.textContent = "Importing last 60 days...";
-    fetch("/dashboard/email/import", {
+    if (importStatusEl) importStatusEl.textContent = "Syncing mailbox...";
+    fetch("/dashboard/email/sync", {
       method: "POST",
       credentials: "same-origin",
       headers: {"Content-Type": "application/json", "Accept": "application/json"},
-      body: JSON.stringify({account: activeAccount, days: 60})
+      body: JSON.stringify({account: activeAccount})
     })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j; return j; }); })
       .then(function (data) {
-        var result = data.import || {};
+        var result = data.sync || {};
         var inserted = Number(result.inserted || 0);
         var updated = Number(result.updated || 0);
         if (importStatusEl) {
-          importStatusEl.textContent = "Imported " + inserted.toLocaleString() +
+          importStatusEl.textContent = "Synced " + inserted.toLocaleString() +
             " new, refreshed " + updated.toLocaleString() + ".";
         }
         var account = activeAccountData();

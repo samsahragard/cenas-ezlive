@@ -2540,6 +2540,24 @@ class ManagementEmailMessage(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class ManagementEmailSyncState(Base):
+    """One row per connected management mailbox sync cursor."""
+    __tablename__ = "management_email_sync_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    account_key: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
+    account_address: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    initial_sync_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_full_import_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_incremental_sync_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class SamChatAttachment(Base):
     """One row per file Sam attached to a /sam/chat user turn — images
     and PDFs base64-encoded for storage. Per Sam #837 item 5 (vision

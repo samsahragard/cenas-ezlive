@@ -357,6 +357,40 @@ def _accounts_from_env_json() -> list[MailAccount]:
     return [_normalize_account(item) for item in parsed if isinstance(item, dict)]
 
 
+def _siteground_account(key: str, address: str, password_env: str,
+                        aliases: list[str] | None = None,
+                        names: list[str] | None = None) -> MailAccount:
+    prefix = key.upper()
+    host = os.getenv(f"{prefix}_IMAP_HOST", os.getenv("MANAGEMENT_IMAP_HOST", "gvam1078.siteground.biz"))
+    smtp_host = os.getenv(f"{prefix}_SMTP_HOST", os.getenv("MANAGEMENT_SMTP_HOST", "gvam1078.siteground.biz"))
+    return _normalize_account({
+        "key": key,
+        "label": os.getenv(f"{prefix}_EMAIL_LABEL", address),
+        "address": os.getenv(f"{prefix}_EMAIL_ADDRESS", address),
+        "provider": os.getenv(f"{prefix}_EMAIL_PROVIDER", os.getenv("MANAGEMENT_EMAIL_PROVIDER", "imap_smtp")),
+        "login_aliases": aliases or [address],
+        "login_names": names or [],
+        "imap_host": host,
+        "imap_port": int(os.getenv(f"{prefix}_IMAP_PORT", os.getenv("MANAGEMENT_IMAP_PORT", "993"))),
+        "imap_user": os.getenv(f"{prefix}_IMAP_USER", address),
+        "imap_password_env": password_env,
+        "imap_password_envs": [
+            f"{prefix}_IMAP_PWD",
+            f"{prefix}_EMAIL_PASSWORD",
+        ],
+        "imap_password_file": os.getenv(f"{prefix}_IMAP_PASSWORD_FILE", f"{key}_imap_pwd.txt"),
+        "smtp_host": smtp_host,
+        "smtp_port": int(os.getenv(f"{prefix}_SMTP_PORT", os.getenv("MANAGEMENT_SMTP_PORT", "465"))),
+        "smtp_user": os.getenv(f"{prefix}_SMTP_USER", address),
+        "smtp_password_env": password_env,
+        "smtp_password_envs": [
+            f"{prefix}_SMTP_PWD",
+            f"{prefix}_EMAIL_PASSWORD",
+        ],
+        "smtp_password_file": os.getenv(f"{prefix}_SMTP_PASSWORD_FILE", f"{key}_smtp_pwd.txt"),
+    })
+
+
 def _default_accounts() -> list[MailAccount]:
     gmail_token_file = (
         os.getenv("MANAGEMENT_GMAIL_TOKEN_FILE")
@@ -387,31 +421,98 @@ def _default_accounts() -> list[MailAccount]:
             "smtp_password_env": "SAM_EMAIL_PWD",
             "smtp_password_envs": ["SAM_SMTP_PWD", "SAM_EMAIL_PASSWORD", "MANAGEMENT_EMAIL_PWD"],
             "smtp_password_file": os.getenv("SAM_SMTP_PASSWORD_FILE", "sams_smtp_pwd.txt"),
+            "login_aliases": [
+                "sam@cenaskitchen.com",
+                "samsahragard@gmail.com",
+            ],
+            "login_names": [
+                "Sam",
+                "Sam Sahragard",
+            ],
         })
     ]
+    if sam_provider != "gmail_oauth":
+        accounts.extend([
+            _siteground_account(
+                "masood", "masood@cenaskitchen.com", "MASOOD_EMAIL_PWD",
+                names=["Masood", "Masood Sahragard"],
+            ),
+            _siteground_account(
+                "javier", "javier@cenaskitchen.com", "JAVIER_EMAIL_PWD",
+                names=["Javier", "Javier Cruz"],
+            ),
+            _siteground_account(
+                "angelic", "angelic@cenaskitchen.com", "ANGELIC_EMAIL_PWD",
+                names=["Angelic", "Angelica", "Angelica Barton", "Angelica Truss"],
+            ),
+            _siteground_account(
+                "adriana", "adriana@cenaskitchen.com", "ADRIANA_EMAIL_PWD",
+                names=["Adriana", "Adriana Herrera"],
+            ),
+        ])
     return accounts
 
 
 def configured_accounts() -> list[MailAccount]:
     accounts = _accounts_from_env_json() or _default_accounts()
-    allow_multiple = os.getenv("MANAGEMENT_EMAIL_ALLOW_MULTIPLE", "").strip().lower() in {"1", "true", "yes", "on"}
-    if not allow_multiple:
-        only_address = os.getenv("MANAGEMENT_EMAIL_ONLY", "sam@cenaskitchen.com").strip().lower()
-        accounts = [
-            account for account in accounts
-            if account.key == "sam" or account.address.strip().lower() == only_address
-        ]
-        if not accounts:
-            accounts = _default_accounts()
     deduped: dict[str, MailAccount] = {}
     for account in accounts:
         deduped[account.key] = account
     return list(deduped.values())
 
 
-def public_accounts() -> list[dict[str, Any]]:
+def _norm_email(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _norm_person_name(value: str | None) -> str:
+    return " ".join((value or "").strip().lower().split())
+
+
+def _account_login_emails(account: MailAccount) -> set[str]:
+    aliases = account.config.get("login_aliases") or []
+    if isinstance(aliases, str):
+        vals = [x.strip() for x in aliases.split(",")]
+    elif isinstance(aliases, list):
+        vals = [str(x).strip() for x in aliases]
+    else:
+        vals = []
+    vals.append(account.address)
+    env_aliases = os.getenv(f"{account.key.upper()}_EMAIL_LOGIN_ALIASES", "")
+    if env_aliases:
+        vals.extend(x.strip() for x in env_aliases.split(","))
+    return {_norm_email(v) for v in vals if _norm_email(v)}
+
+
+def _account_login_names(account: MailAccount) -> set[str]:
+    raw_names = account.config.get("login_names") or []
+    if isinstance(raw_names, str):
+        vals = [x.strip() for x in raw_names.split(",")]
+    elif isinstance(raw_names, list):
+        vals = [str(x).strip() for x in raw_names]
+    else:
+        vals = []
+    env_names = os.getenv(f"{account.key.upper()}_EMAIL_LOGIN_NAMES", "")
+    if env_names:
+        vals.extend(x.strip() for x in env_names.split(","))
+    return {_norm_person_name(v) for v in vals if _norm_person_name(v)}
+
+
+def accounts_for_user(user: Any | None) -> list[MailAccount]:
+    user_email = _norm_email(getattr(user, "email", None))
+    user_name = _norm_person_name(getattr(user, "full_name", None))
+    if not user_email and not user_name:
+        return []
+    return [
+        account for account in configured_accounts()
+        if user_email in _account_login_emails(account)
+        or user_name in _account_login_names(account)
+    ]
+
+
+def public_accounts(user: Any | None = None) -> list[dict[str, Any]]:
     accounts = []
-    for account in configured_accounts():
+    for account in accounts_for_user(user):
         meta = _cached_account_meta(account)
         accounts.append({
             "key": account.key,
@@ -422,21 +523,23 @@ def public_accounts() -> list[dict[str, Any]]:
             "can_send": account.can_send,
             "cached_count": meta["cached_count"],
             "last_imported_at": meta["last_imported_at"],
+            "last_cached_date": meta["last_cached_date"],
         })
     return accounts
 
 
-def default_account_key() -> str | None:
-    accounts = configured_accounts()
+def default_account_key(user: Any | None = None) -> str | None:
+    accounts = accounts_for_user(user)
     for account in accounts:
         if account.connected:
             return account.key
     return accounts[0].key if accounts else None
 
 
-def get_account(key: str | None) -> MailAccount:
-    accounts = configured_accounts()
-    target = (key or default_account_key() or "").strip().lower()
+def get_account(key: str | None, user: Any | None = None,
+                allow_any: bool = False) -> MailAccount:
+    accounts = configured_accounts() if allow_any else accounts_for_user(user)
+    target = (key or (accounts[0].key if accounts else "")).strip().lower()
     for account in accounts:
         if account.key == target:
             return account
@@ -539,15 +642,53 @@ def _imap_message_parts(message_id: str) -> tuple[str, str]:
     return "INBOX", value
 
 
-def _imap_mailboxes(account: MailAccount) -> list[str]:
-    raw = account.config.get("imap_mailboxes") or os.getenv("SAM_IMAP_MAILBOXES") or os.getenv("MANAGEMENT_IMAP_MAILBOXES")
+def _parse_imap_mailbox_name(raw: bytes | str) -> str | None:
+    text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
+    text = text.strip()
+    for delimiter in (' "/" ', ' "." ', " NIL "):
+        if delimiter in text:
+            return text.rsplit(delimiter, 1)[-1].strip().strip('"') or None
+    if " " in text:
+        return text.rsplit(" ", 1)[-1].strip().strip('"') or None
+    return text.strip('"') or None
+
+
+def _imap_mailboxes(account: MailAccount, conn: imaplib.IMAP4_SSL | None = None) -> list[str]:
+    raw = (
+        account.config.get("imap_mailboxes")
+        or os.getenv(f"{account.key.upper()}_IMAP_MAILBOXES")
+        or os.getenv("MANAGEMENT_IMAP_MAILBOXES")
+    )
     if not raw:
-        return ["INBOX"]
-    if isinstance(raw, list):
+        boxes = ["INBOX"]
+        if conn is not None:
+            try:
+                typ, data = conn.list()
+            except Exception:
+                data = []
+                typ = "NO"
+            if typ == "OK":
+                for item in data or []:
+                    name = _parse_imap_mailbox_name(item)
+                    if not name:
+                        continue
+                    leaf = name.replace("\\", "/").replace(".", "/").split("/")[-1].strip().lower()
+                    if leaf in {"sent", "sent messages", "sent items"} or "sent" == leaf:
+                        boxes.append(name)
+        else:
+            boxes.extend(["Sent", "Sent Messages", "INBOX.Sent"])
+    elif isinstance(raw, list):
         boxes = [str(x).strip() for x in raw if str(x).strip()]
     else:
         boxes = [x.strip() for x in str(raw).split(",") if x.strip()]
-    return boxes or ["INBOX"]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for box in boxes:
+        key = box.lower()
+        if key not in seen:
+            deduped.append(box)
+            seen.add(key)
+    return deduped or ["INBOX"]
 
 
 def _decode_addr(value: str | None) -> str:
@@ -639,7 +780,7 @@ def _imap_import_messages(account: MailAccount, cutoff: datetime) -> list[dict[s
     since = cutoff.strftime("%d-%b-%Y")
     messages: list[dict[str, Any]] = []
     try:
-        for mailbox in _imap_mailboxes(account):
+        for mailbox in _imap_mailboxes(account, conn):
             typ, _ = conn.select(mailbox)
             if typ != "OK":
                 continue
@@ -754,15 +895,17 @@ def _cached_account_meta(account: MailAccount) -> dict[str, Any]:
 
         db = _email_db()
     except Exception:
-        return {"cached_count": 0, "last_imported_at": None}
+        return {"cached_count": 0, "last_imported_at": None, "last_cached_date": None}
     try:
         q = db.query(ManagementEmailMessage).filter(
             ManagementEmailMessage.account_key == account.key
         )
         last = q.order_by(ManagementEmailMessage.imported_at.desc()).first()
+        latest_msg = q.order_by(ManagementEmailMessage.date_at.desc()).first()
         return {
             "cached_count": q.count(),
             "last_imported_at": _datetime_to_iso(last.imported_at) if last else None,
+            "last_cached_date": _datetime_to_iso(latest_msg.date_at) if latest_msg else None,
         }
     finally:
         db.close()
@@ -880,12 +1023,90 @@ def _upsert_cached_messages(account: MailAccount, messages: list[dict[str, Any]]
         db.close()
 
 
-def import_recent_messages(account_key: str | None = None, days: int = 60) -> dict[str, Any]:
-    account = get_account(account_key)
+def _record_sync_state(account: MailAccount, mode: str, stats: dict[str, Any] | None = None,
+                       error: str | None = None) -> None:
+    try:
+        from app.models import ManagementEmailSyncState
+
+        db = _email_db()
+    except Exception:
+        return
+    now = datetime.utcnow()
+    try:
+        row = db.query(ManagementEmailSyncState).filter(
+            ManagementEmailSyncState.account_key == account.key
+        ).first()
+        if row is None:
+            row = ManagementEmailSyncState(
+                account_key=account.key,
+                account_address=account.address,
+                created_at=now,
+            )
+            db.add(row)
+        row.account_address = account.address
+        row.updated_at = now
+        if error:
+            row.last_error = error[:2000]
+        else:
+            row.last_error = None
+            row.last_success_at = now
+            if mode == "full":
+                row.initial_sync_completed = True
+                row.last_full_import_at = now
+            else:
+                row.last_incremental_sync_at = now
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def _sync_state_snapshot(account: MailAccount) -> dict[str, Any]:
+    try:
+        from app.models import ManagementEmailSyncState
+
+        db = _email_db()
+    except Exception:
+        return {}
+    try:
+        row = db.query(ManagementEmailSyncState).filter(
+            ManagementEmailSyncState.account_key == account.key
+        ).first()
+        if row is None:
+            return {}
+        return {
+            "initial_sync_completed": bool(row.initial_sync_completed),
+            "last_full_import_at": row.last_full_import_at,
+            "last_incremental_sync_at": row.last_incremental_sync_at,
+            "last_success_at": row.last_success_at,
+            "last_error": row.last_error,
+        }
+    finally:
+        db.close()
+
+
+def _latest_cached_message_at(account: MailAccount) -> datetime | None:
+    try:
+        from app.models import ManagementEmailMessage
+
+        db = _email_db()
+    except Exception:
+        return None
+    try:
+        row = db.query(ManagementEmailMessage).filter(
+            ManagementEmailMessage.account_key == account.key,
+            ManagementEmailMessage.date_at.isnot(None),
+        ).order_by(ManagementEmailMessage.date_at.desc()).first()
+        return row.date_at if row else None
+    finally:
+        db.close()
+
+
+def _import_account_since(account: MailAccount, cutoff: datetime) -> dict[str, Any]:
     if not account.connected:
         raise MailConfigError(f"{account.label} is not connected yet.")
-    safe_days = max(1, min(int(days or 60), 365))
-    cutoff = datetime.utcnow() - timedelta(days=safe_days)
     if account.provider == "gmail_oauth":
         messages = _gmail_import_messages(account, cutoff)
     else:
@@ -894,14 +1115,89 @@ def import_recent_messages(account_key: str | None = None, days: int = 60) -> di
     stats.update({
         "account": account.address,
         "account_key": account.key,
-        "days": safe_days,
         "cutoff": _datetime_to_iso(cutoff),
     })
     return stats
 
 
-def list_messages(account_key: str | None = None, query: str = "", limit: int = 25) -> list[dict[str, Any]]:
-    account = get_account(account_key)
+def import_recent_messages(account_key: str | None = None, days: int = 60,
+                           user: Any | None = None, allow_any: bool = False) -> dict[str, Any]:
+    account = get_account(account_key, user=user, allow_any=allow_any)
+    safe_days = max(1, min(int(days or 60), 365))
+    cutoff = datetime.utcnow() - timedelta(days=safe_days)
+    stats = _import_account_since(account, cutoff)
+    stats["days"] = safe_days
+    if safe_days >= 60:
+        _record_sync_state(account, "full", stats)
+    else:
+        _record_sync_state(account, "incremental", stats)
+    return stats
+
+
+def sync_account(account: MailAccount, initial_days: int = 60,
+                 overlap_hours: int = 6) -> dict[str, Any]:
+    state = _sync_state_snapshot(account)
+    meta = _cached_account_meta(account)
+    needs_initial = (
+        not state.get("initial_sync_completed")
+        or int(meta.get("cached_count") or 0) == 0
+    )
+    try:
+        if needs_initial:
+            stats = import_recent_messages(
+                account.key, days=initial_days, allow_any=True)
+            stats["mode"] = "full"
+            return stats
+        latest = _latest_cached_message_at(account) or state.get("last_success_at")
+        cutoff = latest or (datetime.utcnow() - timedelta(days=1))
+        cutoff = cutoff - timedelta(hours=max(1, min(int(overlap_hours or 6), 48)))
+        stats = _import_account_since(account, cutoff)
+        stats["mode"] = "incremental"
+        _record_sync_state(account, "incremental", stats)
+        return stats
+    except Exception as exc:
+        _record_sync_state(account, "incremental" if not needs_initial else "full", error=str(exc))
+        raise
+
+
+def sync_all_configured_accounts(initial_days: int = 60,
+                                 overlap_hours: int = 6) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    for account in configured_accounts():
+        if not account.connected:
+            results.append({
+                "account": account.address,
+                "account_key": account.key,
+                "ok": False,
+                "error": "not_connected",
+            })
+            continue
+        try:
+            result = sync_account(account, initial_days=initial_days,
+                                  overlap_hours=overlap_hours)
+            result["ok"] = True
+            results.append(result)
+        except Exception as exc:
+            results.append({
+                "account": account.address,
+                "account_key": account.key,
+                "ok": False,
+                "error": str(exc),
+            })
+    return {
+        "ok": all(r.get("ok") for r in results),
+        "accounts": results,
+    }
+
+
+def sync_visible_account(account_key: str | None, user: Any | None) -> dict[str, Any]:
+    account = get_account(account_key, user=user)
+    return sync_account(account, initial_days=60)
+
+
+def list_messages(account_key: str | None = None, query: str = "", limit: int = 25,
+                  user: Any | None = None) -> list[dict[str, Any]]:
+    account = get_account(account_key, user=user)
     cached = _cached_messages(account, query, limit)
     if cached is not None:
         return cached
@@ -912,8 +1208,9 @@ def list_messages(account_key: str | None = None, query: str = "", limit: int = 
     return _imap_list_messages(account, query, limit)
 
 
-def get_message(account_key: str | None, message_id: str) -> dict[str, Any]:
-    account = get_account(account_key)
+def get_message(account_key: str | None, message_id: str,
+                user: Any | None = None) -> dict[str, Any]:
+    account = get_account(account_key, user=user)
     cached = _cached_message(account, message_id)
     if cached is not None:
         return cached
@@ -924,8 +1221,9 @@ def get_message(account_key: str | None, message_id: str) -> dict[str, Any]:
     return _imap_get_message(account, message_id)
 
 
-def get_attachment(account_key: str | None, message_id: str, attachment_id: str) -> bytes:
-    account = get_account(account_key)
+def get_attachment(account_key: str | None, message_id: str, attachment_id: str,
+                   user: Any | None = None) -> bytes:
+    account = get_account(account_key, user=user)
     if not account.connected:
         raise MailConfigError(f"{account.label} is not connected yet.")
     if account.provider == "gmail_oauth":
@@ -933,18 +1231,20 @@ def get_attachment(account_key: str | None, message_id: str, attachment_id: str)
     return _imap_attachment(account, message_id, attachment_id)
 
 
-def attachment_stream(account_key: str | None, message_id: str, attachment_id: str) -> BytesIO:
-    return BytesIO(get_attachment(account_key, message_id, attachment_id))
+def attachment_stream(account_key: str | None, message_id: str, attachment_id: str,
+                      user: Any | None = None) -> BytesIO:
+    return BytesIO(get_attachment(account_key, message_id, attachment_id, user=user))
 
 
-def send_reply(account_key: str | None, message_id: str, body: str) -> None:
+def send_reply(account_key: str | None, message_id: str, body: str,
+               user: Any | None = None) -> None:
     clean_body = (body or "").strip()
     if not clean_body:
         raise MailConfigError("Reply body is required.")
-    account = get_account(account_key)
+    account = get_account(account_key, user=user)
     if not account.can_send:
         raise MailConfigError(f"{account.label} is not configured for sending.")
-    original = get_message(account.key, message_id)
+    original = get_message(account.key, message_id, user=user)
     if account.provider == "gmail_oauth":
         _gmail_send_reply(account, original, clean_body)
     else:

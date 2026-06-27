@@ -1,7 +1,9 @@
 """Dashboard email workspace routes."""
 from __future__ import annotations
 
-from flask import Blueprint, abort, jsonify, request, send_file
+import os
+
+from flask import Blueprint, abort, g, jsonify, request, send_file
 
 from app.services.management_email import (
     MailConfigError,
@@ -13,6 +15,8 @@ from app.services.management_email import (
     list_messages,
     public_accounts,
     send_reply,
+    sync_all_configured_accounts,
+    sync_visible_account,
 )
 from app.services.permissions import has_permission
 
@@ -22,6 +26,16 @@ management_email_bp = Blueprint(
     __name__,
     url_prefix="/dashboard/email",
 )
+
+management_email_cron_bp = Blueprint(
+    "management_email_cron",
+    __name__,
+    url_prefix="/cron/email",
+)
+
+
+def _current_user():
+    return getattr(g, "current_user", None)
 
 
 def _require_email_view() -> None:
@@ -46,13 +60,21 @@ def _mail_error(exc: Exception):
     }), status
 
 
+def _extract_cron_token() -> str | None:
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return request.headers.get("X-Cron-Token") or request.args.get("token")
+
+
 @management_email_bp.route("/accounts", methods=["GET"])
 def email_accounts():
     _require_email_view()
+    user = _current_user()
     return jsonify({
         "ok": True,
-        "default_account": default_account_key(),
-        "accounts": public_accounts(),
+        "default_account": default_account_key(user),
+        "accounts": public_accounts(user),
     })
 
 
@@ -68,7 +90,7 @@ def email_messages():
     try:
         return jsonify({
             "ok": True,
-            "messages": list_messages(account, query=query, limit=limit),
+            "messages": list_messages(account, query=query, limit=limit, user=_current_user()),
         })
     except (MailConfigError, MailProviderError) as exc:
         return _mail_error(exc)
@@ -86,7 +108,21 @@ def email_import():
     try:
         return jsonify({
             "ok": True,
-            "import": import_recent_messages(account, days=days),
+            "import": import_recent_messages(account, days=days, user=_current_user()),
+        })
+    except (MailConfigError, MailProviderError) as exc:
+        return _mail_error(exc)
+
+
+@management_email_bp.route("/sync", methods=["POST"])
+def email_sync():
+    _require_email_view()
+    data = request.get_json(silent=True) or {}
+    account = (data.get("account") or request.args.get("account") or "").strip() or None
+    try:
+        return jsonify({
+            "ok": True,
+            "sync": sync_visible_account(account, _current_user()),
         })
     except (MailConfigError, MailProviderError) as exc:
         return _mail_error(exc)
@@ -99,7 +135,7 @@ def email_message(message_id: str):
     try:
         return jsonify({
             "ok": True,
-            "message": get_message(account, message_id),
+            "message": get_message(account, message_id, user=_current_user()),
         })
     except (MailConfigError, MailProviderError) as exc:
         return _mail_error(exc)
@@ -117,7 +153,7 @@ def email_attachment():
         return jsonify({"ok": False, "error": "missing_attachment_id"}), 400
     try:
         return send_file(
-            attachment_stream(account, message_id, attachment_id),
+            attachment_stream(account, message_id, attachment_id, user=_current_user()),
             mimetype=mime_type,
             as_attachment=True,
             download_name=filename,
@@ -137,7 +173,18 @@ def email_reply():
     if not message_id:
         return jsonify({"ok": False, "error": "missing_message_id"}), 400
     try:
-        send_reply(account, message_id, body)
+        send_reply(account, message_id, body, user=_current_user())
         return jsonify({"ok": True})
     except (MailConfigError, MailProviderError) as exc:
         return _mail_error(exc)
+
+
+@management_email_cron_bp.route("/sync", methods=["POST"])
+def cron_email_sync():
+    expected = os.getenv("CRON_TOKEN")
+    if not expected or _extract_cron_token() != expected:
+        abort(401)
+    try:
+        return jsonify(sync_all_configured_accounts(initial_days=60))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500

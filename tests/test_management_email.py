@@ -1,4 +1,5 @@
 import base64
+from types import SimpleNamespace
 
 from app.services import management_email as mail
 
@@ -53,7 +54,7 @@ def test_public_accounts_uses_json_without_leaking_secrets(monkeypatch):
         '"provider":"imap_smtp","imap_password":"secret"}]',
     )
 
-    accounts = mail.public_accounts()
+    accounts = mail.public_accounts(SimpleNamespace(email="ops@example.com"))
 
     assert accounts == [
         {
@@ -65,5 +66,28 @@ def test_public_accounts_uses_json_without_leaking_secrets(monkeypatch):
             "can_send": False,
             "cached_count": 0,
             "last_imported_at": None,
+            "last_cached_date": None,
         }
     ]
+
+
+def test_public_accounts_filters_to_current_login(monkeypatch):
+    monkeypatch.setenv("MANAGEMENT_EMAIL_ACCOUNTS_JSON", """
+    [
+      {"key":"sam","label":"Sam","address":"sam@cenaskitchen.com",
+       "provider":"imap_smtp","imap_password":"secret",
+       "login_aliases":["sam@cenaskitchen.com","samsahragard@gmail.com"],
+       "login_names":["Sam Sahragard"]},
+      {"key":"masood","label":"Masood","address":"masood@cenaskitchen.com",
+       "provider":"imap_smtp","imap_password":"secret",
+       "login_names":["Masood Sahragard"]}
+    ]
+    """)
+
+    sam_accounts = mail.public_accounts(SimpleNamespace(email="samsahragard@gmail.com"))
+    masood_accounts = mail.public_accounts(SimpleNamespace(email=None, full_name="Masood Sahragard"))
+    no_accounts = mail.public_accounts(SimpleNamespace(email="javier@cenaskitchen.com"))
+
+    assert [a["key"] for a in sam_accounts] == ["sam"]
+    assert [a["key"] for a in masood_accounts] == ["masood"]
+    assert no_accounts == []

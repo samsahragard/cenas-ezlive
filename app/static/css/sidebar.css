@@ -75,7 +75,7 @@
   cursor: pointer;
 }
 .ck-sb-logo-bottom {
-  margin-top: auto;
+  margin-top: 16px;
   padding-top: 14px;
   border-top: 0.5px solid var(--ck-border-subtle);
 }

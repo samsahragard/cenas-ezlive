@@ -67,6 +67,26 @@ def _extract_cron_token() -> str | None:
     return request.headers.get("X-Cron-Token") or request.args.get("token")
 
 
+def _clean_upload_filename(filename: str | None) -> str:
+    raw = (filename or "attachment").replace("\\", "/").rsplit("/", 1)[-1]
+    cleaned = "".join(ch for ch in raw if ch not in "\r\n\0").strip()
+    return cleaned[:255] or "attachment"
+
+
+def _reply_uploads() -> list[dict]:
+    uploads = []
+    for item in request.files.getlist("attachments"):
+        data = item.read()
+        if not data and not item.filename:
+            continue
+        uploads.append({
+            "filename": _clean_upload_filename(item.filename),
+            "mime_type": item.mimetype or "application/octet-stream",
+            "content": data,
+        })
+    return uploads
+
+
 @management_email_bp.route("/accounts", methods=["GET"])
 def email_accounts():
     _require_email_view()
@@ -166,14 +186,19 @@ def email_attachment():
 def email_reply():
     _require_email_view()
     _require_email_send()
-    data = request.get_json(silent=True) or {}
+    uploads: list[dict] = []
+    if request.mimetype == "multipart/form-data":
+        data = request.form
+        uploads = _reply_uploads()
+    else:
+        data = request.get_json(silent=True) or {}
     account = (data.get("account") or "").strip() or None
     message_id = (data.get("message_id") or "").strip()
     body = (data.get("body") or "").strip()
     if not message_id:
         return jsonify({"ok": False, "error": "missing_message_id"}), 400
     try:
-        send_reply(account, message_id, body, user=_current_user())
+        send_reply(account, message_id, body, user=_current_user(), attachments=uploads)
         return jsonify({"ok": True})
     except (MailConfigError, MailProviderError) as exc:
         return _mail_error(exc)

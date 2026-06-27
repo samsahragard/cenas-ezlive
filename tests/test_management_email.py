@@ -1,4 +1,5 @@
 import base64
+from email.message import EmailMessage
 from types import SimpleNamespace
 
 from app.services import management_email as mail
@@ -91,3 +92,62 @@ def test_public_accounts_filters_to_current_login(monkeypatch):
     assert [a["key"] for a in sam_accounts] == ["sam"]
     assert [a["key"] for a in masood_accounts] == ["masood"]
     assert no_accounts == []
+
+
+def test_send_reply_allows_attachment_only(monkeypatch):
+    account = mail.MailAccount(
+        key="ops",
+        label="Ops",
+        address="ops@example.com",
+        provider="imap_smtp",
+        config={"smtp_password": "secret"},
+    )
+    sent = {}
+
+    monkeypatch.setattr(mail, "get_account", lambda *args, **kwargs: account)
+    monkeypatch.setattr(
+        mail,
+        "get_message",
+        lambda *args, **kwargs: {
+            "from": "sender@example.com",
+            "subject": "Invoice",
+        },
+    )
+    monkeypatch.setattr(
+        mail,
+        "_imap_send_reply",
+        lambda _account, _original, body, attachments=None: sent.update({
+            "body": body,
+            "attachments": attachments,
+        }),
+    )
+
+    mail.send_reply(
+        "ops",
+        "m1",
+        "",
+        attachments=[{
+            "filename": "invoice.pdf",
+            "mime_type": "application/pdf",
+            "content": b"%PDF",
+        }],
+    )
+
+    assert sent["body"] == ""
+    assert sent["attachments"][0]["filename"] == "invoice.pdf"
+
+
+def test_reply_attachments_are_added_to_mime_message():
+    msg = EmailMessage()
+    msg.set_content("See attached.")
+
+    mail._add_reply_attachments(msg, [{
+        "filename": "invoice.pdf",
+        "mime_type": "application/pdf",
+        "content": b"%PDF",
+    }])
+
+    attachments = list(msg.iter_attachments())
+    assert len(attachments) == 1
+    assert attachments[0].get_filename() == "invoice.pdf"
+    assert attachments[0].get_content_type() == "application/pdf"

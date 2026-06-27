@@ -175,12 +175,14 @@
     overflow: hidden;
   }
   .mailbox-detail {
-    background: #24100d;
-    border-left: 1px solid rgba(211, 63, 43, 0.34);
+    background: #3a0e0a;
+    border-left: 2px solid rgba(255, 74, 50, 0.72);
     display: flex;
     flex-direction: column;
+    gap: 12px;
     min-width: 0;
     overflow: auto;
+    padding: 12px;
   }
   .mailbox-detail-empty,
   .mailbox-state {
@@ -189,8 +191,10 @@
     padding: 28px;
   }
   .mailbox-detail-head {
-    background: #2b120f;
-    border-bottom: 1px solid rgba(228, 89, 64, 0.28);
+    background: #64180f;
+    border: 1px solid rgba(255, 101, 67, 0.55);
+    border-radius: 6px;
+    box-shadow: inset 0 1px 0 rgba(255, 190, 143, 0.08);
     padding: 18px;
   }
   .mailbox-detail-head h2 {
@@ -205,13 +209,14 @@
     line-height: 1.55;
   }
   .mailbox-body {
-    background: #1f0d0a;
-    border: 1px solid rgba(228, 89, 64, 0.2);
+    background: #260704;
+    border: 1px solid rgba(255, 101, 67, 0.42);
     border-radius: 6px;
     color: rgba(250, 246, 236, 0.9);
     font-size: 14px;
     line-height: 1.55;
-    margin: 16px 18px 18px;
+    margin: 0;
+    min-height: 140px;
     padding: 18px;
     white-space: pre-wrap;
   }
@@ -219,7 +224,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 0 18px 18px;
+    padding: 0 2px;
   }
   .mailbox-attachment {
     border: 1px solid rgba(91, 202, 197, 0.38);
@@ -230,20 +235,56 @@
     text-decoration: none;
   }
   .mailbox-reply {
-    background: #24100d;
-    border-top: 1px solid rgba(228, 89, 64, 0.24);
+    background: #4a100b;
+    border: 1px solid rgba(255, 101, 67, 0.48);
+    border-radius: 6px;
     margin-top: auto;
-    padding: 14px 18px 18px;
+    padding: 16px;
   }
   .mailbox-reply textarea {
     width: 100%;
     min-height: 120px;
     resize: vertical;
-    border: 1px solid rgba(228, 179, 64, 0.2);
+    border: 1px solid rgba(255, 169, 89, 0.38);
     border-radius: 6px;
-    background: rgba(0, 0, 0, 0.26);
+    background: rgba(28, 2, 0, 0.52);
     color: #fff;
     padding: 10px;
+  }
+  .mailbox-reply-upload {
+    align-items: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .mailbox-file-input {
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    position: absolute;
+    width: 1px;
+  }
+  .mailbox-file-btn {
+    border: 1px solid rgba(255, 191, 87, 0.34);
+    border-radius: 6px;
+    color: #fff4d9;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 10px;
+  }
+  .mailbox-selected-files {
+    color: rgba(250, 246, 236, 0.68);
+    flex: 1 1 220px;
+    font-size: 12px;
+    line-height: 1.35;
+    min-width: 0;
+  }
+  .mailbox-selected-file {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .mailbox-reply-actions {
     display: flex;
@@ -1108,6 +1149,12 @@
       '<div class="mailbox-reply">' +
         '<textarea id="mailboxReplyBody" ' + (account.can_send ? "" : "disabled") + ' placeholder="' +
           (account.can_send ? "Write a reply..." : "Sending is not connected for this mailbox yet.") + '"></textarea>' +
+        '<div class="mailbox-reply-upload">' +
+          '<label class="mailbox-file-btn" for="mailboxReplyFiles">Attach files</label>' +
+          '<input class="mailbox-file-input" id="mailboxReplyFiles" type="file" multiple ' +
+            (account.can_send ? "" : "disabled") + '>' +
+          '<div class="mailbox-selected-files" id="mailboxSelectedFiles"></div>' +
+        '</div>' +
         '<div class="mailbox-reply-actions">' +
           '<button type="button" class="mailbox-icon-btn" id="mailboxSendReply" ' + (account.can_send ? "" : "disabled") + '>Send Reply</button>' +
           '<span class="mailbox-status" id="mailboxReplyStatus"></span>' +
@@ -1115,30 +1162,65 @@
       '</div>';
     var sendBtn = document.getElementById("mailboxSendReply");
     if (sendBtn && account.can_send) sendBtn.addEventListener("click", sendReply);
+    var fileInput = document.getElementById("mailboxReplyFiles");
+    if (fileInput && account.can_send) fileInput.addEventListener("change", renderSelectedReplyFiles);
+  }
+
+  function renderSelectedReplyFiles() {
+    var fileInput = document.getElementById("mailboxReplyFiles");
+    var selectedEl = document.getElementById("mailboxSelectedFiles");
+    if (!fileInput || !selectedEl) return;
+    var files = Array.prototype.slice.call(fileInput.files || []);
+    if (!files.length) {
+      selectedEl.textContent = "";
+      return;
+    }
+    selectedEl.innerHTML = files.map(function (file) {
+      return '<div class="mailbox-selected-file" title="' + esc(file.name) + '">' +
+        esc(file.name) + ' (' + esc(fmtSize(file.size)) + ')</div>';
+    }).join("");
   }
 
   function sendReply() {
     var bodyEl = document.getElementById("mailboxReplyBody");
+    var fileInput = document.getElementById("mailboxReplyFiles");
+    var sendBtn = document.getElementById("mailboxSendReply");
     var statusEl = document.getElementById("mailboxReplyStatus");
     var body = bodyEl ? bodyEl.value.trim() : "";
-    if (!body) {
-      if (statusEl) statusEl.textContent = "Write a reply first.";
+    var files = fileInput ? Array.prototype.slice.call(fileInput.files || []) : [];
+    if (!body && !files.length) {
+      if (statusEl) statusEl.textContent = "Write a reply or attach a file first.";
       return;
     }
     if (statusEl) statusEl.textContent = "Sending...";
+    if (sendBtn) sendBtn.disabled = true;
+    var form = new FormData();
+    form.append("account", activeAccount || "");
+    form.append("message_id", activeMessageId || "");
+    form.append("body", body);
+    files.forEach(function (file) {
+      form.append("attachments", file, file.name);
+    });
     fetch("/dashboard/email/reply", {
       method: "POST",
       credentials: "same-origin",
-      headers: {"Content-Type": "application/json", "Accept": "application/json"},
-      body: JSON.stringify({account: activeAccount, message_id: activeMessageId, body: body})
+      headers: {"Accept": "application/json"},
+      body: form
     })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j; return j; }); })
       .then(function () {
         if (statusEl) statusEl.textContent = "Reply sent.";
         if (bodyEl) bodyEl.value = "";
+        if (fileInput) {
+          fileInput.value = "";
+          renderSelectedReplyFiles();
+        }
       })
       .catch(function (err) {
         if (statusEl) statusEl.textContent = (err && (err.detail || err.error)) || "Reply failed.";
+      })
+      .finally(function () {
+        if (sendBtn) sendBtn.disabled = false;
       });
   }
 

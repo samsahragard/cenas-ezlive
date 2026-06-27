@@ -595,7 +595,27 @@ def _gmail_attachment(account: MailAccount, message_id: str, attachment_id: str)
     return _b64url_decode(data.get("data"))
 
 
-def _gmail_send_reply(account: MailAccount, original: dict[str, Any], body: str) -> None:
+def _add_reply_attachments(msg: EmailMessage, attachments: list[dict[str, Any]] | None) -> None:
+    for attachment in attachments or []:
+        content = attachment.get("content") or b""
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+        filename = str(attachment.get("filename") or "attachment")
+        mime_type = str(attachment.get("mime_type") or "application/octet-stream")
+        if "/" in mime_type:
+            maintype, subtype = mime_type.split("/", 1)
+        else:
+            maintype, subtype = "application", "octet-stream"
+        msg.add_attachment(
+            content,
+            maintype=maintype or "application",
+            subtype=subtype or "octet-stream",
+            filename=filename,
+        )
+
+
+def _gmail_send_reply(account: MailAccount, original: dict[str, Any], body: str,
+                      attachments: list[dict[str, Any]] | None = None) -> None:
     msg = EmailMessage()
     msg["From"] = account.address
     msg["To"] = original.get("reply_to") or original.get("from") or ""
@@ -605,7 +625,8 @@ def _gmail_send_reply(account: MailAccount, original: dict[str, Any], body: str)
         msg["In-Reply-To"] = original["message_id"]
         refs = original.get("references") or original["message_id"]
         msg["References"] = refs
-    msg.set_content(body)
+    msg.set_content(body or "")
+    _add_reply_attachments(msg, attachments)
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("ascii").rstrip("=")
     payload = {"raw": raw}
     if original.get("thread_id"):
@@ -835,7 +856,8 @@ def _imap_attachment(account: MailAccount, uid: str, attachment_id: str) -> byte
     return attachments[idx].get_payload(decode=True) or b""
 
 
-def _imap_send_reply(account: MailAccount, original: dict[str, Any], body: str) -> None:
+def _imap_send_reply(account: MailAccount, original: dict[str, Any], body: str,
+                     attachments: list[dict[str, Any]] | None = None) -> None:
     password = _account_secret(account, "smtp_password", ["smtp_password_file"])
     if not password:
         raise MailConfigError(f"{account.label} is missing an SMTP password.")
@@ -847,7 +869,8 @@ def _imap_send_reply(account: MailAccount, original: dict[str, Any], body: str) 
     if original.get("message_id"):
         msg["In-Reply-To"] = original["message_id"]
         msg["References"] = original.get("references") or original["message_id"]
-    msg.set_content(body)
+    msg.set_content(body or "")
+    _add_reply_attachments(msg, attachments)
 
     host = str(account.config.get("smtp_host") or "gvam1078.siteground.biz")
     port = int(account.config.get("smtp_port") or 465)
@@ -1237,15 +1260,17 @@ def attachment_stream(account_key: str | None, message_id: str, attachment_id: s
 
 
 def send_reply(account_key: str | None, message_id: str, body: str,
-               user: Any | None = None) -> None:
+               user: Any | None = None,
+               attachments: list[dict[str, Any]] | None = None) -> None:
     clean_body = (body or "").strip()
-    if not clean_body:
-        raise MailConfigError("Reply body is required.")
+    clean_attachments = attachments or []
+    if not clean_body and not clean_attachments:
+        raise MailConfigError("Reply body or attachment is required.")
     account = get_account(account_key, user=user)
     if not account.can_send:
         raise MailConfigError(f"{account.label} is not configured for sending.")
     original = get_message(account.key, message_id, user=user)
     if account.provider == "gmail_oauth":
-        _gmail_send_reply(account, original, clean_body)
+        _gmail_send_reply(account, original, clean_body, clean_attachments)
     else:
-        _imap_send_reply(account, original, clean_body)
+        _imap_send_reply(account, original, clean_body, clean_attachments)

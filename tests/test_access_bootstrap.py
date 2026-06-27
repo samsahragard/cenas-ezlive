@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models import User, UserAuditLog
+from app.models import Employee, EmployeePosition, EmployeeStoreAssignment, Position, User, UserAuditLog
 from app.services.access_bootstrap import apply_requested_access_scopes
 
 
@@ -62,3 +62,58 @@ def test_requested_access_bootstrap_updates_named_users_and_is_idempotent(db_ses
 
     assert changed_again == 0
     assert db_session.query(UserAuditLog).count() == 8
+
+
+def test_access_bootstrap_moves_damean_employee_to_copperfield_manager_profile(db_session):
+    adriana = _user(db_session, 20, "Adriana Herrera", role="foh_manager", scope="tomball")
+    employee = Employee(
+        id=30,
+        full_name="Damean Employee",
+        phone="555-333-3030",
+        email="damean@test.local",
+        passcode_hash="employee-pin-hash",
+        active=True,
+        session_version=4,
+    )
+    server = Position(id=31, name="Server", store_key=None)
+    db_session.add_all([adriana, employee, server])
+    db_session.flush()
+    db_session.add(EmployeePosition(employee_id=employee.id, position_id=server.id, store_key="copperfield"))
+    db_session.commit()
+
+    changed = apply_requested_access_scopes(db_session)
+    db_session.commit()
+
+    assert changed == 1
+    manager = db_session.query(User).filter(User.full_name == "Damean Employee").one()
+    assert employee.user_id == manager.id
+    assert employee.session_version == 5
+    assert manager.permission_level == adriana.permission_level
+    assert manager.store_scope == "copperfield"
+    assert manager.passcode_hash == employee.passcode_hash
+    assert manager.phone == employee.phone
+    assert manager.email == employee.email
+    assert manager.active is True
+    assert manager.first_login_done is True
+    assert (
+        db_session.query(EmployeeStoreAssignment)
+        .filter_by(employee_id=employee.id, store_key="copperfield")
+        .count()
+        == 1
+    )
+    position_names = {
+        name for (name,) in (
+            db_session.query(Position.name)
+            .join(EmployeePosition, EmployeePosition.position_id == Position.id)
+            .filter(EmployeePosition.employee_id == employee.id, EmployeePosition.store_key == "copperfield")
+            .all()
+        )
+    }
+    assert {"Server", "FOH Manager"}.issubset(position_names)
+    assert db_session.query(UserAuditLog).filter_by(target_user_id=manager.id, action="create").count() == 1
+
+    changed_again = apply_requested_access_scopes(db_session)
+    db_session.commit()
+
+    assert changed_again == 0
+    assert db_session.query(UserAuditLog).filter_by(target_user_id=manager.id).count() == 1

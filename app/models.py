@@ -2498,6 +2498,48 @@ class VendorRecentOrder(Base):
         DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+class ManagementEmailMessage(Base):
+    """Imported dashboard email row.
+
+    Body text and attachment metadata are cached so management can search/read
+    the recent mailbox quickly. Attachment bytes and replies still flow through
+    the live mailbox adapter.
+    """
+    __tablename__ = "management_email_messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_key", "provider_message_id",
+            name="uq_management_email_account_message",
+        ),
+        Index("ix_management_email_account_date", "account_key", "date_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    account_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    account_address: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_message_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mailbox: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    from_addr: Mapped[str | None] = mapped_column(Text, nullable=True)
+    to_addr: Mapped[str | None] = mapped_column(Text, nullable=True)
+    date_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    date_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    unread: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    attachments_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    attachment_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    message_id_header: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    references_header: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reply_to: Mapped[str | None] = mapped_column(Text, nullable=True)
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class SamChatAttachment(Base):
     """One row per file Sam attached to a /sam/chat user turn — images
     and PDFs base64-encoded for storage. Per Sam #837 item 5 (vision

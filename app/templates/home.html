@@ -118,6 +118,15 @@
     padding: 0 10px;
     white-space: nowrap;
   }
+  .mailbox-icon-btn[disabled] {
+    cursor: not-allowed;
+    opacity: 0.48;
+  }
+  .mailbox-import-status {
+    color: rgba(250, 246, 236, 0.6);
+    font-size: 12px;
+    min-height: 16px;
+  }
   .mailbox-grid {
     display: grid;
     grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
@@ -835,7 +844,9 @@
         <input type="search" id="mailboxSearch" placeholder="Search mail" autocomplete="off">
         <button type="button" class="mailbox-icon-btn" id="mailboxSearchBtn">Search</button>
         <button type="button" class="mailbox-icon-btn" id="mailboxRefreshBtn">Refresh</button>
+        <button type="button" class="mailbox-icon-btn" id="mailboxImportBtn">Import 60 days</button>
       </div>
+      <div class="mailbox-import-status" id="mailboxImportStatus"></div>
     </div>
     <div class="mailbox-grid">
       <div class="mailbox-list" id="mailboxList">
@@ -881,6 +892,8 @@
   var searchEl = document.getElementById("mailboxSearch");
   var searchBtn = document.getElementById("mailboxSearchBtn");
   var refreshBtn = document.getElementById("mailboxRefreshBtn");
+  var importBtn = document.getElementById("mailboxImportBtn");
+  var importStatusEl = document.getElementById("mailboxImportStatus");
 
   function esc(value) {
     return String(value || "").replace(/[&<>"']/g, function (ch) {
@@ -903,6 +916,20 @@
     return mailboxAccounts.find(function (a) { return a.key === activeAccount; }) || null;
   }
 
+  function renderImportStatus() {
+    var account = activeAccountData() || {};
+    if (!importStatusEl) return;
+    var count = Number(account.cached_count || 0);
+    if (!account.connected && !count) {
+      importStatusEl.textContent = "";
+    } else if (count) {
+      importStatusEl.textContent = count.toLocaleString() + " imported emails";
+    } else {
+      importStatusEl.textContent = "No imported emails yet";
+    }
+    if (importBtn) importBtn.disabled = !account.connected;
+  }
+
   function renderAccounts(defaultKey) {
     if (!accountEl) return;
     accountEl.innerHTML = "";
@@ -911,24 +938,28 @@
       return;
     }
     var connectedDefault = mailboxAccounts.find(function (a) { return a.connected; });
-    activeAccount = defaultKey || (connectedDefault && connectedDefault.key) || mailboxAccounts[0].key;
+    var cachedDefault = mailboxAccounts.find(function (a) { return Number(a.cached_count || 0) > 0; });
+    activeAccount = defaultKey || (connectedDefault && connectedDefault.key) || (cachedDefault && cachedDefault.key) || mailboxAccounts[0].key;
     mailboxAccounts.forEach(function (account) {
+      var hasCache = Number(account.cached_count || 0) > 0;
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "mailbox-account" + (account.key === activeAccount ? " is-active" : "");
       btn.textContent = account.label || account.address || account.key;
-      btn.title = account.connected ? (account.address || account.label) : "Mailbox is not connected yet";
-      if (!account.connected) btn.setAttribute("disabled", "disabled");
+      btn.title = account.connected ? (account.address || account.label) : (hasCache ? "Showing imported email cache" : "Mailbox is not connected yet");
+      if (!account.connected && !hasCache) btn.setAttribute("disabled", "disabled");
       btn.addEventListener("click", function () {
-        if (!account.connected) return;
+        if (!account.connected && !hasCache) return;
         activeAccount = account.key;
         activeMessageId = null;
         accountEl.querySelectorAll(".mailbox-account").forEach(function (x) { x.classList.remove("is-active"); });
         btn.classList.add("is-active");
+        renderImportStatus();
         loadMessages();
       });
       accountEl.appendChild(btn);
     });
+    renderImportStatus();
   }
 
   function initMailbox() {
@@ -939,7 +970,7 @@
       .then(function (data) {
         mailboxAccounts = data.accounts || [];
         renderAccounts(data.default_account);
-        if ((activeAccountData() || {}).connected) {
+        if ((activeAccountData() || {}).connected || Number((activeAccountData() || {}).cached_count || 0) > 0) {
           loadMessages();
         } else {
           state(listEl, "sam@cenaskitchen.com is ready in the dashboard, but the mailbox secret is not connected yet.");
@@ -948,6 +979,38 @@
       })
       .catch(function (err) {
         state(listEl, (err && (err.detail || err.error)) || "Could not load mailbox accounts.");
+      });
+  }
+
+  function runImport() {
+    if (!activeAccount || !importBtn) return;
+    importBtn.disabled = true;
+    if (importStatusEl) importStatusEl.textContent = "Importing last 60 days...";
+    fetch("/dashboard/email/import", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {"Content-Type": "application/json", "Accept": "application/json"},
+      body: JSON.stringify({account: activeAccount, days: 60})
+    })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j; return j; }); })
+      .then(function (data) {
+        var result = data.import || {};
+        var inserted = Number(result.inserted || 0);
+        var updated = Number(result.updated || 0);
+        if (importStatusEl) {
+          importStatusEl.textContent = "Imported " + inserted.toLocaleString() +
+            " new, refreshed " + updated.toLocaleString() + ".";
+        }
+        var account = activeAccountData();
+        if (account && result.cached_count != null) account.cached_count = result.cached_count;
+        loadMessages();
+      })
+      .catch(function (err) {
+        if (importStatusEl) importStatusEl.textContent = (err && (err.detail || err.error)) || "Import failed.";
+      })
+      .finally(function () {
+        var account = activeAccountData() || {};
+        if (importBtn) importBtn.disabled = !account.connected;
       });
   }
 
@@ -1073,6 +1136,7 @@
 
   if (searchBtn) searchBtn.addEventListener("click", loadMessages);
   if (refreshBtn) refreshBtn.addEventListener("click", loadMessages);
+  if (importBtn) importBtn.addEventListener("click", runImport);
   if (searchEl) {
     searchEl.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter") loadMessages();

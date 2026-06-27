@@ -9,6 +9,7 @@ from app.services.management_email import (
     attachment_stream,
     default_account_key,
     get_message,
+    import_recent_messages,
     list_messages,
     public_accounts,
     send_reply,
@@ -68,6 +69,24 @@ def email_messages():
         return jsonify({
             "ok": True,
             "messages": list_messages(account, query=query, limit=limit),
+        })
+    except (MailConfigError, MailProviderError) as exc:
+        return _mail_error(exc)
+
+
+@management_email_bp.route("/import", methods=["POST"])
+def email_import():
+    _require_email_view()
+    data = request.get_json(silent=True) or {}
+    account = (data.get("account") or request.args.get("account") or "").strip() or None
+    try:
+        days = int(data.get("days") or request.args.get("days") or 60)
+    except (TypeError, ValueError):
+        days = 60
+    try:
+        return jsonify({
+            "ok": True,
+            "import": import_recent_messages(account, days=days),
         })
     except (MailConfigError, MailProviderError) as exc:
         return _mail_error(exc)

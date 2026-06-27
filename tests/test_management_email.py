@@ -63,5 +63,7 @@ def test_public_accounts_uses_json_without_leaking_secrets(monkeypatch):
             "provider": "imap_smtp",
             "connected": True,
             "can_send": False,
+            "cached_count": 0,
+            "last_imported_at": None,
         }
     ]

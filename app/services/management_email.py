@@ -13,7 +13,8 @@ import json
 import os
 import smtplib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from sqlalchemy import or_
 
 
 class MailConfigError(RuntimeError):
@@ -88,6 +90,43 @@ def _html_to_text(value: str) -> str:
     parser = _HTMLText()
     parser.feed(value or "")
     return html.unescape(parser.text())
+
+
+def _parse_mail_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        dt = parsedate_to_datetime(value)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _iso_to_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        clean = value.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(clean)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _datetime_to_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _summary_datetime(item: dict[str, Any]) -> datetime | None:
+    return _iso_to_datetime(item.get("date_iso")) or _parse_mail_datetime(item.get("date"))
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -371,17 +410,20 @@ def configured_accounts() -> list[MailAccount]:
 
 
 def public_accounts() -> list[dict[str, Any]]:
-    return [
-        {
+    accounts = []
+    for account in configured_accounts():
+        meta = _cached_account_meta(account)
+        accounts.append({
             "key": account.key,
             "label": account.label,
             "address": account.address,
             "provider": account.provider,
             "connected": account.connected,
             "can_send": account.can_send,
-        }
-        for account in configured_accounts()
-    ]
+            "cached_count": meta["cached_count"],
+            "last_imported_at": meta["last_imported_at"],
+        })
+    return accounts
 
 
 def default_account_key() -> str | None:
@@ -415,6 +457,28 @@ def _gmail_list_messages(account: MailAccount, query: str, limit: int) -> list[d
         summary = _gmail_message_summary(msg)
         summary.pop("body_text", None)
         messages.append(summary)
+    return messages
+
+
+def _gmail_import_messages(account: MailAccount, cutoff: datetime) -> list[dict[str, Any]]:
+    cutoff_date = cutoff.strftime("%Y/%m/%d")
+    gmail_q = f"in:anywhere after:{cutoff_date}"
+    max_results = max(1, min(int(os.getenv("MANAGEMENT_EMAIL_IMPORT_PAGE_SIZE", "100")), 500))
+    page_token = None
+    messages: list[dict[str, Any]] = []
+    while True:
+        params: dict[str, Any] = {"maxResults": max_results, "q": gmail_q}
+        if page_token:
+            params["pageToken"] = page_token
+        data = _gmail_request(account, "GET", "messages", params=params)
+        for item in data.get("messages") or []:
+            msg = _gmail_request(account, "GET", f"messages/{item['id']}", params={"format": "full"})
+            summary = _gmail_message_summary(msg)
+            summary["mailbox"] = "Gmail"
+            messages.append(summary)
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
     return messages
 
 
@@ -458,11 +522,39 @@ def _imap_connect(account: MailAccount) -> imaplib.IMAP4_SSL:
     return conn
 
 
+def _imap_message_id(mailbox: str, uid: str) -> str:
+    raw = base64.urlsafe_b64encode(mailbox.encode("utf-8")).decode("ascii").rstrip("=")
+    return f"imap-{raw}:{uid}"
+
+
+def _imap_message_parts(message_id: str) -> tuple[str, str]:
+    value = str(message_id or "")
+    if value.startswith("imap-") and ":" in value:
+        mailbox_part, uid = value[5:].split(":", 1)
+        try:
+            mailbox = _b64url_decode(mailbox_part).decode("utf-8")
+        except Exception:
+            mailbox = "INBOX"
+        return mailbox or "INBOX", uid
+    return "INBOX", value
+
+
+def _imap_mailboxes(account: MailAccount) -> list[str]:
+    raw = account.config.get("imap_mailboxes") or os.getenv("SAM_IMAP_MAILBOXES") or os.getenv("MANAGEMENT_IMAP_MAILBOXES")
+    if not raw:
+        return ["INBOX"]
+    if isinstance(raw, list):
+        boxes = [str(x).strip() for x in raw if str(x).strip()]
+    else:
+        boxes = [x.strip() for x in str(raw).split(",") if x.strip()]
+    return boxes or ["INBOX"]
+
+
 def _decode_addr(value: str | None) -> str:
     return str(value or "").strip()
 
 
-def _imap_parse_message(uid: str, raw: bytes, include_body: bool) -> dict[str, Any]:
+def _imap_parse_message(uid: str, raw: bytes, include_body: bool, mailbox: str = "INBOX") -> dict[str, Any]:
     msg = BytesParser(policy=policy.default).parsebytes(raw)
     attachments: list[dict[str, Any]] = []
     for idx, part in enumerate(msg.iter_attachments()):
@@ -481,14 +573,17 @@ def _imap_parse_message(uid: str, raw: bytes, include_body: bool) -> dict[str, A
             content = body_part.get_content()
             body_text = _html_to_text(content) if body_part.get_content_type() == "text/html" else str(content).strip()
 
+    date_text = str(msg.get("date") or "")
+    date_at = _parse_mail_datetime(date_text)
     return {
-        "id": uid,
-        "thread_id": uid,
+        "id": _imap_message_id(mailbox, uid),
+        "thread_id": _imap_message_id(mailbox, uid),
+        "mailbox": mailbox,
         "subject": str(msg.get("subject") or "(no subject)"),
         "from": _decode_addr(msg.get("from")),
         "to": _decode_addr(msg.get("to")),
-        "date": str(msg.get("date") or ""),
-        "date_iso": None,
+        "date": date_text,
+        "date_iso": _datetime_to_iso(date_at),
         "snippet": (body_text[:180] if body_text else ""),
         "unread": False,
         "attachments": attachments,
@@ -513,7 +608,8 @@ def _imap_fetch_raw(conn: imaplib.IMAP4_SSL, uid: str) -> bytes:
 def _imap_list_messages(account: MailAccount, query: str, limit: int) -> list[dict[str, Any]]:
     conn = _imap_connect(account)
     try:
-        conn.select("INBOX")
+        mailbox = "INBOX"
+        conn.select(mailbox)
         typ, data = conn.uid("SEARCH", None, "ALL")
         if typ != "OK":
             raise MailProviderError("IMAP search failed.")
@@ -522,7 +618,7 @@ def _imap_list_messages(account: MailAccount, query: str, limit: int) -> list[di
         messages: list[dict[str, Any]] = []
         for uid in reversed(uids[-max(limit * 4, limit):]):
             raw = _imap_fetch_raw(conn, uid)
-            item = _imap_parse_message(uid, raw, include_body=bool(q))
+            item = _imap_parse_message(uid, raw, include_body=bool(q), mailbox=mailbox)
             haystack = " ".join([item.get("subject") or "", item.get("from") or "", item.get("body_text") or ""]).lower()
             if q and q not in haystack:
                 continue
@@ -538,11 +634,40 @@ def _imap_list_messages(account: MailAccount, query: str, limit: int) -> list[di
             pass
 
 
+def _imap_import_messages(account: MailAccount, cutoff: datetime) -> list[dict[str, Any]]:
+    conn = _imap_connect(account)
+    since = cutoff.strftime("%d-%b-%Y")
+    messages: list[dict[str, Any]] = []
+    try:
+        for mailbox in _imap_mailboxes(account):
+            typ, _ = conn.select(mailbox)
+            if typ != "OK":
+                continue
+            typ, data = conn.uid("SEARCH", None, "SINCE", since)
+            if typ != "OK":
+                raise MailProviderError("IMAP search failed.")
+            uids = (data[0] or b"").decode("ascii", errors="ignore").split()
+            for uid in uids:
+                raw = _imap_fetch_raw(conn, uid)
+                item = _imap_parse_message(uid, raw, include_body=True, mailbox=mailbox)
+                date_at = _summary_datetime(item)
+                if date_at and date_at < cutoff:
+                    continue
+                messages.append(item)
+        return messages
+    finally:
+        try:
+            conn.logout()
+        except Exception:
+            pass
+
+
 def _imap_get_message(account: MailAccount, uid: str) -> dict[str, Any]:
+    mailbox, message_uid = _imap_message_parts(uid)
     conn = _imap_connect(account)
     try:
-        conn.select("INBOX")
-        return _imap_parse_message(uid, _imap_fetch_raw(conn, uid), include_body=True)
+        conn.select(mailbox)
+        return _imap_parse_message(message_uid, _imap_fetch_raw(conn, message_uid), include_body=True, mailbox=mailbox)
     finally:
         try:
             conn.logout()
@@ -551,11 +676,11 @@ def _imap_get_message(account: MailAccount, uid: str) -> dict[str, Any]:
 
 
 def _imap_attachment(account: MailAccount, uid: str, attachment_id: str) -> bytes:
-    msg = _imap_get_message(account, uid)
+    mailbox, message_uid = _imap_message_parts(uid)
     conn = _imap_connect(account)
     try:
-        conn.select("INBOX")
-        raw = _imap_fetch_raw(conn, uid)
+        conn.select(mailbox)
+        raw = _imap_fetch_raw(conn, message_uid)
     finally:
         try:
             conn.logout()
@@ -591,8 +716,195 @@ def _imap_send_reply(account: MailAccount, original: dict[str, Any], body: str) 
         server.send_message(msg)
 
 
+def _email_db():
+    from app.db import SessionLocal
+
+    if SessionLocal is None:
+        raise MailConfigError("Email import database is not configured.")
+    return SessionLocal()
+
+
+def _row_to_message(row: Any, include_body: bool = False) -> dict[str, Any]:
+    item = {
+        "id": row.provider_message_id,
+        "thread_id": row.thread_id,
+        "mailbox": row.mailbox or "",
+        "subject": row.subject or "(no subject)",
+        "from": row.from_addr or "",
+        "to": row.to_addr or "",
+        "date": row.date_text or "",
+        "date_iso": _datetime_to_iso(row.date_at),
+        "snippet": row.snippet or "",
+        "unread": bool(row.unread),
+        "attachments": row.attachments_json or [],
+        "attachment_count": int(row.attachment_count or 0),
+        "message_id": row.message_id_header or "",
+        "references": row.references_header or "",
+        "reply_to": row.reply_to or row.from_addr or "",
+        "cached": True,
+    }
+    if include_body:
+        item["body_text"] = row.body_text or ""
+    return item
+
+
+def _cached_account_meta(account: MailAccount) -> dict[str, Any]:
+    try:
+        from app.models import ManagementEmailMessage
+
+        db = _email_db()
+    except Exception:
+        return {"cached_count": 0, "last_imported_at": None}
+    try:
+        q = db.query(ManagementEmailMessage).filter(
+            ManagementEmailMessage.account_key == account.key
+        )
+        last = q.order_by(ManagementEmailMessage.imported_at.desc()).first()
+        return {
+            "cached_count": q.count(),
+            "last_imported_at": _datetime_to_iso(last.imported_at) if last else None,
+        }
+    finally:
+        db.close()
+
+
+def _cached_messages(account: MailAccount, query: str, limit: int) -> list[dict[str, Any]] | None:
+    try:
+        from app.models import ManagementEmailMessage
+
+        db = _email_db()
+    except Exception:
+        return None
+    try:
+        q = db.query(ManagementEmailMessage).filter(
+            ManagementEmailMessage.account_key == account.key
+        )
+        needle = (query or "").strip()
+        if needle:
+            like = f"%{needle}%"
+            q = q.filter(or_(
+                ManagementEmailMessage.subject.ilike(like),
+                ManagementEmailMessage.from_addr.ilike(like),
+                ManagementEmailMessage.to_addr.ilike(like),
+                ManagementEmailMessage.body_text.ilike(like),
+            ))
+        rows = q.order_by(
+            ManagementEmailMessage.date_at.desc(),
+            ManagementEmailMessage.id.desc(),
+        ).limit(max(1, min(limit, 200))).all()
+        has_cache = db.query(ManagementEmailMessage.id).filter(
+            ManagementEmailMessage.account_key == account.key
+        ).first() is not None
+        if not rows and not has_cache:
+            return None
+        return [_row_to_message(row, include_body=False) for row in rows]
+    finally:
+        db.close()
+
+
+def _cached_message(account: MailAccount, message_id: str) -> dict[str, Any] | None:
+    try:
+        from app.models import ManagementEmailMessage
+
+        db = _email_db()
+    except Exception:
+        return None
+    try:
+        row = db.query(ManagementEmailMessage).filter(
+            ManagementEmailMessage.account_key == account.key,
+            ManagementEmailMessage.provider_message_id == message_id,
+        ).first()
+        return _row_to_message(row, include_body=True) if row else None
+    finally:
+        db.close()
+
+
+def _upsert_cached_messages(account: MailAccount, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    from app.models import ManagementEmailMessage
+
+    now = datetime.utcnow()
+    stats = {"scanned": len(messages), "inserted": 0, "updated": 0, "skipped": 0}
+    db = _email_db()
+    try:
+        for item in messages:
+            provider_message_id = str(item.get("id") or "").strip()
+            if not provider_message_id:
+                stats["skipped"] += 1
+                continue
+            row = db.query(ManagementEmailMessage).filter(
+                ManagementEmailMessage.account_key == account.key,
+                ManagementEmailMessage.provider_message_id == provider_message_id,
+            ).first()
+            if row is None:
+                row = ManagementEmailMessage(
+                    account_key=account.key,
+                    account_address=account.address,
+                    provider=account.provider,
+                    provider_message_id=provider_message_id,
+                    imported_at=now,
+                )
+                db.add(row)
+                stats["inserted"] += 1
+            else:
+                stats["updated"] += 1
+
+            attachments = item.get("attachments") or []
+            body_text = str(item.get("body_text") or "")
+            snippet = str(item.get("snippet") or (body_text[:180] if body_text else ""))
+            row.account_address = account.address
+            row.provider = account.provider
+            row.thread_id = str(item.get("thread_id") or "")
+            row.mailbox = str(item.get("mailbox") or "")
+            row.subject = str(item.get("subject") or "(no subject)")[:500]
+            row.from_addr = str(item.get("from") or "")
+            row.to_addr = str(item.get("to") or "")
+            row.date_text = str(item.get("date") or "")
+            row.date_at = _summary_datetime(item)
+            row.snippet = snippet
+            row.body_text = body_text
+            row.unread = bool(item.get("unread"))
+            row.attachments_json = attachments
+            row.attachment_count = int(item.get("attachment_count") or len(attachments))
+            row.message_id_header = str(item.get("message_id") or "")[:500]
+            row.references_header = str(item.get("references") or "")
+            row.reply_to = str(item.get("reply_to") or item.get("from") or "")
+            row.imported_at = now
+            row.updated_at = now
+        db.commit()
+        stats["cached_count"] = _cached_account_meta(account)["cached_count"]
+        return stats
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def import_recent_messages(account_key: str | None = None, days: int = 60) -> dict[str, Any]:
+    account = get_account(account_key)
+    if not account.connected:
+        raise MailConfigError(f"{account.label} is not connected yet.")
+    safe_days = max(1, min(int(days or 60), 365))
+    cutoff = datetime.utcnow() - timedelta(days=safe_days)
+    if account.provider == "gmail_oauth":
+        messages = _gmail_import_messages(account, cutoff)
+    else:
+        messages = _imap_import_messages(account, cutoff)
+    stats = _upsert_cached_messages(account, messages)
+    stats.update({
+        "account": account.address,
+        "account_key": account.key,
+        "days": safe_days,
+        "cutoff": _datetime_to_iso(cutoff),
+    })
+    return stats
+
+
 def list_messages(account_key: str | None = None, query: str = "", limit: int = 25) -> list[dict[str, Any]]:
     account = get_account(account_key)
+    cached = _cached_messages(account, query, limit)
+    if cached is not None:
+        return cached
     if not account.connected:
         raise MailConfigError(f"{account.label} is not connected yet.")
     if account.provider == "gmail_oauth":
@@ -602,6 +914,9 @@ def list_messages(account_key: str | None = None, query: str = "", limit: int = 
 
 def get_message(account_key: str | None, message_id: str) -> dict[str, Any]:
     account = get_account(account_key)
+    cached = _cached_message(account, message_id)
+    if cached is not None:
+        return cached
     if not account.connected:
         raise MailConfigError(f"{account.label} is not connected yet.")
     if account.provider == "gmail_oauth":

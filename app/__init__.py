@@ -43,6 +43,7 @@ from app.web.scheduling_cron import scheduling_cron_bp  # B6: shift-alarm send c
 from app.web.briefs import briefs_bp
 from app.web.tasks import tasks_bp
 from app.web.team_reports import team_reports_bp
+from app.web.management_email_routes import management_email_bp
 from app.web.floor_routes import floor_bp  # Sections/Floor: map setup + section assignment + host seating + reservations (ck Gate 2; self-contained /floor blueprint, see docs/floor_contract.md)
 from app.web.worldcup import worldcup_bp  # PUBLIC no-login /worldcup page (World Cup only); exempted in auth.py EXEMPT_PREFIXES
 from app.web import auth as ezauth
@@ -219,6 +220,7 @@ def create_app():
     # their own store, no request-param override). See
     # app/web/team_reports.py.
     app.register_blueprint(team_reports_bp)
+    app.register_blueprint(management_email_bp)
     # Corporate-order Blueprint mounts under <store_slug> just like store_bp;
     # has its own url_value_preprocessor + partner_gate so it's standalone.
     app.register_blueprint(corp_order_public_bp)

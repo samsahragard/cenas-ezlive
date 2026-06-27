@@ -22,6 +22,234 @@
 {% endblock %}
 
 {% block content %}
+{% set show_email_dashboard = has_permission('email.view_shared_mailbox') or has_permission('email.view_own_mailbox') %}
+{% if show_email_dashboard %}
+<style>
+  .home-dash-switch {
+    display: inline-flex;
+    gap: 2px;
+    padding: 4px;
+    margin: 0 0 14px;
+    border: 1px solid rgba(228, 179, 64, 0.18);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.24);
+  }
+  .home-dash-tab {
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(250, 246, 236, 0.72);
+    cursor: pointer;
+    font: 700 12px/1.2 Manrope, system-ui, sans-serif;
+    letter-spacing: 0.01em;
+    min-height: 34px;
+    padding: 0 14px;
+  }
+  .home-dash-tab.is-active {
+    background: #e85d3d;
+    color: #fff;
+  }
+  .home-dash-panel.hidden { display: none; }
+  .mailbox-shell {
+    min-height: 680px;
+    border: 1px solid rgba(228, 179, 64, 0.18);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #1b0f0a;
+  }
+  .mailbox-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px;
+    border-bottom: 1px solid rgba(228, 179, 64, 0.16);
+    background: rgba(0, 0, 0, 0.22);
+  }
+  .mailbox-accounts {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .mailbox-account {
+    border: 1px solid rgba(228, 179, 64, 0.22);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(250, 246, 236, 0.82);
+    cursor: pointer;
+    font: 700 12px/1.2 Manrope, system-ui, sans-serif;
+    min-height: 32px;
+    padding: 0 10px;
+  }
+  .mailbox-account.is-active {
+    background: rgba(46, 163, 159, 0.2);
+    border-color: rgba(91, 202, 197, 0.55);
+    color: #fff;
+  }
+  .mailbox-account[disabled] {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  .mailbox-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    min-width: min(100%, 360px);
+  }
+  .mailbox-search input {
+    width: 100%;
+    min-height: 34px;
+    border: 1px solid rgba(228, 179, 64, 0.2);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.28);
+    color: #fff;
+    padding: 0 10px;
+  }
+  .mailbox-icon-btn {
+    border: 1px solid rgba(228, 179, 64, 0.22);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #fff;
+    cursor: pointer;
+    font: 700 12px/1 Manrope, system-ui, sans-serif;
+    min-height: 34px;
+    padding: 0 10px;
+    white-space: nowrap;
+  }
+  .mailbox-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+    min-height: 620px;
+  }
+  .mailbox-list {
+    border-right: 1px solid rgba(228, 179, 64, 0.14);
+    background: rgba(0, 0, 0, 0.12);
+    overflow: auto;
+  }
+  .mailbox-row {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid rgba(228, 179, 64, 0.1);
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    padding: 12px;
+    text-align: left;
+  }
+  .mailbox-row:hover,
+  .mailbox-row.is-active { background: rgba(255, 255, 255, 0.055); }
+  .mailbox-row.is-unread .mailbox-subject { color: #fff; font-weight: 800; }
+  .mailbox-from {
+    color: rgba(250, 246, 236, 0.74);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mailbox-subject {
+    color: rgba(250, 246, 236, 0.92);
+    font-size: 13px;
+    font-weight: 650;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mailbox-snippet {
+    color: rgba(250, 246, 236, 0.52);
+    font-size: 12px;
+    line-height: 1.35;
+    max-height: 34px;
+    overflow: hidden;
+  }
+  .mailbox-detail {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: auto;
+  }
+  .mailbox-detail-empty,
+  .mailbox-state {
+    color: rgba(250, 246, 236, 0.64);
+    font-size: 13px;
+    padding: 28px;
+  }
+  .mailbox-detail-head {
+    border-bottom: 1px solid rgba(228, 179, 64, 0.14);
+    padding: 18px;
+  }
+  .mailbox-detail-head h2 {
+    color: #fff;
+    font-size: 20px;
+    line-height: 1.18;
+    margin: 0 0 12px;
+  }
+  .mailbox-meta {
+    color: rgba(250, 246, 236, 0.58);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .mailbox-body {
+    color: rgba(250, 246, 236, 0.9);
+    font-size: 14px;
+    line-height: 1.55;
+    padding: 18px;
+    white-space: pre-wrap;
+  }
+  .mailbox-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 18px 18px;
+  }
+  .mailbox-attachment {
+    border: 1px solid rgba(91, 202, 197, 0.38);
+    border-radius: 6px;
+    color: #dffcfb;
+    font-size: 12px;
+    padding: 7px 9px;
+    text-decoration: none;
+  }
+  .mailbox-reply {
+    border-top: 1px solid rgba(228, 179, 64, 0.14);
+    margin-top: auto;
+    padding: 14px 18px 18px;
+  }
+  .mailbox-reply textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    border: 1px solid rgba(228, 179, 64, 0.2);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.26);
+    color: #fff;
+    padding: 10px;
+  }
+  .mailbox-reply-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .mailbox-status {
+    color: rgba(250, 246, 236, 0.62);
+    font-size: 12px;
+  }
+  @media (max-width: 840px) {
+    .mailbox-grid { grid-template-columns: 1fr; }
+    .mailbox-list { border-right: 0; max-height: 320px; }
+    .mailbox-search { margin-left: 0; }
+  }
+</style>
+<div class="home-dash-switch" id="homeDashSwitch" role="tablist" aria-label="Dashboard sections">
+  <button type="button" class="home-dash-tab is-active" data-home-dash-tab="analytics" role="tab" aria-selected="true">Analytics</button>
+  <button type="button" class="home-dash-tab" data-home-dash-tab="emails" role="tab" aria-selected="false">Emails</button>
+</div>
+<div class="home-dash-panel" data-home-dash-panel="analytics">
+{% endif %}
 {# KPI strip removed per Sam 2026-05-11 — was the 3 tiles
    (Today's deliveries, Heads to feed, Produce winners) at the top of every
    store dashboard. The downstream sections (donuts + Upcoming list) cover
@@ -596,4 +824,261 @@
     <div class="section-card-desc">Daily revenue, week-over-week, predictive volume.</div>
   </a>
 </div>
+{% if show_email_dashboard %}
+</div>
+
+<div class="home-dash-panel hidden" data-home-dash-panel="emails">
+  <div class="mailbox-shell" id="homeMailbox">
+    <div class="mailbox-topbar">
+      <div class="mailbox-accounts" id="mailboxAccounts"></div>
+      <div class="mailbox-search">
+        <input type="search" id="mailboxSearch" placeholder="Search mail" autocomplete="off">
+        <button type="button" class="mailbox-icon-btn" id="mailboxSearchBtn">Search</button>
+        <button type="button" class="mailbox-icon-btn" id="mailboxRefreshBtn">Refresh</button>
+      </div>
+    </div>
+    <div class="mailbox-grid">
+      <div class="mailbox-list" id="mailboxList">
+        <div class="mailbox-state">Loading mailboxes...</div>
+      </div>
+      <div class="mailbox-detail" id="mailboxDetail">
+        <div class="mailbox-detail-empty">Choose an email to read it here.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var switcher = document.getElementById("homeDashSwitch");
+  if (switcher) {
+    switcher.addEventListener("click", function (ev) {
+      var tab = ev.target.closest("[data-home-dash-tab]");
+      if (!tab) return;
+      var key = tab.getAttribute("data-home-dash-tab");
+      document.querySelectorAll("[data-home-dash-tab]").forEach(function (el) {
+        var on = el === tab;
+        el.classList.toggle("is-active", on);
+        el.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll("[data-home-dash-panel]").forEach(function (panel) {
+        panel.classList.toggle("hidden", panel.getAttribute("data-home-dash-panel") !== key);
+      });
+      if (key === "emails") initMailbox();
+    });
+  }
+
+  var mailboxStarted = false;
+  var mailboxAccounts = [];
+  var activeAccount = null;
+  var activeMessageId = null;
+
+  var accountEl = document.getElementById("mailboxAccounts");
+  var listEl = document.getElementById("mailboxList");
+  var detailEl = document.getElementById("mailboxDetail");
+  var searchEl = document.getElementById("mailboxSearch");
+  var searchBtn = document.getElementById("mailboxSearchBtn");
+  var refreshBtn = document.getElementById("mailboxRefreshBtn");
+
+  function esc(value) {
+    return String(value || "").replace(/[&<>"']/g, function (ch) {
+      return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[ch];
+    });
+  }
+
+  function fmtSize(bytes) {
+    var n = Number(bytes || 0);
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1024 / 1024).toFixed(1) + " MB";
+  }
+
+  function state(target, text) {
+    target.innerHTML = '<div class="mailbox-state">' + esc(text) + '</div>';
+  }
+
+  function activeAccountData() {
+    return mailboxAccounts.find(function (a) { return a.key === activeAccount; }) || null;
+  }
+
+  function renderAccounts(defaultKey) {
+    if (!accountEl) return;
+    accountEl.innerHTML = "";
+    if (!mailboxAccounts.length) {
+      accountEl.innerHTML = '<span class="mailbox-status">No mailboxes configured.</span>';
+      return;
+    }
+    var connectedDefault = mailboxAccounts.find(function (a) { return a.connected; });
+    activeAccount = defaultKey || (connectedDefault && connectedDefault.key) || mailboxAccounts[0].key;
+    mailboxAccounts.forEach(function (account) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mailbox-account" + (account.key === activeAccount ? " is-active" : "");
+      btn.textContent = account.label || account.address || account.key;
+      btn.title = account.connected ? (account.address || account.label) : "Mailbox is not connected yet";
+      if (!account.connected) btn.setAttribute("disabled", "disabled");
+      btn.addEventListener("click", function () {
+        if (!account.connected) return;
+        activeAccount = account.key;
+        activeMessageId = null;
+        accountEl.querySelectorAll(".mailbox-account").forEach(function (x) { x.classList.remove("is-active"); });
+        btn.classList.add("is-active");
+        loadMessages();
+      });
+      accountEl.appendChild(btn);
+    });
+  }
+
+  function initMailbox() {
+    if (mailboxStarted) return;
+    mailboxStarted = true;
+    fetch("/dashboard/email/accounts", {credentials: "same-origin", headers: {"Accept": "application/json"}})
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j; return j; }); })
+      .then(function (data) {
+        mailboxAccounts = data.accounts || [];
+        renderAccounts(data.default_account);
+        if ((activeAccountData() || {}).connected) {
+          loadMessages();
+        } else {
+          state(listEl, "sam@cenaskitchen.com is ready in the dashboard, but the mailbox secret is not connected yet.");
+          state(detailEl, "Add the mailbox OAuth or IMAP secret to connect this account.");
+        }
+      })
+      .catch(function (err) {
+        state(listEl, (err && (err.detail || err.error)) || "Could not load mailbox accounts.");
+      });
+  }
+
+  function loadMessages() {
+    if (!activeAccount) return;
+    activeMessageId = null;
+    state(listEl, "Loading messages...");
+    detailEl.innerHTML = '<div class="mailbox-detail-empty">Choose an email to read it here.</div>';
+    var q = searchEl ? searchEl.value.trim() : "";
+    var url = "/dashboard/email/messages?account=" + encodeURIComponent(activeAccount) +
+      "&limit=25&q=" + encodeURIComponent(q);
+    fetch(url, {credentials: "same-origin", headers: {"Accept": "application/json"}})
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j; return j; }); })
+      .then(function (data) { renderMessages(data.messages || []); })
+      .catch(function (err) {
+        state(listEl, (err && (err.detail || err.error)) || "Could not load messages.");
+      });
+  }
+
+  function renderMessages(messages) {
+    if (!messages.length) {
+      state(listEl, "No messages found.");
+      return;
+    }
+    listEl.innerHTML = "";
+    messages.forEach(function (msg) {
+      var row = document.createElement("button");
+      row.type = "button";
+      row.className = "mailbox-row" + (msg.unread ? " is-unread" : "");
+      row.setAttribute("data-message-id", msg.id);
+      row.innerHTML =
+        '<div class="mailbox-from">' + esc(msg.from || "Unknown sender") + '</div>' +
+        '<div class="mailbox-subject">' + esc(msg.subject || "(no subject)") +
+          (msg.attachment_count ? ' <span title="Has attachments">[' + msg.attachment_count + ']</span>' : '') +
+        '</div>' +
+        '<div class="mailbox-snippet">' + esc(msg.snippet || "") + '</div>';
+      row.addEventListener("click", function () { openMessage(msg.id, row); });
+      listEl.appendChild(row);
+    });
+  }
+
+  function attachmentLink(messageId, att) {
+    var params = new URLSearchParams({
+      account: activeAccount,
+      message_id: messageId,
+      attachment_id: att.id || "",
+      filename: att.filename || "attachment",
+      mime_type: att.mime_type || "application/octet-stream"
+    });
+    return '<a class="mailbox-attachment" href="/dashboard/email/attachment?' + params.toString() + '">' +
+      esc(att.filename || "attachment") + ' <span>(' + esc(fmtSize(att.size)) + ')</span></a>';
+  }
+
+  function openMessage(messageId, row) {
+    if (!activeAccount || !messageId) return;
+    activeMessageId = messageId;
+    listEl.querySelectorAll(".mailbox-row").forEach(function (x) { x.classList.remove("is-active"); });
+    if (row) row.classList.add("is-active");
+    state(detailEl, "Loading message...");
+    fetch("/dashboard/email/messages/" + encodeURIComponent(messageId) + "?account=" + encodeURIComponent(activeAccount), {
+      credentials: "same-origin",
+      headers: {"Accept": "application/json"}
+    })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j; return j; }); })
+      .then(function (data) { renderMessage(data.message); })
+      .catch(function (err) {
+        state(detailEl, (err && (err.detail || err.error)) || "Could not load this message.");
+      });
+  }
+
+  function renderMessage(msg) {
+    var account = activeAccountData() || {};
+    var attachments = (msg.attachments || []).map(function (att) {
+      return attachmentLink(msg.id, att);
+    }).join("");
+    detailEl.innerHTML =
+      '<div class="mailbox-detail-head">' +
+        '<h2>' + esc(msg.subject || "(no subject)") + '</h2>' +
+        '<div class="mailbox-meta">' +
+          '<div><strong>From:</strong> ' + esc(msg.from || "") + '</div>' +
+          '<div><strong>To:</strong> ' + esc(msg.to || "") + '</div>' +
+          '<div><strong>Date:</strong> ' + esc(msg.date || "") + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="mailbox-body">' + esc(msg.body_text || msg.snippet || "No readable body found.") + '</div>' +
+      (attachments ? '<div class="mailbox-attachments">' + attachments + '</div>' : '') +
+      '<div class="mailbox-reply">' +
+        '<textarea id="mailboxReplyBody" ' + (account.can_send ? "" : "disabled") + ' placeholder="' +
+          (account.can_send ? "Write a reply..." : "Sending is not connected for this mailbox yet.") + '"></textarea>' +
+        '<div class="mailbox-reply-actions">' +
+          '<button type="button" class="mailbox-icon-btn" id="mailboxSendReply" ' + (account.can_send ? "" : "disabled") + '>Send Reply</button>' +
+          '<span class="mailbox-status" id="mailboxReplyStatus"></span>' +
+        '</div>' +
+      '</div>';
+    var sendBtn = document.getElementById("mailboxSendReply");
+    if (sendBtn && account.can_send) sendBtn.addEventListener("click", sendReply);
+  }
+
+  function sendReply() {
+    var bodyEl = document.getElementById("mailboxReplyBody");
+    var statusEl = document.getElementById("mailboxReplyStatus");
+    var body = bodyEl ? bodyEl.value.trim() : "";
+    if (!body) {
+      if (statusEl) statusEl.textContent = "Write a reply first.";
+      return;
+    }
+    if (statusEl) statusEl.textContent = "Sending...";
+    fetch("/dashboard/email/reply", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {"Content-Type": "application/json", "Accept": "application/json"},
+      body: JSON.stringify({account: activeAccount, message_id: activeMessageId, body: body})
+    })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j; return j; }); })
+      .then(function () {
+        if (statusEl) statusEl.textContent = "Reply sent.";
+        if (bodyEl) bodyEl.value = "";
+      })
+      .catch(function (err) {
+        if (statusEl) statusEl.textContent = (err && (err.detail || err.error)) || "Reply failed.";
+      });
+  }
+
+  if (searchBtn) searchBtn.addEventListener("click", loadMessages);
+  if (refreshBtn) refreshBtn.addEventListener("click", loadMessages);
+  if (searchEl) {
+    searchEl.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") loadMessages();
+    });
+  }
+})();
+</script>
+{% endif %}
 {% endblock %}

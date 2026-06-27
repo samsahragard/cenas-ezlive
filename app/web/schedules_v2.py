@@ -1040,6 +1040,7 @@ def sv2_shift_delete(shift_id):
 
 
 @store_bp.route("/schedules-v2/shifts/cleanup-open-drafts", methods=["GET", "POST"])
+@store_bp.route("/schedules-v2/open-drafts", methods=["GET", "POST"])
 @require_level("partner")
 def sv2_cleanup_open_draft_shifts():
     """Partner cleanup for accidental copied open draft rows.

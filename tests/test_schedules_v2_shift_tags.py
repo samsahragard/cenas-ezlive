@@ -329,12 +329,12 @@ def test_cleanup_open_draft_shifts_only_removes_accidental_open_unpublished_rows
     ])
     db_session.commit()
 
-    missing_confirm = client.post("/dos/schedules-v2/shifts/cleanup-open-drafts", json={
+    missing_confirm = client.post("/dos/schedules-v2/open-drafts", json={
         "week": "2026-06-14",
     })
     assert missing_confirm.status_code == 400
 
-    cleaned = client.post("/dos/schedules-v2/shifts/cleanup-open-drafts", json={
+    cleaned = client.post("/dos/schedules-v2/open-drafts", json={
         "week": "2026-06-14",
         "confirm": "DELETE_OPEN_DRAFTS",
     })

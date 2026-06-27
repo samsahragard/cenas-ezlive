@@ -7491,6 +7491,56 @@ def operations_dashboard():
     No DB session is opened — the iframed pages run their own queries
     when the browser loads them."""
     require_dashboard_access("dash.operations")
+    open_drafts_week = (request.args.get("open_drafts_week") or "").strip()
+    open_drafts_confirm = (request.args.get("confirm") or "").strip()
+    if open_drafts_week:
+        from app.db import SessionLocal
+        from app.models import Schedule, Shift, ShiftTag, User
+        from app.web.permissions import current_user_id
+
+        db = SessionLocal()
+        user = db.get(User, current_user_id())
+        if (getattr(user, "permission_level", "") or "").lower() != "partner":
+            db.close()
+            abort(403)
+        if open_drafts_confirm != "DELETE_OPEN_DRAFTS":
+            db.close()
+            abort(400)
+        try:
+            week_start = date.fromisoformat(open_drafts_week)
+        except Exception:
+            db.close()
+            abort(400)
+        try:
+            store_key = getattr(g, "current_location", None)
+            sched = (db.query(Schedule)
+                       .filter_by(store_key=store_key, week_start=week_start)
+                       .first())
+            if sched is not None:
+                targets = []
+                for sh in (db.query(Shift)
+                             .filter_by(schedule_id=sched.id, status="open")
+                             .filter(Shift.employee_id.is_(None),
+                                     Shift.published_at.is_(None))
+                             .all()):
+                    if (sh.display_name or "").strip():
+                        continue
+                    targets.append(sh)
+                ids = [sh.id for sh in targets]
+                if ids:
+                    db.query(ShiftTag).filter(ShiftTag.shift_id.in_(ids)).delete(synchronize_session=False)
+                    for sh in targets:
+                        db.delete(sh)
+                    sched.updated_at = datetime.utcnow()
+                    db.commit()
+        finally:
+            db.close()
+        return redirect(url_for(
+            "store.operations_dashboard",
+            tab="team",
+            _v=request.args.get("_v") or "",
+            cleaned_open_drafts=open_drafts_week,
+        ))
     dash_tab_specs = _OPERATIONS_DASH_TABS
     if current_role_is("expo"):
         dash_tab_specs = [

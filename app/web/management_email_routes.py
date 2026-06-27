@@ -209,7 +209,8 @@ def cron_email_sync():
     expected = os.getenv("CRON_TOKEN")
     if not expected or _extract_cron_token() != expected:
         abort(401)
+    force_full = (request.args.get("full") or "").strip().lower() in {"1", "true", "yes", "on"}
     try:
-        return jsonify(sync_all_configured_accounts(initial_days=60))
+        return jsonify(sync_all_configured_accounts(initial_days=60, force_full=force_full))
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500

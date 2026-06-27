@@ -47,6 +47,25 @@ def test_gmail_message_summary_extracts_body_and_attachments():
     assert summary["attachments"][0]["filename"] == "invoice.pdf"
 
 
+def test_html_to_text_skips_email_css():
+    html = """
+    <html>
+      <head><style>body { background: #fff; } .hide { display:none; }</style></head>
+      <body>
+        <p>Ready Kitchen Warranty</p>
+        <p>Warranty Claim 109985 needs additional information.</p>
+      </body>
+    </html>
+    """
+
+    text = mail._html_to_text(html)
+
+    assert "background" not in text
+    assert "display:none" not in text
+    assert "Ready Kitchen Warranty" in text
+    assert "Warranty Claim 109985" in text
+
+
 def test_public_accounts_uses_json_without_leaking_secrets(monkeypatch):
     monkeypatch.setenv("MANAGEMENT_EMAIL_ALLOW_MULTIPLE", "1")
     monkeypatch.setenv(

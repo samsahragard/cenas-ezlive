@@ -69,21 +69,43 @@ class MailAccount:
 
 
 class _HTMLText(HTMLParser):
+    _SKIP_TAGS = {"head", "style", "script", "noscript", "svg", "template"}
+
     def __init__(self) -> None:
         super().__init__()
         self._chunks: list[str] = []
+        self._skip_depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() in {"br", "p", "div", "tr", "li"}:
+        name = tag.lower()
+        if name in self._SKIP_TAGS:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if name in {"br", "p", "div", "tr", "li", "table", "section"}:
+            self._chunks.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        name = tag.lower()
+        if name in self._SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if not self._skip_depth and name in {"p", "div", "tr", "li", "table", "section"}:
             self._chunks.append("\n")
 
     def handle_data(self, data: str) -> None:
-        if data:
+        if data and not self._skip_depth:
             self._chunks.append(data)
 
     def text(self) -> str:
         raw = "".join(self._chunks)
-        return "\n".join(line.rstrip() for line in raw.splitlines()).strip()
+        lines = []
+        for line in raw.splitlines():
+            clean = " ".join(line.split())
+            if clean:
+                lines.append(clean)
+        return "\n".join(lines).strip()
 
 
 def _html_to_text(value: str) -> str:
@@ -1158,11 +1180,12 @@ def import_recent_messages(account_key: str | None = None, days: int = 60,
 
 
 def sync_account(account: MailAccount, initial_days: int = 60,
-                 overlap_hours: int = 6) -> dict[str, Any]:
+                 overlap_hours: int = 6, force_full: bool = False) -> dict[str, Any]:
     state = _sync_state_snapshot(account)
     meta = _cached_account_meta(account)
     needs_initial = (
-        not state.get("initial_sync_completed")
+        force_full
+        or not state.get("initial_sync_completed")
         or int(meta.get("cached_count") or 0) == 0
     )
     try:
@@ -1184,7 +1207,8 @@ def sync_account(account: MailAccount, initial_days: int = 60,
 
 
 def sync_all_configured_accounts(initial_days: int = 60,
-                                 overlap_hours: int = 6) -> dict[str, Any]:
+                                 overlap_hours: int = 6,
+                                 force_full: bool = False) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     for account in configured_accounts():
         if not account.connected:
@@ -1197,7 +1221,8 @@ def sync_all_configured_accounts(initial_days: int = 60,
             continue
         try:
             result = sync_account(account, initial_days=initial_days,
-                                  overlap_hours=overlap_hours)
+                                  overlap_hours=overlap_hours,
+                                  force_full=force_full)
             result["ok"] = True
             results.append(result)
         except Exception as exc:

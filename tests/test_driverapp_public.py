@@ -80,7 +80,6 @@ def _application_payload(location="both", first_name="Maria"):
         "first_name": first_name,
         "last_name": "Gonzalez",
         "phone": "7135550101",
-        "whatsapp": "7135550101",
         "email": f"{first_name.lower()}@example.com",
         "zip_code": "77095",
         "preferred_location": location,
@@ -118,6 +117,8 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert "const adLanguages = ['en','es']" in html
     assert "function totalAdPhases()" in html
     assert "persist: false" in html
+    assert "requestAdFullscreen" in html
+    assert 'id="adExit"' in html
     assert 'id="adDriverRail"' in html
     assert "For Uber and DoorDash drivers" in html
     assert "Make a minimum of <em>$35</em> per delivery." in html
@@ -133,7 +134,9 @@ def test_driverapp_public_page_shows_live_deliveries_without_login(driverapp_bou
     assert "Pay Calculator" in html
     assert "$25 + $10 + ($2 x 8) + $5 = $56" in html
     assert "Driver App" in html
-    assert "Used for delivery photo uploads" in html
+    assert "WhatsApp Number" not in html
+    assert "name=\"whatsapp\"" not in html
+    assert "Used for delivery photo uploads" not in html
     assert "valid driver's license" not in html
     assert "valid auto insurance" not in html
     assert "Deliveries Live Right Now" in html
@@ -154,21 +157,19 @@ def test_driverapp_application_submit_creates_application(driverapp_bound):
     assert row.full_name == "Maria Gonzalez"
     assert row.preferred_location == "copperfield"
     assert row.available_days == ["Mon", "Wed", "Fri"]
-    assert row.whatsapp == "7135550101"
+    assert row.whatsapp is None
     assert row.consent is True
 
 
-def test_driverapp_application_requires_whatsapp(driverapp_bound):
+def test_driverapp_application_does_not_require_whatsapp(driverapp_bound):
     flask_app, db = driverapp_bound
     payload = _application_payload("copperfield")
-    payload["whatsapp"] = ""
 
     resp = flask_app.test_client().post("/driverapp", data=payload)
 
-    assert resp.status_code == 200
-    html = resp.get_data(as_text=True)
-    assert "WhatsApp number is required." in html
-    assert db.query(DriverApplication).count() == 0
+    assert resp.status_code == 302
+    row = db.query(DriverApplication).one()
+    assert row.whatsapp is None
 
 
 def test_driver_admin_applications_tab_scopes_both_to_each_store(driverapp_bound):

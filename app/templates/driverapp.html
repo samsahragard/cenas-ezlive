@@ -21,6 +21,9 @@ body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{anima
 <style>
 :root{--ad-rail:clamp(300px,28vw,390px)}.ad-driver-rail{display:none}.rail-logo-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.rail-logo{display:grid;place-items:center;min-width:126px;height:58px;border-radius:8px;border:1px solid rgba(243,231,209,.22);background:rgba(255,255,255,.08);padding:8px 10px}.rail-logo-doordash{background:#ff3008;border-color:#ff3008}.rail-logo img{display:block;width:100%;max-height:34px}.rail-plus{color:var(--gold);font-size:26px;font-weight:900}.rail-kicker{margin:0;color:var(--gold);font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.ad-driver-rail h2{margin:0;font-size:clamp(34px,4.2vw,54px);line-height:1.02}.ad-driver-rail h2 em{display:inline-block;color:var(--gold);font-style:normal;font-size:1.24em}.rail-qr{align-self:center;display:block;width:min(204px,82%);border-radius:8px;background:rgba(251,245,232,.98);padding:9px;box-shadow:0 16px 44px rgba(0,0,0,.26),0 0 0 1px rgba(233,162,59,.55)}.rail-qr img{display:block;width:100%;height:auto;border-radius:6px}.ad-driver-rail small{display:block;color:rgba(243,231,209,.52);font-size:11px;line-height:1.35}@media(min-width:980px){body.ad-mode main,body.ad-mode .footer{margin-left:var(--ad-rail);width:calc(100% - var(--ad-rail));transition:margin-left .35s ease,width .35s ease}body.ad-mode .ad-driver-rail{position:fixed;left:18px;top:96px;bottom:18px;z-index:24;display:flex;width:calc(var(--ad-rail) - 36px);flex-direction:column;justify-content:center;gap:18px;overflow:hidden;border:1px solid rgba(233,162,59,.48);border-radius:8px;background:radial-gradient(circle at 18% 12%,rgba(233,162,59,.22),transparent 32%),linear-gradient(160deg,rgba(22,5,6,.98),rgba(92,26,33,.95));box-shadow:0 24px 70px rgba(0,0,0,.36);padding:22px;color:var(--bone)}body.ad-mode .ad-panel{left:auto;right:18px;transform:none;width:min(620px,calc(100vw - var(--ad-rail) - 48px))}body.ad-mode .ad-driver-rail h2 em{animation:adMoneyPulse .9s ease-in-out infinite alternate}}@media(min-width:980px) and (max-height:760px){body.ad-mode .ad-driver-rail{top:86px;gap:12px;padding:18px}.ad-driver-rail h2{font-size:clamp(30px,3.5vw,44px)}.rail-logo{height:50px;min-width:118px;padding:7px 9px}.rail-logo img{max-height:30px}.rail-qr{width:min(176px,76%);padding:7px}}@media(prefers-reduced-motion:reduce){body.ad-mode .ad-driver-rail h2 em{animation:none!important}}
 </style>
+<style>
+.ad-exit{display:none}body.ad-mode .announce,body.ad-mode .top{display:none}body.ad-mode .ad-driver-rail{top:18px}body.ad-mode .ad-exit{position:fixed;right:14px;top:14px;z-index:45;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(243,231,209,.38);border-radius:999px;background:rgba(22,5,6,.78);color:var(--bone);box-shadow:0 12px 34px rgba(0,0,0,.32);padding:9px 13px;font-size:13px;font-weight:900;cursor:pointer}html:fullscreen body.ad-mode .announce,html:fullscreen body.ad-mode .top{display:none}html:fullscreen body.ad-mode .ad-driver-rail{top:18px}html:fullscreen body.ad-mode .ad-exit{top:14px}html:-webkit-full-screen body.ad-mode .announce,html:-webkit-full-screen body.ad-mode .top{display:none}html:-webkit-full-screen body.ad-mode .ad-driver-rail{top:18px}html:-webkit-full-screen body.ad-mode .ad-exit{top:14px}
+</style>
 </head>
 <body>
 <div class="announce" data-i18n-html data-en="Join <b>20+ drivers</b> already delivering for Cenas Kitchen" data-es="Unete a <b>mas de 20 conductores</b> que ya entregan para Cenas Kitchen">Join <b>20+ drivers</b> already delivering for Cenas Kitchen</div>
@@ -63,6 +66,7 @@ body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{anima
   <a class="rail-qr" href="#apply" aria-label="Open driver application"><img src="{{ url_for('static', filename='brand/banners/driverapp-qr.png') }}" alt="QR code for the Cenas Kitchen driver application"></a>
   <small data-i18n data-en="Independent Cenas Kitchen opportunity. Not affiliated with Uber or DoorDash." data-es="Oportunidad independiente de Cenas Kitchen. No afiliada con Uber ni DoorDash.">Independent Cenas Kitchen opportunity. Not affiliated with Uber or DoorDash.</small>
 </aside>
+<button class="ad-exit" id="adExit" type="button">Stop Ad</button>
 
 <main id="top">
   <section class="hero">
@@ -223,7 +227,7 @@ body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{anima
         <p data-i18n data-en="It takes about five minutes. Tell us where you want to drive and when you are available." data-es="Toma unos cinco minutos. Dinos donde quieres manejar y cuando estas disponible.">It takes about five minutes. Tell us where you want to drive and when you are available.</p>
       </div>
       {% if submitted %}
-      <div class="success" data-i18n-html data-en="<strong>Application received.</strong> We will reach out within 1-2 days by phone, text, WhatsApp, or email with next steps. Keep an eye on your phone and WhatsApp." data-es="<strong>Aplicacion recibida.</strong> Te contactaremos en 1-2 dias por telefono, texto, WhatsApp o correo con los siguientes pasos. Revisa tu telefono y WhatsApp."><strong>Application received.</strong> We will reach out within 1-2 days by phone, text, WhatsApp, or email with next steps. Keep an eye on your phone and WhatsApp.</div>
+      <div class="success" data-i18n-html data-en="<strong>Application received.</strong> We will reach out within 1-2 days by phone, text, or email with next steps. Keep an eye on your phone." data-es="<strong>Aplicacion recibida.</strong> Te contactaremos en 1-2 dias por telefono, texto o correo con los siguientes pasos. Revisa tu telefono."><strong>Application received.</strong> We will reach out within 1-2 days by phone, text, or email with next steps. Keep an eye on your phone.</div>
       {% endif %}
       <div class="final-scan" id="scan-final">
         <div>
@@ -245,7 +249,6 @@ body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{anima
             <div class="field"><label><span data-i18n data-en="First Name" data-es="Nombre">First Name</span> <span class="req">*</span></label><input name="first_name" value="{{ values.get('first_name','') }}" required></div>
             <div class="field"><label><span data-i18n data-en="Last Name" data-es="Apellido">Last Name</span> <span class="req">*</span></label><input name="last_name" value="{{ values.get('last_name','') }}" required></div>
             <div class="field"><label><span data-i18n data-en="Phone Number" data-es="Telefono">Phone Number</span> <span class="req">*</span></label><input name="phone" type="tel" value="{{ values.get('phone','') }}" required></div>
-            <div class="field"><label><span data-i18n data-en="WhatsApp Number" data-es="Numero de WhatsApp">WhatsApp Number</span> <span class="req">*</span></label><input name="whatsapp" type="tel" value="{{ values.get('whatsapp','') }}" required><span class="hint" data-i18n data-en="Used for delivery photo uploads" data-es="Se usa para subir fotos de entrega">Used for delivery photo uploads</span></div>
             <div class="field full"><label><span data-i18n data-en="Email Address" data-es="Correo electronico">Email Address</span> <span class="req">*</span></label><input name="email" type="email" value="{{ values.get('email','') }}" required></div>
             <div class="field"><label data-i18n data-en="Home ZIP Code" data-es="Codigo postal">Home ZIP Code</label><input name="zip_code" inputmode="numeric" maxlength="5" value="{{ values.get('zip_code','') }}"></div>
           </div>
@@ -283,7 +286,7 @@ body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{anima
             {% for name, label in [('has_vehicle', 'Do you have a reliable vehicle?'), ('has_smartphone', 'Do you have a smartphone with mobile data?')] %}
             <div class="field full">
               <label><span {% if name == 'has_vehicle' %}data-i18n data-en="Do you have a reliable vehicle?" data-es="Tienes un vehiculo confiable?"{% else %}data-i18n data-en="Do you have a smartphone with mobile data?" data-es="Tienes un smartphone con datos moviles?"{% endif %}>{{ label }}</span> <span class="req">*</span></label>
-              {% if name == 'has_smartphone' %}<span class="hint" data-i18n data-en="Required to run the Ez-Manage Delivery app and upload photos via WhatsApp." data-es="Necesario para usar la app Ez-Manage Delivery y subir fotos por WhatsApp.">Required to run the Ez-Manage Delivery app and upload photos via WhatsApp.</span>{% endif %}
+              {% if name == 'has_smartphone' %}<span class="hint" data-i18n data-en="Required to run the Ez-Manage Delivery app and upload delivery photos." data-es="Necesario para usar la app Ez-Manage Delivery y subir fotos de entrega.">Required to run the Ez-Manage Delivery app and upload delivery photos.</span>{% endif %}
               <div class="radios">
                 {% set yes_no_labels = {'Yes':'Si','No':'No'} %}
                 {% for option in ['Yes','No'] %}
@@ -307,7 +310,7 @@ body.ad-mode .top{box-shadow:0 12px 38px rgba(0,0,0,.28)}.ad-toggle.active{anima
           <div class="field full"><label data-i18n data-en="Anything else you'd like us to know?" data-es="Algo mas que quieras que sepamos?">Anything else you'd like us to know?</label><textarea name="notes" placeholder="Tell us a bit about your availability, vehicle, or anything relevant." data-placeholder-en="Tell us a bit about your availability, vehicle, or anything relevant." data-placeholder-es="Cuentanos sobre tu disponibilidad, vehiculo o algo relevante.">{{ values.get('notes','') }}</textarea></div>
           <div class="consent">
             <input id="consent" name="consent" value="1" type="checkbox" {% if values.get('consent') == '1' %}checked{% endif %} required>
-            <label for="consent"><span data-i18n data-en="I confirm the information above is accurate, and I agree to be contacted by Cenas Kitchen by phone, text, WhatsApp, or email about this application. I have also read and understand the pay structure above - the base rate, tracking bonus, mileage bonus, and 5-star bonus - including how each one is earned." data-es="Confirmo que la informacion anterior es correcta y acepto que Cenas Kitchen me contacte por telefono, texto, WhatsApp o correo sobre esta aplicacion. Tambien lei y entiendo la estructura de pago - pago base, bono de seguimiento, bono de millas y bono de 5 estrellas - incluyendo como se gana cada uno.">I confirm the information above is accurate, and I agree to be contacted by Cenas Kitchen by phone, text, WhatsApp, or email about this application. I have also read and understand the pay structure above - the base rate, tracking bonus, mileage bonus, and 5-star bonus - including how each one is earned.</span> <span class="req">*</span></label>
+            <label for="consent"><span data-i18n data-en="I confirm the information above is accurate, and I agree to be contacted by Cenas Kitchen by phone, text, or email about this application. I have also read and understand the pay structure above - the base rate, tracking bonus, mileage bonus, and 5-star bonus - including how each one is earned." data-es="Confirmo que la informacion anterior es correcta y acepto que Cenas Kitchen me contacte por telefono, texto o correo sobre esta aplicacion. Tambien lei y entiendo la estructura de pago - pago base, bono de seguimiento, bono de millas y bono de 5 estrellas - incluyendo como se gana cada uno.">I confirm the information above is accurate, and I agree to be contacted by Cenas Kitchen by phone, text, or email about this application. I have also read and understand the pay structure above - the base rate, tracking bonus, mileage bonus, and 5-star bonus - including how each one is earned.</span> <span class="req">*</span></label>
           </div>
           <p style="margin-top:20px"><button class="btn btn-gold" type="submit" data-i18n data-en="Submit Application" data-es="Enviar aplicacion">Submit Application</button></p>
         </form>
@@ -409,6 +412,7 @@ const adTitle = document.getElementById('adTitle');
 const adSubtitle = document.getElementById('adSubtitle');
 const adStepBadge = document.getElementById('adStepBadge');
 const adProgress = document.getElementById('adProgress');
+const adExit = document.getElementById('adExit');
 const adLanguages = ['en','es'];
 const adSteps = [
   {
@@ -479,6 +483,31 @@ function currentDriverLang(){
   return document.documentElement.getAttribute('lang') === 'es' ? 'es' : 'en';
 }
 
+function isAdFullscreen(){
+  return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+function requestAdFullscreen(){
+  const root = document.documentElement;
+  try {
+    if (root.requestFullscreen && !document.fullscreenElement) {
+      root.requestFullscreen({navigationUI: 'hide'}).catch(() => {});
+    } else if (root.webkitRequestFullscreen && !document.webkitFullscreenElement) {
+      root.webkitRequestFullscreen();
+    }
+  } catch (error) {}
+}
+
+function exitAdFullscreen(){
+  try {
+    if (document.exitFullscreen && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else if (document.webkitExitFullscreen && document.webkitFullscreenElement) {
+      document.webkitExitFullscreen();
+    }
+  } catch (error) {}
+}
+
 function syncAdButtonLabel(){
   if (!adToggle) return;
   const lang = currentDriverLang();
@@ -486,6 +515,10 @@ function syncAdButtonLabel(){
   adToggle.textContent = label;
   adToggle.classList.toggle('active', adRunning);
   adToggle.setAttribute('aria-pressed', adRunning ? 'true' : 'false');
+  if (adExit) {
+    adExit.textContent = lang === 'es' ? 'Parar anuncio' : 'Stop Ad';
+    adExit.setAttribute('aria-label', adExit.textContent);
+  }
 }
 
 function clearAdSpotlight(){
@@ -562,6 +595,7 @@ function stopAdMode(){
   clearAdSpotlight();
   if (adProgress) adProgress.style.width = '0';
   setDriverLanguage(preferredDriverLang, {persist: false, rerenderAd: false});
+  exitAdFullscreen();
   syncAdButtonLabel();
 }
 
@@ -580,6 +614,7 @@ function startAdMode(){
   adIndex = 0;
   preferredDriverLang = currentDriverLang();
   document.body.classList.add('ad-mode');
+  requestAdFullscreen();
   syncAdButtonLabel();
   runAdStep();
 }
@@ -593,6 +628,14 @@ if (adToggle) {
     }
   });
 }
+if (adExit) adExit.addEventListener('click', stopAdMode);
+
+document.addEventListener('fullscreenchange', () => {
+  if (adRunning && !isAdFullscreen()) stopAdMode();
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  if (adRunning && !isAdFullscreen()) stopAdMode();
+});
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && adRunning) stopAdMode();

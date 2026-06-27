@@ -25,19 +25,6 @@
       <i class="ti ti-x" aria-hidden="true"></i>
     </button>
 
-    <a href="/" class="ck-sb-logo" title="Switch store">
-      <img class="ck-sb-logo-bull" src="{{ url_for('static', filename='brand/logo-bull.png') }}" alt="Cenas Kitchen">
-      {# Logo sub-label. Suppressed when it would just say "Partner" — the
-         role dashboard badge (base_dashboard.html, top-right of every
-         page) already says "PARTNER DASHBOARD", so the word under the
-         logo was redundant role text (Sam 2026-05-21). For the real
-         store contexts the sub-label is the STORE name (Tomball /
-         Copperfield / Corporate), which the role badge does NOT convey —
-         so it is kept there as the store identity / switch-store hint. #}
-      {% if store_label and store_label != 'Partner' %}
-      <div class="ck-sb-logo-sub">{{ store_label }}</div>
-      {% endif %}
-    </a>
     {% if _accessible|length > 1 and user_role != 'driver' %}
       {% set _path = request.path or '' %}
       {% set _prefix = '/' ~ store_slug %}
@@ -514,6 +501,20 @@
        moved. #}
 
     {% endif %}{# closes user_role == 'driver' / else #}
+
+    <a href="/" class="ck-sb-logo ck-sb-logo-bottom" title="Switch store">
+      <img class="ck-sb-logo-bull" src="{{ url_for('static', filename='brand/logo-bull.png') }}" alt="Cenas Kitchen">
+      {# Logo sub-label. Suppressed when it would just say "Partner" — the
+         role dashboard badge (base_dashboard.html, top-right of every
+         page) already says "PARTNER DASHBOARD", so the word under the
+         logo was redundant role text (Sam 2026-05-21). For the real
+         store contexts the sub-label is the STORE name (Tomball /
+         Copperfield / Corporate), which the role badge does NOT convey —
+         so it is kept there as the store identity / switch-store hint. #}
+      {% if store_label and store_label != 'Partner' %}
+      <div class="ck-sb-logo-sub">{{ store_label }}</div>
+      {% endif %}
+    </a>
 
     <a href="{% if user_role == 'driver' %}/driver/logout{% else %}/keypad-logout{% endif %}" class="ck-sb-logout"
        {% if user_role == 'driver' %}data-method="post"{% endif %}>

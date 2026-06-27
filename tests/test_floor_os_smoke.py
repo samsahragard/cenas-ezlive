@@ -11,6 +11,7 @@ honest states, the absence of any demo/placeholder data, and the logout).
 The fixture builds an isolated SQLite DB so this file does not leak into the
 other employee suites in the same pytest process.
 """
+import importlib
 import os
 import tempfile
 
@@ -27,11 +28,19 @@ def app_emp():
             pass
     os.environ["ALLOW_DEV_SECRET"] = "1"
     os.environ["DATABASE_URL"] = "sqlite:///" + tmp.replace("\\", "/")
+    import app.db as dbmod
+    importlib.reload(dbmod)
     from app import create_app
     app = create_app()
-    from app.db import SessionLocal
+    from app.web import employee_auth as emp_auth_mod
+    from app.web import employee_messages as emp_messages_mod
+    from app.web import employee_my_profile_page as emp_profile_mod
+    from app.web import employee_schedule_page as emp_schedule_mod
+    from app.web import employee_tables_page as emp_tables_mod
+    for mod in (emp_auth_mod, emp_messages_mod, emp_profile_mod, emp_schedule_mod, emp_tables_mod):
+        mod.SessionLocal = dbmod.SessionLocal
     from app.models import Employee
-    db = SessionLocal()
+    db = dbmod.SessionLocal()
     e = Employee(full_name="Maria Lopez", active=True, session_version=1, passcode_hash="x")
     db.add(e)
     db.commit()
@@ -49,6 +58,38 @@ def _login(client, eid):
         s.clear()
         s["employee_id"] = eid
         s["auth_ok"] = True
+
+
+def test_employee_dashboard_redirects_linked_manager_profile(app_emp):
+    app, eid = app_emp
+    from app.db import SessionLocal
+    from app.models import Employee, User
+
+    db = SessionLocal()
+    employee = db.get(Employee, eid)
+    manager = User(
+        full_name=employee.full_name,
+        email="maria.manager@test.local",
+        phone="555-777-1212",
+        passcode_hash=employee.passcode_hash,
+        permission_level="foh_manager",
+        store_scope="copperfield",
+        active=True,
+        first_login_done=True,
+        session_version=1,
+    )
+    db.add(manager)
+    db.flush()
+    employee.user_id = manager.id
+    db.commit()
+    db.close()
+
+    c = app.test_client()
+    _login(c, eid)
+    r = c.get("/employee/dashboard", follow_redirects=False)
+
+    assert r.status_code in {302, 303}
+    assert (r.headers.get("Location") or "").endswith("/uno/today")
 
 
 def _assert_shell(html: str):

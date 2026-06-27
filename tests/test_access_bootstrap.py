@@ -64,13 +64,13 @@ def test_requested_access_bootstrap_updates_named_users_and_is_idempotent(db_ses
     assert db_session.query(UserAuditLog).count() == 8
 
 
-def test_access_bootstrap_moves_damean_employee_to_copperfield_manager_profile(db_session):
+def test_access_bootstrap_moves_damon_employee_to_copperfield_manager_profile(db_session):
     adriana = _user(db_session, 20, "Adriana Herrera", role="foh_manager", scope="tomball")
     employee = Employee(
         id=30,
-        full_name="Damean Employee",
+        full_name="Damon Greer",
         phone="555-333-3030",
-        email="damean@test.local",
+        email="damon@test.local",
         passcode_hash="employee-pin-hash",
         active=True,
         session_version=4,
@@ -85,7 +85,7 @@ def test_access_bootstrap_moves_damean_employee_to_copperfield_manager_profile(d
     db_session.commit()
 
     assert changed == 1
-    manager = db_session.query(User).filter(User.full_name == "Damean Employee").one()
+    manager = db_session.query(User).filter(User.full_name == "Damon Greer").one()
     assert employee.user_id == manager.id
     assert employee.session_version == 5
     assert manager.permission_level == adriana.permission_level

@@ -543,6 +543,10 @@ def dashboard_page():
                 session.pop(k, None)
             return redirect("/employee/login")
 
+        manager_redirect = _management_employee_redirect(db, emp)
+        if manager_redirect is not None:
+            return manager_redirect
+
         stores = (db.query(EmployeeStoreAssignment)
                     .filter(EmployeeStoreAssignment.employee_id == emp.id)
                     .all())

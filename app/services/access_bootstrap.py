@@ -78,7 +78,7 @@ COPY_ASSIGNMENTS: tuple[CopyAssignment, ...] = (
 
 MANAGER_PROFILE_MOVES: tuple[ManagerProfileMove, ...] = (
     ManagerProfileMove(
-        ("Damean", "Damian", "Damien", "Dameon", "Damen"),
+        ("Damon Greer", "Damon", "Damean", "Damian", "Damien", "Dameon", "Damen"),
         ("Adriana Herrera",),
         "copperfield",
     ),

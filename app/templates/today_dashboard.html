@@ -171,11 +171,8 @@
   }
   .tdydash .tdyd-brand-text .tdyd-module { color: var(--tdyd-accent); }
 
-  /* Title row — the hamburger menu box sits left of the title; the title
-     shifts right to make room. .menu-toggle (dashboard.css) is display:none
-     on desktop (the sidebar is a static column there) and display:flex on
-     mobile, so the box only appears on phones - exactly where Today was
-     missing it. Per Sam 2026-05-28. */
+  /* Title row. The hamburger lives in the tab strip so the row starts
+     cleanly with the page title. */
   .tdydash .tdyd-titlerow {
     display: flex;
     align-items: flex-end;
@@ -223,18 +220,31 @@
   /* TAB STRIP — horizontally scrollable on a phone. The tabs are real
      anchors (href to ?tab=KEY) so the page works with JS off; JS
      upgrades them to in-page panel swaps. */
-  .tdydash .tdyd-tabs {
+  .tdydash .tdyd-tabs-row {
     display: flex;
-    gap: 2px;
+    align-items: stretch;
     padding: 0 12px;
     background: rgba(0, 0, 0, 0.3);
     border-top: 0.5px solid var(--tdyd-border);
-    overflow-x: auto;
-    scrollbar-width: none;
     position: relative;
     z-index: 1;
   }
+  .tdydash .tdyd-tabs {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
   .tdydash .tdyd-tabs::-webkit-scrollbar { display: none; }
+  .tdydash .tdyd-tabs-row .tdyd-menu {
+    align-self: center;
+    width: 42px;
+    height: 42px;
+    margin: 4px 4px 4px 0;
+    border-radius: 9px;
+  }
   .tdydash .tdyd-tab {
     flex-shrink: 0;
     padding: 13px 16px 11px;
@@ -343,7 +353,12 @@
     .tdydash .tdyd-title { font-size: 28px; }
     .tdydash .tdyd-rule { width: 40px; margin-top: 8px; }
     .tdydash .tdyd-meta { font-size: 10px; gap: 6px; margin-bottom: 4px; }
-    .tdydash .tdyd-tabs { padding: 0 6px; }
+    .tdydash .tdyd-tabs-row { padding: 0 6px; }
+    .tdydash .tdyd-tabs-row .tdyd-menu {
+      width: 38px;
+      height: 38px;
+      margin: 4px 4px 4px 0;
+    }
     .tdydash .tdyd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .tdydash .tdyd-tab-icon { width: 12px; height: 12px; }
     .tdydash .tdyd-content-wrap { margin-top: 8px; }
@@ -384,9 +399,6 @@
        suppressed). Role badges now live in the left sidebar. #}
     <div class="tdyd-ribbon">
       <div class="tdyd-titlerow">
-        <button class="menu-toggle tdyd-menu" onclick="window.toggleSidebar && window.toggleSidebar();" aria-label="Open navigation">
-          <span class="menu-toggle-bars"><span></span><span></span><span></span></span>
-        </button>
         <h1 class="tdyd-title">Today</h1>
         <div class="tdyd-meta">
           {# meta tail (store + "N sections") removed per Sam #2230; keep the date #}
@@ -398,17 +410,22 @@
 
     {# TAB STRIP — real anchors to ?tab=KEY so it works without JS;
        JS upgrades them to in-page panel swaps. #}
-    <div class="tdyd-tabs" id="tdydTabs" role="tablist">
-      {% for t in tabs %}
-      <a class="tdyd-tab{% if t.key == active_tab %} active{% endif %}"
-         href="?tab={{ t.key }}"
-         role="tab"
-         data-tab="{{ t.key }}"
-         aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
-        <svg class="tdyd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _tdyd_icons.get(t.key, _tdyd_icons['dashboard'])|safe }}</svg>
-        <span class="tdyd-tab-label">{{ t.label }}</span>
-      </a>
-      {% endfor %}
+    <div class="tdyd-tabs-row">
+      <button class="menu-toggle tdyd-menu" type="button" onclick="window.toggleSidebar && window.toggleSidebar();" aria-label="Open navigation">
+        <span class="menu-toggle-bars"><span></span><span></span><span></span></span>
+      </button>
+      <div class="tdyd-tabs" id="tdydTabs" role="tablist">
+        {% for t in tabs %}
+        <a class="tdyd-tab{% if t.key == active_tab %} active{% endif %}"
+           href="?tab={{ t.key }}"
+           role="tab"
+           data-tab="{{ t.key }}"
+           aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
+          <svg class="tdyd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _tdyd_icons.get(t.key, _tdyd_icons['dashboard'])|safe }}</svg>
+          <span class="tdyd-tab-label">{{ t.label }}</span>
+        </a>
+        {% endfor %}
+      </div>
     </div>
 
   </div>

@@ -668,6 +668,37 @@
     } catch (err) { /* frame may be mid-navigation; safe to ignore */ }
   }
 
+  function frameSrcWithCacheBust(src) {
+    return src + (String(src).includes("?") ? "&" : "?") + "_cb=" + _IFCB;
+  }
+
+  function resetFrameToCanonical(key) {
+    var frame = root.querySelector('[data-embed-frame="' + key + '"]');
+    if (!frame) return false;
+    var src = frame.getAttribute("data-src");
+    if (!src) return false;
+    if (!loaded[key]) {
+      loadFrame(key);
+      return true;
+    }
+
+    var shim = root.querySelector('[data-embed-loading="' + key + '"]');
+    if (shim) shim.classList.remove("gone");
+    frame.classList.remove("ready");
+
+    var target = frameSrcWithCacheBust(src);
+    try {
+      if (frame.contentWindow && frame.contentWindow.location) {
+        frame.contentWindow.location.replace(target);
+      } else {
+        frame.setAttribute("src", target);
+      }
+    } catch (err) {
+      frame.setAttribute("src", target);
+    }
+    return true;
+  }
+
   /* Lazy-load: set src from data-src the first time a tab is shown.
      The load handler runs stripChrome; loaded[] guards against
      re-loading on every subsequent activation of the same tab. */
@@ -682,11 +713,11 @@
     /* Append the per-page-load cache-bust so a deploy never serves a
        stale cached copy of this iframe page. The data-src route itself
        is left untouched — the param is added only at assignment. */
-    var bustedSrc = src + (String(src).includes("?") ? "&" : "?") + "_cb=" + _IFCB;
-    frame.setAttribute("src", bustedSrc);
+    frame.setAttribute("src", frameSrcWithCacheBust(src));
   }
 
-  function activate(key) {
+  function activate(key, options) {
+    options = options || {};
     tabs.forEach(function (t) {
       var on = t.getAttribute("data-tab") === key;
       t.classList.toggle("active", on);
@@ -695,7 +726,11 @@
     panels.forEach(function (p) {
       p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== key);
     });
-    loadFrame(key);   // first activation of this tab loads its iframe
+    if (options.reset) {
+      resetFrameToCanonical(key);
+    } else {
+      loadFrame(key);   // first activation of this tab loads its iframe
+    }
     var frame = root.querySelector('[data-embed-frame="' + key + '"]');
     notifyFrameVisible(frame);
     setTimeout(function () { notifyFrameVisible(frame); }, 250);
@@ -707,7 +742,7 @@
     if (!tab) return;
     e.preventDefault();
     var key = tab.getAttribute("data-tab");
-    activate(key);
+    activate(key, { reset: key === "ez-orders" });
     /* Keep the URL in sync so a refresh / share lands on the same tab,
        without adding a history entry per tap. */
     try {

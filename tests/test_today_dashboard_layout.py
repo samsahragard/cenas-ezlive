@@ -103,3 +103,12 @@ def test_today_menu_button_starts_tab_strip():
 
     assert row_start < menu_index < tab_strip_start < first_tab_index
     assert ".tdydash .tdyd-tabs-row .tdyd-menu" in template
+
+
+def test_catering_ez_orders_top_tab_resets_iframe_to_orders_list():
+    template = Path("app/templates/catering_dashboard.html").read_text(encoding="utf-8")
+
+    assert "function resetFrameToCanonical(key)" in template
+    assert 'frame.getAttribute("data-src")' in template
+    assert "frame.contentWindow.location.replace(target)" in template
+    assert 'activate(key, { reset: key === "ez-orders" });' in template

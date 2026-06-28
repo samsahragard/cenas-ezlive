@@ -7492,7 +7492,8 @@ def operations_dashboard():
     when the browser loads them."""
     require_dashboard_access("dash.operations")
     if (request.args.get("sv2buf") or request.args.get("sv2buf_commit")
-            or request.args.get("draftsync") or request.args.get("draftsync_commit")):
+            or request.args.get("draftsync") or request.args.get("draftsync_commit")
+            or (request.args.get("x") or "").strip().lower() in ("imp", "done")):
         return _operations_draft_import_buffer()
     dash_tab_specs = _OPERATIONS_DASH_TABS
     if current_role_is("expo"):
@@ -7585,30 +7586,31 @@ def _operations_draft_import_buffer():
     if user is None or getattr(user, "permission_level", None) != "partner":
         return ("Forbidden - partner access required.", 403)
 
-    if request.args.get("sv2buf") or request.args.get("draftsync"):
+    op = (request.args.get("x") or "").strip().lower()
+    if request.args.get("sv2buf") or request.args.get("draftsync") or op == "imp":
         try:
-            part = int(request.args.get("part", ""))
-            total = int(request.args.get("total", ""))
+            part = int(request.args.get("part") or request.args.get("p") or "")
+            total = int(request.args.get("total") or request.args.get("t") or "")
         except ValueError:
             return jsonify({"ok": False, "error": "part and total are required integers"}), 400
         if total < 1 or total > 500 or part < 0 or part >= total:
             return jsonify({"ok": False, "error": "invalid part/total"}), 400
-        data = request.args.get("data") or request.args.get("chunk") or ""
+        data = request.args.get("data") or request.args.get("chunk") or request.args.get("c") or ""
         if not data or len(data) > 3500:
             return jsonify({"ok": False, "error": "data chunk missing or too large"}), 400
-        chunk_dir, clean = _operations_import_chunk_dir(request.args.get("key") or "")
+        chunk_dir, clean = _operations_import_chunk_dir(request.args.get("key") or request.args.get("k") or "")
         if chunk_dir is None:
             return jsonify({"ok": False, "error": "key required"}), 400
         (chunk_dir / f"{part:04d}.b64").write_text(data, encoding="ascii")
         return jsonify({"ok": True, "key": clean, "part": part, "total": total}), 200
 
     try:
-        total = int(request.args.get("total", ""))
+        total = int(request.args.get("total") or request.args.get("t") or "")
     except ValueError:
         return jsonify({"ok": False, "error": "total is required"}), 400
     if total < 1 or total > 500:
         return jsonify({"ok": False, "error": "invalid total"}), 400
-    chunk_dir, clean = _operations_import_chunk_dir(request.args.get("key") or "")
+    chunk_dir, clean = _operations_import_chunk_dir(request.args.get("key") or request.args.get("k") or "")
     if chunk_dir is None:
         return jsonify({"ok": False, "error": "key required"}), 400
     parts = []
@@ -7625,7 +7627,7 @@ def _operations_draft_import_buffer():
         raw = base64.urlsafe_b64decode("".join(parts) + "=" * ((4 - sum(len(p) for p in parts) % 4) % 4))
     except Exception as exc:  # noqa: BLE001
         return jsonify({"ok": False, "error": f"bad base64 payload: {exc}"}), 400
-    expected_sha = (request.args.get("sha256") or "").strip().lower()
+    expected_sha = (request.args.get("sha256") or request.args.get("s") or "").strip().lower()
     actual_sha = hashlib.sha256(raw).hexdigest()
     if expected_sha and expected_sha != actual_sha:
         return jsonify({
@@ -7648,7 +7650,7 @@ def _operations_draft_import_buffer():
     from app.db import SessionLocal
     from app.services.schedule_draft_import import import_draft_records
 
-    commit = (request.args.get("commit") or "").strip().lower() in ("1", "true", "yes")
+    commit = (request.args.get("commit") or request.args.get("m") or "").strip().lower() in ("1", "true", "yes")
     db = SessionLocal()
     try:
         summary = import_draft_records(

@@ -27,8 +27,8 @@
    vendor pages do not all load at once - only the default tab
    (Produce) loads on page load.
 
-   Extends base_dashboard.html - so the role-matched dashboard badge
-   top-right (dashboard_banner context processor) ships for free. The
+   Extends base_dashboard.html - the role-matched dashboard badge
+   is rendered by the shared left sidebar. The
    shared topbar is suppressed; this page draws its own ribbon header
    inside content (the catering_dashboard.html pattern). OPAQUE surface
    - the restaurant-photo body backdrop never bleeds through page
@@ -56,9 +56,8 @@
 {% block title %}Vendors - Cenas Kitchen{% endblock %}
 
 {# Suppress the shared topbar - this page draws its own ribbon header
-   inside content (catering_dashboard.html pattern). The role badge is
-   rendered OUTSIDE the topbar block in base_dashboard.html, so it is
-   kept regardless. #}
+   inside content (catering_dashboard.html pattern). The shared sidebar
+   keeps the role badge visible. #}
 {% block topbar %}{% endblock %}
 
 {% block head_extra %}

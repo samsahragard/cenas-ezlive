@@ -227,6 +227,9 @@
   .corp-inventory-table {
     min-width: 680px;
   }
+  .corp-store-order-table {
+    min-width: 560px;
+  }
   .corp-inventory-table th:nth-child(2),
   .corp-inventory-table td:nth-child(2) {
     width: 78px;
@@ -291,6 +294,35 @@
   .corp-inventory-table .corp-reorder-tools {
     margin: 0;
   }
+  .corp-store-order-table th:nth-child(2),
+  .corp-store-order-table td:nth-child(2),
+  .corp-store-order-table th:nth-child(3),
+  .corp-store-order-table td:nth-child(3) {
+    width: 96px;
+    text-align: right;
+  }
+  .corp-store-order-table .corp-order-input {
+    width: 76px;
+    min-height: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.42);
+    color: #fff;
+    padding: 6px 8px;
+    text-align: right;
+  }
+  .corp-store-order-table .corp-order-input::placeholder {
+    color: rgba(255, 255, 255, 0.34);
+  }
+  .corp-store-available {
+    display: block;
+    margin-top: 2px;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .corp-store-available.low { color: #f0c060; }
+  .corp-store-available.out { color: #f08080; }
   .corp-small-button,
   .corp-submit-button {
     border: 0;
@@ -664,6 +696,19 @@
       padding: 6px 9px;
       font-size: 11px;
     }
+    .corp-store-order-table {
+      min-width: 420px;
+    }
+    .corp-store-order-table .corp-inventory-thumb {
+      flex-basis: 26px;
+      width: 26px;
+      height: 26px;
+    }
+    .corp-store-order-table .corp-order-input {
+      width: 58px;
+      min-height: 34px;
+      padding: 6px;
+    }
   }
 </style>
 {% endblock %}
@@ -695,6 +740,9 @@
       {% for line in order_add_target.lines %}
         <li>
           {{ line.quantity }}x {{ line.name }}
+          {% if line.store_on_hand is defined and line.store_on_hand is not none %}
+            <span class="corp-added-line">OH {{ line.store_on_hand }}</span>
+          {% endif %}
           {% if line.added_at %}
             <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
           {% endif %}
@@ -839,39 +887,61 @@
             action="{{ url_for('corporate_order.add_to_order', order_id=order_add_target.id) if order_add_target else url_for('corporate_order.submit') }}"
             id="corpOrderForm"
             data-draft-key="corpOrderDraft:v2:{{ g.current_store }}:{% if order_add_target %}order:{{ order_add_target.id }}{% else %}new{% endif %}">
-        <div class="corp-grid" id="corpProductGrid">
-          {% for p in products %}
-          <section class="corp-card" data-product-card data-product-id="{{ p.id }}"
-                   data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}">
-            {% if p.picture_url %}
-            <div class="corp-photo">
-              <img src="{{ p.picture_url }}" alt="{{ p.name }}" loading="lazy">
-            </div>
-            {% endif %}
-            <div class="corp-name">{{ p.name }}</div>
-            <div class="corp-stock {% if p.in_stock == 0 %}out{% elif p.in_stock <= 5 %}low{% endif %}">
-              {% if p.in_stock == 0 %}
-                Out of stock
-              {% elif p.in_stock <= 5 %}
-                Low stock ({{ p.in_stock }})
-              {% else %}
-                In stock ({{ p.in_stock }})
-              {% endif %}
-            </div>
-
-            <div class="corp-card-footer">
-              {% if p.in_stock == 0 %}
-                <button class="corp-small-button secondary" type="button" disabled>Unavailable</button>
-              {% else %}
-                <div class="corp-qty-row">
-                  <label for="qty_{{ p.id }}">Qty</label>
-                  <input class="corp-qty-input" type="number" name="qty_{{ p.id }}" id="qty_{{ p.id }}"
-                         min="0" max="{{ p.in_stock }}" value="0" inputmode="numeric">
-                </div>
-              {% endif %}
-            </div>
-          </section>
-          {% endfor %}
+        <div class="corp-table-wrap">
+          <table class="corp-orders-table corp-store-order-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>OH</th>
+                <th>OR</th>
+              </tr>
+            </thead>
+            <tbody id="corpProductGrid">
+              {% for p in products %}
+              <tr data-product-card data-product-id="{{ p.id }}"
+                  data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}">
+                <td class="corp-inventory-item">
+                  <div class="corp-inventory-item-inner">
+                    {% if p.picture_url %}
+                      <img class="corp-inventory-thumb" src="{{ p.picture_url }}" alt="{{ p.name }}" loading="lazy">
+                    {% endif %}
+                    <span class="corp-inventory-name">
+                      {{ p.name }}
+                      <span class="corp-store-available {% if p.in_stock == 0 %}out{% elif p.in_stock <= 5 %}low{% endif %}">
+                        {% if p.in_stock == 0 %}
+                          Unavailable
+                        {% elif p.in_stock <= 5 %}
+                          Available {{ p.in_stock }}
+                        {% else %}
+                          Available {{ p.in_stock }}
+                        {% endif %}
+                      </span>
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <input class="corp-order-input corp-oh-input corp-draft-input"
+                         type="number" name="oh_{{ p.id }}" id="oh_{{ p.id }}"
+                         min="0" value="" placeholder="0" inputmode="numeric"
+                         aria-label="On hand for {{ p.name }}">
+                </td>
+                <td>
+                  {% if p.in_stock == 0 %}
+                    <input class="corp-order-input corp-qty-input corp-draft-input"
+                           type="number" name="qty_{{ p.id }}" id="qty_{{ p.id }}"
+                           min="0" max="0" value="0" inputmode="numeric"
+                           aria-label="Order request for {{ p.name }}" disabled>
+                  {% else %}
+                    <input class="corp-order-input corp-qty-input corp-draft-input"
+                           type="number" name="qty_{{ p.id }}" id="qty_{{ p.id }}"
+                           min="0" max="{{ p.in_stock }}" value="0" placeholder="0"
+                           inputmode="numeric" aria-label="Order request for {{ p.name }}">
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
         <div class="corp-submit-bar">
           <span class="corp-submit-count" id="corpSubmitCount">No items selected</span>
@@ -919,6 +989,9 @@
                     {% for line in o.lines %}
                       <li>
                         {{ line.quantity }}x {{ line.name }}
+                        {% if line.store_on_hand is defined and line.store_on_hand is not none %}
+                          <span class="corp-added-line">OH {{ line.store_on_hand }}</span>
+                        {% endif %}
                         {% if line.added_at %}
                           <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
                         {% endif %}
@@ -940,6 +1013,9 @@
                     <label class="corp-fulfill-line">
                       <span title="{{ line.name }}">
                         {{ line.name }} (ordered {{ line.quantity }})
+                        {% if line.store_on_hand is defined and line.store_on_hand is not none %}
+                          <span class="corp-added-line">OH {{ line.store_on_hand }}</span>
+                        {% endif %}
                         {% if line.added_at %}
                           <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
                         {% endif %}
@@ -1066,7 +1142,8 @@
 
   const form = document.getElementById('corpOrderForm');
   const draftKey = form ? form.dataset.draftKey : '';
-  const inputs = Array.from(document.querySelectorAll('.corp-qty-input'));
+  const inputs = Array.from(document.querySelectorAll('.corp-draft-input'));
+  const orderInputs = Array.from(document.querySelectorAll('.corp-qty-input'));
   const count = document.getElementById('corpSubmitCount');
   const button = document.getElementById('corpSubmitButton');
   function draftStorage() {
@@ -1152,9 +1229,10 @@
       Array.from(form.querySelectorAll('[name]')).map((input) => input.name)
     );
     Object.entries(draft).forEach(([name, value]) => {
-      if (!/^qty_\d+$/.test(name) || existing.has(name)) return;
+      if (!/^(qty|oh)_\d+$/.test(name) || existing.has(name)) return;
       const qty = parseQty(value);
-      if (qty <= 0) return;
+      if (qty <= 0 && !name.startsWith('qty_')) return;
+      if (name.startsWith('qty_') && qty <= 0) return;
       const hidden = document.createElement('input');
       hidden.type = 'hidden';
       hidden.name = name;
@@ -1164,11 +1242,11 @@
     });
   }
   function updateCount() {
-    const visibleNames = new Set(inputs.map((input) => input.name));
+    const visibleNames = new Set(orderInputs.map((input) => input.name));
     const draft = readDraft();
-    let picked = inputs.reduce((n, input) => n + (normalizedInputQty(input) > 0 ? 1 : 0), 0);
+    let picked = orderInputs.reduce((n, input) => n + (normalizedInputQty(input) > 0 ? 1 : 0), 0);
     Object.entries(draft).forEach(([name, value]) => {
-      if (!visibleNames.has(name) && parseQty(value) > 0) picked += 1;
+      if (name.startsWith('qty_') && !visibleNames.has(name) && parseQty(value) > 0) picked += 1;
     });
     if (count) count.textContent = picked ? `${picked} item${picked === 1 ? '' : 's'} selected` : 'No items selected';
     if (button) button.disabled = picked === 0;

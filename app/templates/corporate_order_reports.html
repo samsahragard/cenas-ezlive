@@ -155,6 +155,9 @@
                 {% for line in o.lines %}
                   <li style="padding:2px 0;color:rgba(255,255,255,0.75);">
                     ordered {{ line.quantity }} / fulfilled {{ line.fulfilled_quantity }} - {{ line.name }}
+                    {% if line.store_on_hand is defined and line.store_on_hand is not none %}
+                      <span class="corp-added-line">OH {{ line.store_on_hand }}</span>
+                    {% endif %}
                     {% if line.added_at %}
                       <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
                     {% endif %}

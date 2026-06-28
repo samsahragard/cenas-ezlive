@@ -89,6 +89,7 @@ class OrderItem(CorporateBase):
     quantity = Column(Integer, nullable=False)
     fulfilled_quantity = Column(Integer)
     added_at = Column(DateTime)
+    store_on_hand = Column(Integer)
 
 
 _engine = None
@@ -145,6 +146,9 @@ def _ensure_schema() -> None:
     if "added_at" not in order_item_cols:
         with _engine.begin() as conn:
             conn.execute(text("ALTER TABLE order_item ADD COLUMN added_at TIMESTAMP"))
+    if "store_on_hand" not in order_item_cols:
+        with _engine.begin() as conn:
+            conn.execute(text("ALTER TABLE order_item ADD COLUMN store_on_hand INTEGER"))
     try:
         product_cols = {c["name"] for c in insp.get_columns("product")}
     except Exception:
@@ -402,6 +406,7 @@ def _order_to_dict(o: Order) -> dict:
         ),
         "added_at": it.added_at,
         "is_added": bool(it.added_at),
+        "store_on_hand": it.store_on_hand,
     } for it in (o.items or [])]
     return {
         "id": o.id,
@@ -453,6 +458,15 @@ def get_order(order_id: int, store_filter: str | None = None) -> dict | None:
             q = q.filter(Order.customer_link == cust.id)
         order = q.one_or_none()
         return _order_to_dict(order) if order else None
+
+
+def _unpack_requested_item(item) -> tuple[int, int, int | None]:
+    product_id = int(item[0])
+    quantity = int(item[1])
+    store_on_hand = None
+    if len(item) > 2 and item[2] not in (None, ""):
+        store_on_hand = max(0, int(item[2]))
+    return product_id, quantity, store_on_hand
 
 
 def add_product(
@@ -534,10 +548,11 @@ def delete_product(product_id: int) -> bool:
         return True
 
 
-def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
+def place_order(store_key: str, items: list[tuple]) -> dict:
     """Create an Order in cenas_db on behalf of the given store.
 
-    items = [(product_id, qty), ...]. Returns a dict with order id + line items.
+    items = [(product_id, qty), ...] or [(product_id, qty, store_on_hand), ...].
+    Returns a dict with order id + line items.
     Decrements Product.in_stock for each line.
     """
     _ensure_engine()
@@ -549,7 +564,8 @@ def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
         s.add(order)
         s.flush()
         line_dicts = []
-        for pid, qty in items:
+        for item in items:
+            pid, qty, store_on_hand = _unpack_requested_item(item)
             if qty <= 0:
                 continue
             p = s.query(Product).filter_by(id=pid).one_or_none()
@@ -567,6 +583,7 @@ def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
                 product_name=clean_name,
                 product_category=p.category,
                 quantity=qty,
+                store_on_hand=store_on_hand,
             )
             s.add(oi)
             # Decrement stock — clamp at 0 so we never go negative.
@@ -575,6 +592,7 @@ def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
                 "name": clean_name,
                 "category": p.category,
                 "quantity": qty,
+                "store_on_hand": store_on_hand,
                 "remaining_stock": p.in_stock,
             })
         if not line_dicts:
@@ -590,7 +608,7 @@ def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
         }
 
 
-def add_items_to_order(order_id: int, store_key: str, items: list[tuple[int, int]]) -> dict:
+def add_items_to_order(order_id: int, store_key: str, items: list[tuple]) -> dict:
     """Append newly requested items to an existing store order.
 
     Added lines stay separate from the original order lines so corporate can
@@ -612,7 +630,8 @@ def add_items_to_order(order_id: int, store_key: str, items: list[tuple[int, int
             raise ValueError("order is closed")
         added_at = datetime.now(timezone.utc)
         line_dicts = []
-        for pid, qty in items:
+        for item in items:
+            pid, qty, store_on_hand = _unpack_requested_item(item)
             if qty <= 0:
                 continue
             p = s.query(Product).filter_by(id=pid).one_or_none()
@@ -631,6 +650,7 @@ def add_items_to_order(order_id: int, store_key: str, items: list[tuple[int, int
                 product_category=p.category,
                 quantity=qty,
                 added_at=added_at,
+                store_on_hand=store_on_hand,
             )
             s.add(oi)
             p.in_stock = max(0, (p.in_stock or 0) - qty)
@@ -638,6 +658,7 @@ def add_items_to_order(order_id: int, store_key: str, items: list[tuple[int, int
                 "name": clean_name,
                 "category": p.category,
                 "quantity": qty,
+                "store_on_hand": store_on_hand,
                 "remaining_stock": p.in_stock,
                 "added_at": added_at,
             })

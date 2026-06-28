@@ -209,16 +209,18 @@ def test_add_items_to_order_marks_added_lines_and_decrements_stock(monkeypatch):
         s.commit()
         order_id = order.id
 
-    added = corporate_shop.add_items_to_order(order_id, "tomball", [(1, 3)])
+    added = corporate_shop.add_items_to_order(order_id, "tomball", [(1, 3, 4)])
     rows = corporate_shop.list_orders(limit=None, store_filter="tomball")
 
     assert added["order_id"] == order_id
     assert added["items"][0]["quantity"] == 3
+    assert added["items"][0]["store_on_hand"] == 4
     assert added["items"][0]["added_at"] is not None
     assert len(rows[0]["lines"]) == 2
     added_lines = [line for line in rows[0]["lines"] if line["is_added"]]
     assert len(added_lines) == 1
     assert added_lines[0]["name"] == "Bleach"
+    assert added_lines[0]["store_on_hand"] == 4
     assert added_lines[0]["added_at"] is not None
     with Session() as s:
         assert s.query(corporate_shop.Product).filter_by(id=1).one().in_stock == 6

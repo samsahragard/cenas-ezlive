@@ -179,6 +179,9 @@
                   {% for line in o.lines %}
                     <li>
                       {{ line.quantity }}x {{ line.name }}
+                      {% if line.store_on_hand is defined and line.store_on_hand is not none %}
+                        <span class="corp-added-line">OH {{ line.store_on_hand }}</span>
+                      {% endif %}
                       {% if line.added_at %}
                         <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
                       {% endif %}

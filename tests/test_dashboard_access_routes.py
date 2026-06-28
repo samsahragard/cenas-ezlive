@@ -227,6 +227,10 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
     html = resp.get_data(as_text=True)
     assert "Bleach (6/case)" in html
     assert 'src="https://cenaskitchen.com/media/Bleach.webp"' in html
+    assert "<th>OH</th>" in html
+    assert "<th>OR</th>" in html
+    assert 'class="corp-orders-table corp-store-order-table"' in html
+    assert 'name="oh_42"' in html
     assert 'name="qty_42"' in html
     assert "Departments" in html
     assert "corp-cat-pill active" in html
@@ -268,9 +272,13 @@ def test_corporate_order_submit_maps_dos_to_tomball(dashboard_app, monkeypatch):
     monkeypatch.setattr(corporate_shop, "place_order", _place_order)
     monkeypatch.setattr(corporate_order_mod, "_send_corporate_order_email", lambda order: (True, ""))
 
-    resp = client.post("/dos/corporate-order/submit", data={"qty_42": "2"}, follow_redirects=False)
+    resp = client.post(
+        "/dos/corporate-order/submit",
+        data={"oh_42": "7", "qty_42": "2"},
+        follow_redirects=False,
+    )
     assert resp.status_code == 302
-    assert submitted == {"store_key": "tomball", "items": [(42, 2)]}
+    assert submitted == {"store_key": "tomball", "items": [(42, 2, 7)]}
 
 
 def test_store_orders_page_links_current_order_for_additions(dashboard_app, monkeypatch):
@@ -360,13 +368,13 @@ def test_store_can_add_items_to_existing_order(dashboard_app, monkeypatch):
 
     resp = client.post(
         "/dos/corporate-order/orders/501/add",
-        data={"qty_42": "3", "qty_77": "0"},
+        data={"oh_42": "1", "qty_42": "3", "qty_77": "0"},
         follow_redirects=False,
     )
 
     assert resp.status_code == 302
     assert resp.headers["Location"].endswith("/dos/corporate-order/orders")
-    assert captured == {"order_id": 501, "store_key": "tomball", "items": [(42, 3)]}
+    assert captured == {"order_id": 501, "store_key": "tomball", "items": [(42, 3, 1)]}
 
 
 def test_store_add_to_order_page_reuses_catalog_with_order_draft(dashboard_app, monkeypatch):
@@ -425,6 +433,7 @@ def test_store_add_to_order_page_reuses_catalog_with_order_draft(dashboard_app, 
     assert "Adding to order #501" in html
     assert 'action="/dos/corporate-order/orders/501/add"' in html
     assert 'data-draft-key="corpOrderDraft:v2:dos:order:501"' in html
+    assert 'name="oh_42"' in html
     assert 'href="/dos/corporate-order/orders/501/add?category=BOH"' in html
     assert "Add to Order" in html
 

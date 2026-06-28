@@ -362,8 +362,8 @@ def _catalog_redirect(category: str | None = None):
     return redirect(url_for("corporate_order.view", store_slug=g.current_store))
 
 
-def _parse_qty_items() -> list[tuple[int, int]]:
-    items: list[tuple[int, int]] = []
+def _parse_qty_items() -> list[tuple[int, int, int | None]]:
+    items: list[tuple[int, int, int | None]] = []
     for key, value in request.form.items():
         if not key.startswith("qty_"):
             continue
@@ -373,7 +373,14 @@ def _parse_qty_items() -> list[tuple[int, int]]:
         except ValueError:
             continue
         if quantity > 0:
-            items.append((product_id, quantity))
+            store_on_hand = None
+            raw_on_hand = request.form.get(f"oh_{product_id}")
+            if raw_on_hand not in (None, ""):
+                try:
+                    store_on_hand = max(0, int(raw_on_hand or 0))
+                except ValueError:
+                    store_on_hand = None
+            items.append((product_id, quantity, store_on_hand))
     return items
 
 
@@ -409,8 +416,13 @@ def _send_corporate_order_email(order: dict) -> tuple[bool, str]:
         "Items:",
     ]
     for it in items:
+        oh_text = (
+            f"  [store OH: {it.get('store_on_hand')}]"
+            if it.get("store_on_hand") is not None else ""
+        )
         plain_lines.append(
             f"  - {it['quantity']} × {it['name']} ({it.get('category','-')})"
+            + oh_text
             + (f"  [stock now: {it.get('remaining_stock','?')}]" if it.get('remaining_stock') is not None else "")
         )
     plain_lines.append("")
@@ -422,6 +434,7 @@ def _send_corporate_order_email(order: dict) -> tuple[bool, str]:
         rows_html.append(
             f"<tr><td>{it['quantity']}</td>"
             f"<td>{it['name']}</td>"
+            f"<td>{it.get('store_on_hand','') if it.get('store_on_hand') is not None else ''}</td>"
             f"<td>{it.get('category','')}</td>"
             f"<td style='color:#666'>{it.get('remaining_stock','')}</td></tr>"
         )
@@ -434,6 +447,7 @@ def _send_corporate_order_email(order: dict) -> tuple[bool, str]:
         "<thead><tr style='background:#f4f4f4'>"
         "<th style='padding:6px 10px;text-align:left'>Qty</th>"
         "<th style='padding:6px 10px;text-align:left'>Item</th>"
+        "<th style='padding:6px 10px;text-align:left'>Store OH</th>"
         "<th style='padding:6px 10px;text-align:left'>Category</th>"
         "<th style='padding:6px 10px;text-align:left'>Stock now</th>"
         "</tr></thead><tbody>"
@@ -626,17 +640,7 @@ def submit():
         flash("Corporate Order DB is not connected. Set CORPORATE_DB_URL on Render.", "error")
         return redirect(url_for("corporate_order.view", store_slug=g.current_store))
 
-    items: list[tuple[int, int]] = []
-    for k, v in request.form.items():
-        if not k.startswith("qty_"):
-            continue
-        try:
-            pid = int(k.removeprefix("qty_"))
-            qty = int(v)
-        except ValueError:
-            continue
-        if qty > 0:
-            items.append((pid, qty))
+    items = _parse_qty_items()
 
     if not items:
         flash("No items selected — pick a quantity > 0 on at least one product.", "warning")

@@ -886,7 +886,8 @@
       <form method="POST"
             action="{{ url_for('corporate_order.add_to_order', order_id=order_add_target.id) if order_add_target else url_for('corporate_order.submit') }}"
             id="corpOrderForm"
-            data-draft-key="corpOrderDraft:v2:{{ g.current_store }}:{% if order_add_target %}order:{{ order_add_target.id }}{% else %}new{% endif %}">
+            data-draft-key="corpOrderDraft:v2:{{ g.current_store }}:{% if order_add_target %}order:{{ order_add_target.id }}{% else %}new{% endif %}"
+            autocomplete="off">
         <div class="corp-table-wrap">
           <table class="corp-orders-table corp-store-order-table">
             <thead>
@@ -923,6 +924,7 @@
                   <input class="corp-order-input corp-oh-input corp-draft-input"
                          type="number" name="oh_{{ p.id }}" id="oh_{{ p.id }}"
                          min="0" value="" placeholder="0" inputmode="numeric"
+                         autocomplete="off"
                          aria-label="On hand for {{ p.name }}">
                 </td>
                 <td>
@@ -930,12 +932,14 @@
                     <input class="corp-order-input corp-qty-input corp-draft-input"
                            type="number" name="qty_{{ p.id }}" id="qty_{{ p.id }}"
                            min="0" max="0" value="0" inputmode="numeric"
+                           autocomplete="off"
                            aria-label="Order request for {{ p.name }}" disabled>
                   {% else %}
                     <input class="corp-order-input corp-qty-input corp-draft-input"
                            type="number" name="qty_{{ p.id }}" id="qty_{{ p.id }}"
                            min="0" max="{{ p.in_stock }}" value="0" placeholder="0"
-                           inputmode="numeric" aria-label="Order request for {{ p.name }}">
+                           inputmode="numeric" autocomplete="off"
+                           aria-label="Order request for {{ p.name }}">
                   {% endif %}
                 </td>
               </tr>

@@ -239,6 +239,23 @@
     color: #fff;
     font-weight: 700;
   }
+  .corp-inventory-item-inner {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+  }
+  .corp-inventory-thumb {
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    background: #fff;
+    object-fit: contain;
+  }
+  .corp-inventory-name {
+    min-width: 0;
+  }
   .corp-oh-value {
     color: #fff;
     font-family: var(--font-mono, monospace);
@@ -705,7 +722,14 @@
             <tr data-product-card data-product-id="{{ p.id }}"
                 data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}"
                 {% if selected_category %}draggable="true"{% endif %}>
-              <td class="corp-inventory-item">{{ p.name }}</td>
+              <td class="corp-inventory-item">
+                <div class="corp-inventory-item-inner">
+                  {% if p.picture_url %}
+                    <img class="corp-inventory-thumb" src="{{ p.picture_url }}" alt="{{ p.name }}" loading="lazy">
+                  {% endif %}
+                  <span class="corp-inventory-name">{{ p.name }}</span>
+                </div>
+              </td>
               <td>
                 <span class="corp-oh-value {% if p.in_stock == 0 %}out{% elif p.in_stock <= 5 %}low{% endif %}">
                   {{ p.in_stock }}

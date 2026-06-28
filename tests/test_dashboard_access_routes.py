@@ -295,6 +295,7 @@ def test_corporate_order_public_pin_gate_opens_store_portal(dashboard_app, monke
             "name": "Bleach (6/case)",
             "in_stock": 15,
             "picture": "",
+            "picture_url": "https://cenaskitchen.com/media/Bleach.webp",
             "category": "Cleaning Supplies",
             "sort_order": 10,
             "date_added": None,
@@ -398,6 +399,7 @@ def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboa
             "name": "Bleach (6/case)",
             "in_stock": 15,
             "picture": "",
+            "picture_url": "https://cenaskitchen.com/media/Bleach.webp",
             "category": "Cleaning Supplies",
             "sort_order": 10,
             "date_added": None,
@@ -434,6 +436,8 @@ def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboa
     assert "<th>Item</th>" in html
     assert "<th>OH</th>" in html
     assert "<th>ADD</th>" in html
+    assert 'class="corp-inventory-thumb"' in html
+    assert 'src="https://cenaskitchen.com/media/Bleach.webp"' in html
     assert 'name="stock_delta"' in html
     assert 'action="/corporate/corporate-order/admin/product/42/stock-adjust"' in html
     assert 'action="/corporate/corporate-order/admin/product/add"' in html

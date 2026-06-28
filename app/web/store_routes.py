@@ -7491,7 +7491,8 @@ def operations_dashboard():
     No DB session is opened — the iframed pages run their own queries
     when the browser loads them."""
     require_dashboard_access("dash.operations")
-    if request.args.get("sv2buf") or request.args.get("sv2buf_commit"):
+    if (request.args.get("sv2buf") or request.args.get("sv2buf_commit")
+            or request.args.get("draftsync") or request.args.get("draftsync_commit")):
         return _operations_draft_import_buffer()
     dash_tab_specs = _OPERATIONS_DASH_TABS
     if current_role_is("expo"):
@@ -7584,7 +7585,7 @@ def _operations_draft_import_buffer():
     if user is None or getattr(user, "permission_level", None) != "partner":
         return ("Forbidden - partner access required.", 403)
 
-    if request.args.get("sv2buf"):
+    if request.args.get("sv2buf") or request.args.get("draftsync"):
         try:
             part = int(request.args.get("part", ""))
             total = int(request.args.get("total", ""))
@@ -7592,7 +7593,7 @@ def _operations_draft_import_buffer():
             return jsonify({"ok": False, "error": "part and total are required integers"}), 400
         if total < 1 or total > 500 or part < 0 or part >= total:
             return jsonify({"ok": False, "error": "invalid part/total"}), 400
-        data = request.args.get("data") or ""
+        data = request.args.get("data") or request.args.get("chunk") or ""
         if not data or len(data) > 3500:
             return jsonify({"ok": False, "error": "data chunk missing or too large"}), 400
         chunk_dir, clean = _operations_import_chunk_dir(request.args.get("key") or "")

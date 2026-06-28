@@ -7493,7 +7493,7 @@ def operations_dashboard():
     require_dashboard_access("dash.operations")
     if (request.args.get("sv2buf") or request.args.get("sv2buf_commit")
             or request.args.get("draftsync") or request.args.get("draftsync_commit")
-            or (request.args.get("x") or "").strip().lower() in ("imp", "done")):
+            or (request.args.get("x") or "").strip().lower() in ("imp", "done", "1", "2")):
         return _operations_draft_import_buffer()
     dash_tab_specs = _OPERATIONS_DASH_TABS
     if current_role_is("expo"):
@@ -7587,7 +7587,7 @@ def _operations_draft_import_buffer():
         return ("Forbidden - partner access required.", 403)
 
     op = (request.args.get("x") or "").strip().lower()
-    if request.args.get("sv2buf") or request.args.get("draftsync") or op == "imp":
+    if request.args.get("sv2buf") or request.args.get("draftsync") or op in ("imp", "1"):
         try:
             part = int(request.args.get("part") or request.args.get("p") or "")
             total = int(request.args.get("total") or request.args.get("t") or "")

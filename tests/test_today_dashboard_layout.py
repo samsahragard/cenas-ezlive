@@ -66,7 +66,7 @@ def test_mobile_dashboard_top_navs_use_red_bar_with_gold_tabs():
 
         assert "@media (max-width: 760px)" in template
         assert nav_selector in template
-        assert "background: linear-gradient(180deg, #c70914 0%, #96050d 100%);" in template
+        assert "background: linear-gradient(180deg, #940812 0%, #620309 100%);" in template
         assert "position: fixed;" in template
         assert "top: 0;" in template
         assert "margin-top: calc(0px - var(--ck-main-pad-top, 28px));" in template

@@ -1952,7 +1952,8 @@ def create_app():
 
     # Idempotent requested Team access backfill (Sam, 2026-06-26): store
     # switch badges for named managers/partners. Runs after the users table is
-    # available and skips any missing names; never creates accounts/passcodes.
+    # available and skips missing names. Employee-to-manager moves may create
+    # linked manager users, but only by copying an existing employee PIN hash.
     try:
         from app.db import SessionLocal
         from app.services.access_bootstrap import apply_requested_access_scopes

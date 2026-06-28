@@ -82,6 +82,11 @@ MANAGER_PROFILE_MOVES: tuple[ManagerProfileMove, ...] = (
         ("Adriana Herrera",),
         "copperfield",
     ),
+    ManagerProfileMove(
+        ("Alex Martinez Herrera", "Alex Martinez", "Alex"),
+        ("Sebastian Ayala", "Sebastian"),
+        "copperfield",
+    ),
 )
 
 

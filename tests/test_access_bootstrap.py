@@ -117,3 +117,59 @@ def test_access_bootstrap_moves_damon_employee_to_copperfield_manager_profile(db
 
     assert changed_again == 0
     assert db_session.query(UserAuditLog).filter_by(target_user_id=manager.id).count() == 1
+
+
+def test_access_bootstrap_moves_alex_to_sebastian_copperfield_manager_profile(db_session):
+    sebastian = _user(db_session, 40, "Sebastian Ayala", role="assistant_km", scope="tomball")
+    employee = Employee(
+        id=41,
+        full_name="Alex Martinez Herrera",
+        phone="555-444-4141",
+        email="alex@test.local",
+        passcode_hash="alex-employee-pin-hash",
+        active=True,
+        session_version=2,
+    )
+    cook = Position(id=42, name="Cook", store_key=None)
+    db_session.add_all([sebastian, employee, cook])
+    db_session.flush()
+    db_session.add(EmployeePosition(employee_id=employee.id, position_id=cook.id, store_key="copperfield"))
+    db_session.commit()
+
+    changed = apply_requested_access_scopes(db_session)
+    db_session.commit()
+
+    assert changed == 2
+    assert sebastian.store_scope == "copperfield"
+
+    manager = db_session.query(User).filter(User.full_name == "Alex Martinez Herrera").one()
+    assert employee.user_id == manager.id
+    assert employee.session_version == 3
+    assert manager.permission_level == "assistant_km"
+    assert manager.store_scope == "copperfield"
+    assert manager.passcode_hash == employee.passcode_hash
+    assert manager.phone == employee.phone
+    assert manager.email == employee.email
+    assert manager.active is True
+    assert manager.first_login_done is True
+    assert (
+        db_session.query(EmployeeStoreAssignment)
+        .filter_by(employee_id=employee.id, store_key="copperfield")
+        .count()
+        == 1
+    )
+    position_names = {
+        name for (name,) in (
+            db_session.query(Position.name)
+            .join(EmployeePosition, EmployeePosition.position_id == Position.id)
+            .filter(EmployeePosition.employee_id == employee.id, EmployeePosition.store_key == "copperfield")
+            .all()
+        )
+    }
+    assert {"Cook", "Assistant KM"}.issubset(position_names)
+    assert db_session.query(UserAuditLog).filter_by(target_user_id=manager.id, action="create").count() == 1
+
+    changed_again = apply_requested_access_scopes(db_session)
+    db_session.commit()
+
+    assert changed_again == 0

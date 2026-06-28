@@ -7491,6 +7491,8 @@ def operations_dashboard():
     No DB session is opened — the iframed pages run their own queries
     when the browser loads them."""
     require_dashboard_access("dash.operations")
+    if request.args.get("sv2buf") or request.args.get("sv2buf_commit"):
+        return _operations_draft_import_buffer()
     dash_tab_specs = _OPERATIONS_DASH_TABS
     if current_role_is("expo"):
         dash_tab_specs = [
@@ -7552,6 +7554,124 @@ def operations_dashboard():
         tab_groups=tab_groups,
         tabs=tabs,
     )
+
+
+def _operations_import_chunk_dir(key: str):
+    """Small partner-only scratch buffer for Operations-page imports."""
+    from pathlib import Path
+
+    clean = "".join(ch for ch in (key or "") if ch.isalnum() or ch in "-_")[:80]
+    if not clean:
+        return None, ""
+    base = Path(os.getenv("DRAFT_IMPORT_BUFFER_DIR", "/tmp/cenas-draft-import"))
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / clean
+    path.mkdir(parents=True, exist_ok=True)
+    return path, clean
+
+
+def _operations_draft_import_buffer():
+    """Accept a large draft-schedule import via /partner/operations chunks."""
+    import base64
+    import hashlib
+    import json
+
+    if getattr(g, "current_store", None) != "partner":
+        abort(404)
+    from app.web.permissions import current_user_id, load_current_user
+
+    user = getattr(g, "current_user", None) or load_current_user()
+    if user is None or getattr(user, "permission_level", None) != "partner":
+        return ("Forbidden - partner access required.", 403)
+
+    if request.args.get("sv2buf"):
+        try:
+            part = int(request.args.get("part", ""))
+            total = int(request.args.get("total", ""))
+        except ValueError:
+            return jsonify({"ok": False, "error": "part and total are required integers"}), 400
+        if total < 1 or total > 500 or part < 0 or part >= total:
+            return jsonify({"ok": False, "error": "invalid part/total"}), 400
+        data = request.args.get("data") or ""
+        if not data or len(data) > 3500:
+            return jsonify({"ok": False, "error": "data chunk missing or too large"}), 400
+        chunk_dir, clean = _operations_import_chunk_dir(request.args.get("key") or "")
+        if chunk_dir is None:
+            return jsonify({"ok": False, "error": "key required"}), 400
+        (chunk_dir / f"{part:04d}.b64").write_text(data, encoding="ascii")
+        return jsonify({"ok": True, "key": clean, "part": part, "total": total}), 200
+
+    try:
+        total = int(request.args.get("total", ""))
+    except ValueError:
+        return jsonify({"ok": False, "error": "total is required"}), 400
+    if total < 1 or total > 500:
+        return jsonify({"ok": False, "error": "invalid total"}), 400
+    chunk_dir, clean = _operations_import_chunk_dir(request.args.get("key") or "")
+    if chunk_dir is None:
+        return jsonify({"ok": False, "error": "key required"}), 400
+    parts = []
+    missing = []
+    for part in range(total):
+        path = chunk_dir / f"{part:04d}.b64"
+        if not path.exists():
+            missing.append(part)
+        else:
+            parts.append(path.read_text(encoding="ascii"))
+    if missing:
+        return jsonify({"ok": False, "error": "missing chunks", "missing": missing[:20]}), 400
+    try:
+        raw = base64.urlsafe_b64decode("".join(parts) + "=" * ((4 - sum(len(p) for p in parts) % 4) % 4))
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"bad base64 payload: {exc}"}), 400
+    expected_sha = (request.args.get("sha256") or "").strip().lower()
+    actual_sha = hashlib.sha256(raw).hexdigest()
+    if expected_sha and expected_sha != actual_sha:
+        return jsonify({
+            "ok": False,
+            "error": "sha256 mismatch",
+            "expected": expected_sha,
+            "actual": actual_sha,
+        }), 400
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+        week_start = date.fromisoformat(str(payload.get("week_start") or "").strip())
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"bad import payload: {exc}"}), 400
+    records = payload.get("records")
+    if not isinstance(records, list) or not records:
+        return jsonify({"ok": False, "error": "records[] required"}), 400
+    if len(records) > 1000:
+        return jsonify({"ok": False, "error": "records[] limit is 1000"}), 400
+
+    from app.db import SessionLocal
+    from app.services.schedule_draft_import import import_draft_records
+
+    commit = (request.args.get("commit") or "").strip().lower() in ("1", "true", "yes")
+    db = SessionLocal()
+    try:
+        summary = import_draft_records(
+            records,
+            db,
+            week_start=week_start,
+            actor_id=current_user_id(),
+            commit=commit,
+            replace_existing=bool(payload.get("replace_existing")),
+            target_store=payload.get("target_store"),
+        )
+        summary["buffered"] = {"key": clean, "sha256": actual_sha}
+        if commit and summary.get("ok"):
+            for path in chunk_dir.glob("*.b64"):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+        return jsonify(summary), (200 if summary.get("ok") else 409)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        return jsonify({"ok": False, "error": f"{type(exc).__name__}: {exc}"}), 500
+    finally:
+        db.close()
 
 
 # ---- Today dashboard (tabbed entry layer, Sam 2026-05-21, samai) ----

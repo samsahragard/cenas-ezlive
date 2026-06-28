@@ -353,14 +353,45 @@
     .tdydash .tdyd-title { font-size: 28px; }
     .tdydash .tdyd-rule { width: 40px; margin-top: 8px; }
     .tdydash .tdyd-meta { font-size: 10px; gap: 6px; margin-bottom: 4px; }
-    .tdydash .tdyd-tabs-row { padding: 0 6px; }
+    .tdydash .tdyd-tabs-row {
+      padding: 0 6px;
+      background: linear-gradient(180deg, #c70914 0%, #96050d 100%);
+      border-top: 1px solid rgba(255, 217, 112, 0.24);
+      border-bottom: 1px solid rgba(212, 175, 55, 0.34);
+      box-shadow: 0 8px 24px -12px rgba(212, 175, 55, 0.48),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
     .tdydash .tdyd-tabs-row .tdyd-menu {
       width: 38px;
       height: 38px;
       margin: 4px 4px 4px 0;
+      background: rgba(255, 255, 255, 0.07);
+      border-color: rgba(212, 175, 55, 0.82);
+      box-shadow: 0 0 13px -4px rgba(212, 175, 55, 0.62);
+    }
+    .tdydash .tdyd-tabs-row .tdyd-menu .menu-toggle-bars span {
+      background: #d4af37;
+      box-shadow: 0 0 6px rgba(212, 175, 55, 0.55);
+    }
+    .tdydash .tdyd-tab {
+      color: #d4af37;
+      text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);
     }
     .tdydash .tdyd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
     .tdydash .tdyd-tab-icon { width: 12px; height: 12px; }
+    .tdydash .tdyd-tab-icon {
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5));
+    }
+    .tdydash .tdyd-tab:hover,
+    .tdydash .tdyd-tab.active {
+      color: #ffffff;
+      border-bottom-color: #ffffff;
+      text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+    }
+    .tdydash .tdyd-tab.active .tdyd-tab-icon {
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
+    }
     .tdydash .tdyd-content-wrap { margin-top: 8px; }
     .tdydash .tdyd-panel { border-radius: 12px; }
     .tdydash .tdyd-embed-frame {

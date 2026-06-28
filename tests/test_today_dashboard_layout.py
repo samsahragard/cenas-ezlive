@@ -50,6 +50,29 @@ def test_mobile_dashboard_ribbons_are_hidden_without_removing_tabs():
             assert marker in template
 
 
+def test_mobile_dashboard_top_navs_use_red_bar_with_gold_tabs():
+    dashboards = [
+        ("today_dashboard.html", ".tdydash .tdyd-tabs-row", ".tdydash .tdyd-tab"),
+        ("manager_dashboard.html", ".mgrdash .mgd-tabs", ".mgrdash .mgd-tab"),
+        ("catering_dashboard.html", ".catdash .catd-tabs", ".catdash .catd-tab"),
+        ("operations_dashboard.html", ".opsdash .opsd-tabs", ".opsdash .opsd-tab"),
+        ("kitchen_dashboard.html", ".kitdash .kitd-tabs", ".kitdash .kitd-tab"),
+        ("vendors_dashboard.html", ".vendash .vend-tabs", ".vendash .vend-tab"),
+        ("legal_dashboard.html", ".legdash .legd-tabs", ".legdash .legd-tab"),
+    ]
+
+    for template_name, nav_selector, tab_selector in dashboards:
+        template = Path(f"app/templates/{template_name}").read_text(encoding="utf-8")
+
+        assert "@media (max-width: 760px)" in template
+        assert nav_selector in template
+        assert "background: linear-gradient(180deg, #c70914 0%, #96050d 100%);" in template
+        assert f"{tab_selector} {{" in template
+        assert "color: #d4af37;" in template
+        assert "text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);" in template
+        assert "border-bottom-color: #ffffff;" in template
+
+
 def test_today_menu_button_starts_tab_strip():
     template = Path("app/templates/today_dashboard.html").read_text(encoding="utf-8")
 

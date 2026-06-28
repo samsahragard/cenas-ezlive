@@ -440,6 +440,14 @@
 
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
+    .opsdash { margin-top: calc(0px - var(--ck-main-pad-top, 28px)); padding-top: 64px; }
+    .opsdash .opsd-card {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
+    }
+    .opsdash .opsd-card::before { display: none; }
     .opsdash .opsd-ribbon { display: none; }
     .opsdash .opsd-heading { gap: 10px; }
     .opsdash .opsd-brand { margin-bottom: 8px; }
@@ -448,19 +456,41 @@
     .opsdash .opsd-rule { width: 40px; margin-top: 8px; }
     .opsdash .opsd-meta { font-size: 10px; gap: 6px; margin-bottom: 4px; }
     .opsdash .opsd-tabs {
-      padding: 0 8px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 98;
+      min-height: 64px;
+      align-items: stretch;
+      padding: 6px 8px 4px;
       background: linear-gradient(180deg, #c70914 0%, #96050d 100%);
       border-top: 1px solid rgba(255, 217, 112, 0.24);
       border-bottom: 1px solid rgba(212, 175, 55, 0.34);
+      border-radius: 0;
       box-shadow: 0 8px 24px -12px rgba(212, 175, 55, 0.48),
                   inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
     .opsdash .opsd-tab {
       color: #d4af37;
+      flex-direction: column-reverse;
+      justify-content: center;
+      min-width: 74px;
+      min-height: 54px;
+      line-height: 1;
+      text-transform: uppercase;
       text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);
     }
-    .opsdash .opsd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
-    .opsdash .opsd-tab-icon { width: 12px; height: 12px; }
+    .opsdash .opsd-tab { padding: 7px 9px 5px; font-size: 9px; gap: 3px; }
+    .opsdash .opsd-tab-label {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+    .opsdash .opsd-tab-icon { width: 15px; height: 15px; }
     .opsdash .opsd-tab-icon {
       opacity: 1;
       filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5));
@@ -489,7 +519,7 @@
   @media (max-width: 380px) {
     .opsdash .opsd-title { font-size: 26px; }
     .opsdash .opsd-heading { padding-right: 0; }
-    .opsdash .opsd-tab { padding: 10px 9px 8px; font-size: 11px; }
+    .opsdash .opsd-tab { padding: 7px 7px 5px; font-size: 9px; min-width: 66px; }
   }
 </style>
 

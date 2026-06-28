@@ -346,6 +346,14 @@
 
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
+    .tdydash { margin-top: calc(0px - var(--ck-main-pad-top, 28px)); padding-top: 64px; }
+    .tdydash .tdyd-card {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
+    }
+    .tdydash .tdyd-card::before { display: none; }
     .tdydash .tdyd-ribbon { display: none; }
     .tdydash .tdyd-titlerow { gap: 10px; }
     .tdydash .tdyd-brand { margin-bottom: 4px; }
@@ -354,17 +362,25 @@
     .tdydash .tdyd-rule { width: 40px; margin-top: 8px; }
     .tdydash .tdyd-meta { font-size: 10px; gap: 6px; margin-bottom: 4px; }
     .tdydash .tdyd-tabs-row {
-      padding: 0 6px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 98;
+      min-height: 64px;
+      padding: 6px 6px 4px;
       background: linear-gradient(180deg, #c70914 0%, #96050d 100%);
       border-top: 1px solid rgba(255, 217, 112, 0.24);
       border-bottom: 1px solid rgba(212, 175, 55, 0.34);
+      border-radius: 0;
       box-shadow: 0 8px 24px -12px rgba(212, 175, 55, 0.48),
                   inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
+    .tdydash .tdyd-tabs { align-items: stretch; }
     .tdydash .tdyd-tabs-row .tdyd-menu {
       width: 38px;
       height: 38px;
-      margin: 4px 4px 4px 0;
+      margin: 7px 4px 7px 0;
       background: rgba(255, 255, 255, 0.07);
       border-color: rgba(212, 175, 55, 0.82);
       box-shadow: 0 0 13px -4px rgba(212, 175, 55, 0.62);
@@ -375,10 +391,29 @@
     }
     .tdydash .tdyd-tab {
       color: #d4af37;
+      flex-direction: column-reverse;
+      justify-content: center;
+      min-width: 66px;
+      min-height: 54px;
+      line-height: 1;
+      text-transform: uppercase;
       text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);
     }
-    .tdydash .tdyd-tab { padding: 11px 11px 9px; font-size: 12px; gap: 6px; }
-    .tdydash .tdyd-tab-icon { width: 12px; height: 12px; }
+    .tdydash .tdyd-tab { padding: 7px 9px 5px; font-size: 9px; gap: 3px; }
+    .tdydash .tdyd-tab-label {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0;
+      font-weight: 700;
+    }
+    .tdydash .tdyd-tab-label::before {
+      content: attr(data-mobile-label);
+      font-size: 9px;
+    }
+    .tdydash .tdyd-tab-icon { width: 15px; height: 15px; }
     .tdydash .tdyd-tab-icon {
       opacity: 1;
       filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5));
@@ -403,7 +438,7 @@
   @media (max-width: 380px) {
     .tdydash .tdyd-title { font-size: 26px; }
     .tdydash .tdyd-titlerow { padding-right: 0; }
-    .tdydash .tdyd-tab { padding: 10px 9px 8px; font-size: 11px; }
+    .tdydash .tdyd-tab { padding: 7px 7px 5px; font-size: 9px; min-width: 60px; }
   }
 </style>
 
@@ -418,6 +453,11 @@
   'pass':          '<path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>',
   'docs':          '<path d="M19 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h11v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6z"/>',
   'automation':    '<path d="M12 8l-4 4 4 4 4-4-4-4zm0-6L4.5 6.5 12 11l7.5-4.5L12 2zm-9.5 8.5L12 21l9.5-10.5L12 6 2.5 10.5z"/>'
+} %}
+{% set _tdyd_mobile_labels = {
+  'dashboard': 'Dash',
+  'notifications': 'Notice',
+  'task-reports': 'Tasks'
 } %}
 
 <div class="tdydash" id="tdydash">
@@ -452,7 +492,7 @@
            data-tab="{{ t.key }}"
            aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
           <svg class="tdyd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _tdyd_icons.get(t.key, _tdyd_icons['dashboard'])|safe }}</svg>
-          <span class="tdyd-tab-label">{{ t.label }}</span>
+          <span class="tdyd-tab-label" data-mobile-label="{{ _tdyd_mobile_labels.get(t.key, t.label) }}">{{ t.label }}</span>
         </a>
         {% endfor %}
       </div>

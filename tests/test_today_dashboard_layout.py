@@ -67,10 +67,24 @@ def test_mobile_dashboard_top_navs_use_red_bar_with_gold_tabs():
         assert "@media (max-width: 760px)" in template
         assert nav_selector in template
         assert "background: linear-gradient(180deg, #c70914 0%, #96050d 100%);" in template
+        assert "position: fixed;" in template
+        assert "top: 0;" in template
+        assert "margin-top: calc(0px - var(--ck-main-pad-top, 28px));" in template
+        assert "flex-direction: column-reverse;" in template
         assert f"{tab_selector} {{" in template
         assert "color: #d4af37;" in template
         assert "text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);" in template
         assert "border-bottom-color: #ffffff;" in template
+
+
+def test_today_mobile_nav_uses_short_labels():
+    template = Path("app/templates/today_dashboard.html").read_text(encoding="utf-8")
+
+    assert "'dashboard': 'Dash'" in template
+    assert "'notifications': 'Notice'" in template
+    assert "'task-reports': 'Tasks'" in template
+    assert 'data-mobile-label="{{ _tdyd_mobile_labels.get(t.key, t.label) }}"' in template
+    assert "content: attr(data-mobile-label);" in template
 
 
 def test_today_menu_button_starts_tab_strip():

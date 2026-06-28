@@ -694,18 +694,30 @@
   // mechanism (dashboard.css mobile rules) and the new .ck-sidebar-host[data-open]
   // mechanism (sidebar.css from samai's design package). Sidebar.js exposes
   // window.ckSidebar.{open,close,isOpen} once initialized; we call those if present.
+  function setSidebarOpen(open) {
+    var host = document.querySelector('.ck-sidebar-host');
+    var trigger = host ? host.querySelector('.ck-mobile-trigger') : null;
+    var panel = host ? host.querySelector('.ck-sidebar') : null;
+    document.body.classList.toggle('sidebar-open', open);
+    document.body.classList.toggle('ck-drawer-open', open);
+    if (host) host.dataset.open = open ? 'true' : 'false';
+    if (trigger) trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (panel) panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+  }
   window.toggleSidebar = function () {
-    var isOpen = document.body.classList.contains('sidebar-open');
+    var host = document.querySelector('.ck-sidebar-host');
+    var isOpen = document.body.classList.contains('sidebar-open') ||
+                 (host && host.dataset.open === 'true');
     if (isOpen) {
-      document.body.classList.remove('sidebar-open');
+      setSidebarOpen(false);
       if (window.ckSidebar) window.ckSidebar.close();
     } else {
-      document.body.classList.add('sidebar-open');
+      setSidebarOpen(true);
       if (window.ckSidebar) window.ckSidebar.open();
     }
   };
   window.closeSidebar = function () {
-    document.body.classList.remove('sidebar-open');
+    setSidebarOpen(false);
     if (window.ckSidebar) window.ckSidebar.close();
   };
 </script>

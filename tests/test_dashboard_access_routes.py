@@ -232,6 +232,10 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
     assert "corp-cat-pill active" in html
     assert 'href="/dos/corporate-order?category=Cleaning+Supplies"' in html
     assert 'href="/dos/corporate-order/orders"' in html
+    assert 'class="corp-brand"' not in html
+    assert '<section class="corp-page-head">' not in html
+    assert 'class="corp-bottom-nav"' in html
+    assert 'href="/dos/operations?tab=corp-order"' in html
     assert 'data-draft-key="corpOrderDraft:v2:dos:new"' in html
     assert "localStorage" in html
     assert "corporate_order_demo.html" not in html

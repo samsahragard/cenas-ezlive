@@ -152,13 +152,11 @@
     position: relative;
     z-index: 1;
   }
-  .legdash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
   .legdash .legd-heading {
     display: flex;
     align-items: flex-end;
     gap: 16px;
     flex-wrap: wrap;
-    padding-right: clamp(160px, 24vw, 340px);
   }
   .legdash .legd-brand {
     display: inline-flex;
@@ -388,8 +386,7 @@
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
     .legdash .legd-ribbon { padding: 16px 14px; }
-    .legdash .ribbon-role-badge { top: 16px; right: 14px; }
-    .legdash .legd-heading { gap: 10px; padding-right: 116px; }
+    .legdash .legd-heading { gap: 10px; }
     .legdash .legd-brand { margin-bottom: 8px; }
     .legdash .legd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
     .legdash .legd-title { font-size: 30px; }
@@ -436,10 +433,8 @@
   <div class="legd-card">
 
     {# RIBBON HEADER — the page's own header (the shared topbar is
-       suppressed). The role badge sits above this, rendered by
-       base_dashboard.html outside the topbar block. #}
+       suppressed). Role badges now live in the left sidebar. #}
     <div class="legd-ribbon">
-      <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
       <div class="legd-brand">
         <span class="legd-brand-dot"></span>
         <span class="legd-brand-text">CENAS <span class="legd-div">&middot;</span> OPS <span class="legd-div">&middot;</span> <span class="legd-module">LEGAL</span></span>

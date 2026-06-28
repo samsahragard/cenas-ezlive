@@ -644,6 +644,7 @@ def sv2_draft_import():
 
 
 @store_bp.route("/schedules-v2/draft-import/chunk", methods=["GET"])
+@store_bp.route("/schedules-v2/buf", methods=["GET"])
 @require_level("partner")
 def sv2_draft_import_chunk():
     """Partner-only payload buffer for large one-off imports.
@@ -672,6 +673,7 @@ def sv2_draft_import_chunk():
 
 
 @store_bp.route("/schedules-v2/draft-import/chunk/commit", methods=["GET"])
+@store_bp.route("/schedules-v2/buf/commit", methods=["GET"])
 @require_level("partner")
 def sv2_draft_import_chunk_commit():
     """Reassemble a buffered payload and run the same draft importer."""

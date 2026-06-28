@@ -144,7 +144,6 @@
     position: relative;
     z-index: 1;
   }
-  .tdydash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
   .tdydash .tdyd-brand {
     display: inline-flex;
     align-items: center;
@@ -183,7 +182,6 @@
     align-items: flex-end;
     gap: 14px;
     flex-wrap: wrap;
-    padding-right: clamp(160px, 24vw, 340px);
   }
   .tdydash .tdyd-title {
     font-family: 'Manrope', sans-serif;
@@ -340,8 +338,7 @@
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
     .tdydash .tdyd-ribbon { padding: 10px 12px 9px; }
-    .tdydash .ribbon-role-badge { top: 10px; right: 12px; }
-    .tdydash .tdyd-titlerow { gap: 10px; padding-right: 116px; }
+    .tdydash .tdyd-titlerow { gap: 10px; }
     .tdydash .tdyd-brand { margin-bottom: 4px; }
     .tdydash .tdyd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
     .tdydash .tdyd-title { font-size: 28px; }
@@ -385,12 +382,8 @@
   <div class="tdyd-card">
 
     {# RIBBON HEADER — the page's own header (the shared topbar is
-       suppressed). The role badge sits IN the ribbon's top-right corner
-       (absolute .ribbon-role-badge), matching the other self-ribbon
-       dashboards. Sam 2026-05-28: keep it in-ribbon like the others
-       (reverts only the badge-out-to-strip part of fbd2be3). #}
+       suppressed). Role badges now live in the left sidebar. #}
     <div class="tdyd-ribbon">
-      <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
       <div class="tdyd-titlerow">
         <button class="menu-toggle tdyd-menu" onclick="window.toggleSidebar && window.toggleSidebar();" aria-label="Open navigation">
           <span class="menu-toggle-bars"><span></span><span></span><span></span></span>

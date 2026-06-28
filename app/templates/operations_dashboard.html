@@ -158,13 +158,11 @@
     position: relative;
     z-index: 1;
   }
-  .opsdash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
   .opsdash .opsd-heading {
     display: flex;
     align-items: flex-end;
     gap: 16px;
     flex-wrap: wrap;
-    padding-right: clamp(160px, 24vw, 340px);
   }
   .opsdash .opsd-brand {
     display: inline-flex;
@@ -444,8 +442,7 @@
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
     .opsdash .opsd-ribbon { padding: 16px 14px; }
-    .opsdash .ribbon-role-badge { top: 16px; right: 14px; }
-    .opsdash .opsd-heading { gap: 10px; padding-right: 116px; }
+    .opsdash .opsd-heading { gap: 10px; }
     .opsdash .opsd-brand { margin-bottom: 8px; }
     .opsdash .opsd-brand-text { font-size: 9px; letter-spacing: 0.2em; }
     .opsdash .opsd-title { font-size: 30px; }
@@ -496,10 +493,8 @@
   <div class="opsd-card">
 
     {# RIBBON HEADER — the page's own header (the shared topbar is
-       suppressed). The role badge sits above this, rendered by
-       base_dashboard.html outside the topbar block. #}
+       suppressed). Role badges now live in the left sidebar. #}
     <div class="opsd-ribbon">
-      <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
       {# eyebrow breadcrumb + meta tail (store + "N sections") removed per Sam #2230; keep the date #}
       <div class="opsd-heading">
         <h1 class="opsd-title">Operations</h1>

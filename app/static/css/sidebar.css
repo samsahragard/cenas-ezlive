@@ -74,10 +74,26 @@
   text-decoration: none;
   cursor: pointer;
 }
-.ck-sb-logo-bottom {
-  margin-top: 16px;
-  padding-top: 14px;
+.ck-sb-role-badge {
+  display: flex;
+  justify-content: flex-start;
+  margin: 16px 6px 0;
+  padding: 14px 0 2px 10px;
   border-top: 0.5px solid var(--ck-border-subtle);
+}
+.ck-sb-role-badge .dash-role-banner {
+  display: block;
+  width: min(118px, 100%);
+  max-width: 118px;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.42);
+}
+.ck-sb-logo-bottom {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 0;
 }
 .ck-sb-logo-bull {
   width: 78px;

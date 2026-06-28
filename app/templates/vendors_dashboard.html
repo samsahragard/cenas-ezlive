@@ -142,13 +142,11 @@
     position: relative;
     z-index: 1;
   }
-  .vendash .ribbon-role-badge { position: absolute; top: 24px; right: 26px; z-index: 2; }
   .vendash .vend-heading {
     display: flex;
     align-items: flex-end;
     gap: 16px;
     flex-wrap: wrap;
-    padding-right: clamp(160px, 24vw, 340px);
   }
   .vendash .vend-brand {
     display: inline-flex;
@@ -333,8 +331,7 @@
   /* MOBILE - mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
     .vendash .vend-ribbon { padding: 16px 14px; }
-    .vendash .ribbon-role-badge { top: 16px; right: 14px; }
-    .vendash .vend-heading { gap: 10px; padding-right: 116px; }
+    .vendash .vend-heading { gap: 10px; }
     .vendash .vend-brand { margin-bottom: 8px; }
     .vendash .vend-brand-text { font-size: 9px; letter-spacing: 0.2em; }
     .vendash .vend-title { font-size: 30px; }
@@ -380,10 +377,8 @@
   <div class="vend-card">
 
     {# RIBBON HEADER - the page's own header (the shared topbar is
-       suppressed). The role badge sits above this, rendered by
-       base_dashboard.html outside the topbar block. #}
+       suppressed). Role badges now live in the left sidebar. #}
     <div class="vend-ribbon">
-      <div class="ribbon-role-badge">{% include 'partials/_role_badge.html' %}</div>
       {# eyebrow breadcrumb + meta tail (store + "N sections") removed per Sam #2230; keep the date #}
       <div class="vend-heading">
         <h1 class="vend-title">Vendors</h1>

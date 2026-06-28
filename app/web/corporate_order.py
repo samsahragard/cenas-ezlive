@@ -100,6 +100,7 @@ LEGACY_CATEGORY_ALIASES = {
     "Cleaning Supplies": BOH_CATEGORY,
     "Spices": BOH_CATEGORY,
 }
+CURRENT_ORDER_STATUSES = {"Submitted", "In Progress"}
 
 
 def _pin_digest(scope: str, pin: str) -> str:
@@ -361,6 +362,21 @@ def _catalog_redirect(category: str | None = None):
     return redirect(url_for("corporate_order.view", store_slug=g.current_store))
 
 
+def _parse_qty_items() -> list[tuple[int, int]]:
+    items: list[tuple[int, int]] = []
+    for key, value in request.form.items():
+        if not key.startswith("qty_"):
+            continue
+        try:
+            product_id = int(key.removeprefix("qty_"))
+            quantity = int(value)
+        except ValueError:
+            continue
+        if quantity > 0:
+            items.append((product_id, quantity))
+    return items
+
+
 def _send_corporate_order_email(order: dict) -> tuple[bool, str]:
     """Email Sam + any additional recipients about a newly-placed corporate order.
     Returns (sent_ok, error_or_blank)."""
@@ -460,6 +476,7 @@ def view():
             is_admin=_is_admin(),
             products=[], categories=[], orders=[],
             recent_submission=None,
+            order_add_target=None,
             platform_mode=True,
             portal_profiles=ORDER_PORTAL_PROFILES,
             analytics=_order_analytics([]),
@@ -492,9 +509,113 @@ def view():
         selected_category=selected_category,
         orders=orders,
         recent_submission=flash_id,
+        order_add_target=None,
         platform_mode=True,
         portal_profiles=ORDER_PORTAL_PROFILES,
         analytics=_order_analytics(orders),
+    )
+
+
+@corp_order.route("/corporate-order/orders", methods=["GET"])
+def orders():
+    """Store-facing current orders list. Stores can add to open orders here."""
+    if _is_admin():
+        return redirect(url_for("corporate_order.reports", store_slug=g.current_store))
+    if not corporate_shop.is_configured():
+        return render_template(
+            "corporate_order_orders.html",
+            active="corporate_order_orders",
+            page_title="Corporate Order — Orders",
+            configured=False,
+            is_admin=False,
+            orders=[],
+            current_orders=[],
+            platform_mode=True,
+        )
+    rows = corporate_shop.list_orders(limit=None, store_filter=_shop_store_key())
+    current_orders = [
+        order for order in rows
+        if (order.get("status") or "Submitted") in CURRENT_ORDER_STATUSES
+    ]
+    return render_template(
+        "corporate_order_orders.html",
+        active="corporate_order_orders",
+        page_title="Corporate Order — Orders",
+        configured=True,
+        is_admin=False,
+        orders=rows,
+        current_orders=current_orders,
+        platform_mode=True,
+    )
+
+
+@corp_order.route("/corporate-order/orders/<int:order_id>/add", methods=["GET", "POST"])
+def add_to_order(order_id):
+    """Store-facing flow for adding more items to an existing open order."""
+    if _is_admin():
+        abort(403)
+    if not corporate_shop.is_configured():
+        flash("Corporate Order DB is not connected. Set CORPORATE_DB_URL on Render.", "error")
+        return redirect(url_for("corporate_order.orders", store_slug=g.current_store))
+    order = corporate_shop.get_order(order_id, store_filter=_shop_store_key())
+    if not order:
+        flash(f"Order #{order_id} was not found for {g.store_label}.", "error")
+        return redirect(url_for("corporate_order.orders", store_slug=g.current_store))
+    if (order.get("status") or "Submitted") not in CURRENT_ORDER_STATUSES:
+        flash(f"Order #{order_id} is closed and cannot be changed.", "warning")
+        return redirect(url_for("corporate_order.orders", store_slug=g.current_store))
+
+    if request.method == "POST":
+        items = _parse_qty_items()
+        if not items:
+            flash("No items selected — pick a quantity > 0 on at least one product.", "warning")
+            return redirect(url_for(
+                "corporate_order.add_to_order",
+                store_slug=g.current_store,
+                order_id=order_id,
+                category=_current_category(),
+            ))
+        try:
+            added = corporate_shop.add_items_to_order(order_id, _shop_store_key(), items)
+        except Exception as ex:
+            log.exception("corporate_order: add_to_order failed")
+            flash(f"Could not add to order #{order_id}: {ex}", "error")
+            return redirect(url_for(
+                "corporate_order.add_to_order",
+                store_slug=g.current_store,
+                order_id=order_id,
+                category=_current_category(),
+            ))
+        total_qty = sum(int(item.get("quantity") or 0) for item in added.get("items") or [])
+        flash(
+            f"Added {total_qty} item{'s' if total_qty != 1 else ''} to order #{order_id}.",
+            "success",
+        )
+        return redirect(url_for("corporate_order.orders", store_slug=g.current_store))
+
+    try:
+        corporate_shop.ensure_catalog_seeded()
+    except Exception:
+        log.exception("corporate_order: catalog seed check failed")
+    selected_category = _current_category()
+    products = corporate_shop.list_products(category=selected_category or None)
+    categories = corporate_shop.list_categories()
+    store_orders = corporate_shop.list_orders(limit=25, store_filter=_shop_store_key())
+    return render_template(
+        "corporate_order.html",
+        active="corporate_order_orders",
+        page_title="Corporate Order — Add to Order",
+        configured=True,
+        is_admin=False,
+        products=products,
+        categories=categories,
+        selected_category=selected_category,
+        orders=store_orders,
+        recent_submission=None,
+        order_add_target=order,
+        platform_mode=True,
+        portal_profiles=ORDER_PORTAL_PROFILES,
+        analytics=_order_analytics(store_orders),
     )
 
 

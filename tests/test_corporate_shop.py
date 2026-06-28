@@ -174,6 +174,56 @@ def test_list_orders_filters_store_before_limit(monkeypatch):
     assert rows[0]["customer_email"] == corporate_shop.STORE_CUSTOMER_EMAIL["copperfield"]
 
 
+def test_add_items_to_order_marks_added_lines_and_decrements_stock(monkeypatch):
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
+    corporate_shop.CorporateBase.metadata.create_all(engine)
+    monkeypatch.setattr(corporate_shop, "_engine", engine)
+    monkeypatch.setattr(corporate_shop, "_Session", Session)
+    monkeypatch.setattr(corporate_shop, "_schema_checked", True)
+
+    with Session() as s:
+        tomball = corporate_shop.Customer(
+            email=corporate_shop.STORE_CUSTOMER_EMAIL["tomball"],
+            username="Tomball Kitchen",
+        )
+        product = corporate_shop.Product(
+            id=1,
+            product_name="Bleach",
+            in_stock=9,
+            product_picture="",
+            category="BOH",
+            sort_order=10,
+        )
+        s.add_all([tomball, product])
+        s.flush()
+        order = corporate_shop.Order(customer_link=tomball.id, status="Submitted")
+        s.add(order)
+        s.flush()
+        s.add(corporate_shop.OrderItem(
+            order_link=order.id,
+            product_name="Original Cups",
+            product_category="Cups & Lids",
+            quantity=2,
+        ))
+        s.commit()
+        order_id = order.id
+
+    added = corporate_shop.add_items_to_order(order_id, "tomball", [(1, 3)])
+    rows = corporate_shop.list_orders(limit=None, store_filter="tomball")
+
+    assert added["order_id"] == order_id
+    assert added["items"][0]["quantity"] == 3
+    assert added["items"][0]["added_at"] is not None
+    assert len(rows[0]["lines"]) == 2
+    added_lines = [line for line in rows[0]["lines"] if line["is_added"]]
+    assert len(added_lines) == 1
+    assert added_lines[0]["name"] == "Bleach"
+    assert added_lines[0]["added_at"] is not None
+    with Session() as s:
+        assert s.query(corporate_shop.Product).filter_by(id=1).one().in_stock == 6
+
+
 def test_list_products_uses_custom_sort_order(monkeypatch):
     engine = create_engine("sqlite:///:memory:", future=True)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)

@@ -1,13 +1,22 @@
 {% extends "corporate_order_shell.html" if platform_mode else "base_dashboard.html" %}
 {% set active = active|default('corporate_order') %}
+{% set order_add_target = order_add_target|default(None) %}
 {% block title %}Corporate Order - Cenas Kitchen{% endblock %}
 
 {% block page_module %}CATERING{% endblock %}
 {% block page_module_class %}mod-catering{% endblock %}
-{% block page_title %}<span class="word-primary">Corporate</span> <span class="ck-accent">Order</span>{% endblock %}
+{% block page_title %}
+  {% if order_add_target %}
+    <span class="word-primary">Add to</span> <span class="ck-accent">Order</span>
+  {% else %}
+    <span class="word-primary">Corporate</span> <span class="ck-accent">Order</span>
+  {% endif %}
+{% endblock %}
 {% block page_subtitle %}
   <p class="greeting-sub">
-    {% if is_admin %}
+    {% if order_add_target %}
+      {{ g.store_label }} · order #{{ order_add_target.id }}
+    {% elif is_admin %}
       {{ products|length }} catalog item{{ 's' if products|length != 1 else '' }} · all stores
     {% else %}
       {{ g.store_label }} · {{ products|length }} catalog item{{ 's' if products|length != 1 else '' }}
@@ -365,6 +374,42 @@
     margin-bottom: 14px;
     padding: 12px;
   }
+  .corp-add-target {
+    margin-bottom: 14px;
+    border: 1px solid rgba(235, 164, 59, 0.26);
+    border-radius: 8px;
+    background: rgba(235, 164, 59, 0.08);
+    padding: 12px;
+  }
+  .corp-add-target h2 {
+    margin: 0 0 8px;
+    color: #fff;
+    font-size: 14px;
+  }
+  .corp-add-target p {
+    margin: 0 0 8px;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 13px;
+  }
+  .corp-add-target ul {
+    margin: 0;
+    padding-left: 18px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 12px;
+  }
+  .corp-added-line {
+    display: inline-block;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: rgba(235, 164, 59, 0.16);
+    color: var(--accent-soft);
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
   .corp-admin-add h2 {
     margin: 0 0 10px;
     color: rgba(255, 255, 255, 0.62);
@@ -461,7 +506,7 @@
     color: rgba(255, 255, 255, 0.70);
     font-size: 12px;
   }
-  .corp-fulfill-line span {
+  .corp-fulfill-line > span {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -638,6 +683,28 @@
   {% endif %}
 {% endwith %}
 
+{% if order_add_target %}
+<section class="corp-add-target" aria-label="Current order">
+  <h2>Adding to order #{{ order_add_target.id }}</h2>
+  <p>
+    Submitted {{ order_add_target.submitted_at.strftime('%a %b %d, %I:%M %p') if order_add_target.submitted_at else '-' }}
+    · {{ order_add_target.status }}
+  </p>
+  {% if order_add_target.lines %}
+    <ul>
+      {% for line in order_add_target.lines %}
+        <li>
+          {{ line.quantity }}x {{ line.name }}
+          {% if line.added_at %}
+            <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if is_admin %}
 <section class="corp-analytics" aria-label="Corporate order analytics">
   <div class="corp-stat"><span>Total orders</span><strong>{{ analytics.total_orders }}</strong></div>
@@ -684,10 +751,10 @@
     <nav class="corp-categories" aria-label="Departments">
       <span class="corp-cat-label">Departments</span>
       <a class="corp-cat-pill {% if not selected_category %}active{% endif %}"
-         href="{{ url_for('corporate_order.view') }}">All</a>
+         href="{{ url_for('corporate_order.add_to_order', order_id=order_add_target.id) if order_add_target else url_for('corporate_order.view') }}">All</a>
       {% for c in categories %}
         <a class="corp-cat-pill {% if selected_category == c %}active{% endif %}"
-           href="{{ url_for('corporate_order.view', category=c) }}">{{ c }}</a>
+           href="{{ url_for('corporate_order.add_to_order', order_id=order_add_target.id, category=c) if order_add_target else url_for('corporate_order.view', category=c) }}">{{ c }}</a>
       {% endfor %}
     </nav>
     {% endif %}
@@ -768,7 +835,10 @@
         </table>
       </div>
       {% else %}
-      <form method="POST" action="{{ url_for('corporate_order.submit') }}" id="corpOrderForm">
+      <form method="POST"
+            action="{{ url_for('corporate_order.add_to_order', order_id=order_add_target.id) if order_add_target else url_for('corporate_order.submit') }}"
+            id="corpOrderForm"
+            data-draft-key="corpOrderDraft:v2:{{ g.current_store }}:{% if order_add_target %}order:{{ order_add_target.id }}{% else %}new{% endif %}">
         <div class="corp-grid" id="corpProductGrid">
           {% for p in products %}
           <section class="corp-card" data-product-card data-product-id="{{ p.id }}"
@@ -805,7 +875,9 @@
         </div>
         <div class="corp-submit-bar">
           <span class="corp-submit-count" id="corpSubmitCount">No items selected</span>
-          <button class="corp-submit-button" id="corpSubmitButton" type="submit" disabled>Submit Order</button>
+          <button class="corp-submit-button" id="corpSubmitButton" type="submit" disabled>
+            {% if order_add_target %}Add to Order{% else %}Submit Order{% endif %}
+          </button>
         </div>
       </form>
       {% endif %}
@@ -847,6 +919,9 @@
                     {% for line in o.lines %}
                       <li>
                         {{ line.quantity }}x {{ line.name }}
+                        {% if line.added_at %}
+                          <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
+                        {% endif %}
                         {% if is_admin %}
                           · fulfilled {{ line.fulfilled_quantity }}
                         {% endif %}
@@ -863,7 +938,12 @@
                 <form class="corp-fulfill-form" method="POST" action="{{ url_for('corporate_order.update_status', order_id=o.id) }}">
                   {% for line in o.lines %}
                     <label class="corp-fulfill-line">
-                      <span title="{{ line.name }}">{{ line.name }} (ordered {{ line.quantity }})</span>
+                      <span title="{{ line.name }}">
+                        {{ line.name }} (ordered {{ line.quantity }})
+                        {% if line.added_at %}
+                          <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
+                        {% endif %}
+                      </span>
                       <input
                         type="number"
                         min="0"
@@ -984,15 +1064,137 @@
     });
   }
 
+  const form = document.getElementById('corpOrderForm');
+  const draftKey = form ? form.dataset.draftKey : '';
   const inputs = Array.from(document.querySelectorAll('.corp-qty-input'));
   const count = document.getElementById('corpSubmitCount');
   const button = document.getElementById('corpSubmitButton');
+  function draftStorage() {
+    try {
+      return window.localStorage;
+    } catch (err) {
+      return null;
+    }
+  }
+  function readDraft() {
+    const storage = draftStorage();
+    if (!draftKey || !storage) return {};
+    try {
+      const raw = storage.getItem(draftKey);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (err) {
+      return {};
+    }
+  }
+  function writeDraft(draft) {
+    const storage = draftStorage();
+    if (!draftKey || !storage) return;
+    try {
+      const keys = Object.keys(draft).filter((key) => parseInt(draft[key], 10) > 0);
+      if (!keys.length) {
+        storage.removeItem(draftKey);
+        return;
+      }
+      const clean = {};
+      keys.forEach((key) => { clean[key] = String(parseInt(draft[key], 10)); });
+      storage.setItem(draftKey, JSON.stringify(clean));
+    } catch (err) {
+      // Browsers can disable storage; ordering still works without drafts.
+    }
+  }
+  function parseQty(value) {
+    const qty = parseInt(value, 10);
+    return Number.isFinite(qty) ? Math.max(0, qty) : 0;
+  }
+  function normalizedInputQty(input) {
+    const max = parseQty(input.getAttribute('max') || '');
+    const qty = parseQty(input.value);
+    return max > 0 ? Math.min(qty, max) : qty;
+  }
+  function restoreDraft() {
+    const draft = readDraft();
+    let changed = false;
+    inputs.forEach((input) => {
+      if (!Object.prototype.hasOwnProperty.call(draft, input.name)) return;
+      const max = parseQty(input.getAttribute('max') || '');
+      const qty = max > 0 ? Math.min(parseQty(draft[input.name]), max) : parseQty(draft[input.name]);
+      input.value = qty > 0 ? String(qty) : '0';
+      if (qty > 0) {
+        if (String(draft[input.name]) !== String(qty)) {
+          draft[input.name] = String(qty);
+          changed = true;
+        }
+      } else {
+        delete draft[input.name];
+        changed = true;
+      }
+    });
+    if (changed) writeDraft(draft);
+  }
+  function saveDraftValue(input) {
+    const draft = readDraft();
+    const qty = normalizedInputQty(input);
+    if (input.value !== '' && String(qty) !== input.value) {
+      input.value = qty > 0 ? String(qty) : '0';
+    }
+    if (qty > 0) {
+      draft[input.name] = String(qty);
+    } else {
+      delete draft[input.name];
+    }
+    writeDraft(draft);
+  }
+  function appendDraftInputs() {
+    if (!form) return;
+    const draft = readDraft();
+    const existing = new Set(
+      Array.from(form.querySelectorAll('[name]')).map((input) => input.name)
+    );
+    Object.entries(draft).forEach(([name, value]) => {
+      if (!/^qty_\d+$/.test(name) || existing.has(name)) return;
+      const qty = parseQty(value);
+      if (qty <= 0) return;
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = name;
+      hidden.value = String(qty);
+      hidden.dataset.savedDraft = '1';
+      form.appendChild(hidden);
+    });
+  }
   function updateCount() {
-    const picked = inputs.reduce((n, input) => n + (parseInt(input.value, 10) > 0 ? 1 : 0), 0);
+    const visibleNames = new Set(inputs.map((input) => input.name));
+    const draft = readDraft();
+    let picked = inputs.reduce((n, input) => n + (normalizedInputQty(input) > 0 ? 1 : 0), 0);
+    Object.entries(draft).forEach(([name, value]) => {
+      if (!visibleNames.has(name) && parseQty(value) > 0) picked += 1;
+    });
     if (count) count.textContent = picked ? `${picked} item${picked === 1 ? '' : 's'} selected` : 'No items selected';
     if (button) button.disabled = picked === 0;
   }
-  inputs.forEach((input) => input.addEventListener('input', updateCount));
+  restoreDraft();
+  inputs.forEach((input) => {
+    input.addEventListener('input', () => {
+      saveDraftValue(input);
+      updateCount();
+    });
+    input.addEventListener('change', () => {
+      saveDraftValue(input);
+      updateCount();
+    });
+  });
+  if (form && draftKey) {
+    form.addEventListener('submit', () => {
+      appendDraftInputs();
+      try {
+        const storage = draftStorage();
+        if (storage) storage.removeItem(draftKey);
+      } catch (err) {
+        // Nothing else needed; submit should continue.
+      }
+    });
+  }
   syncOrderInput();
   syncMoveButtons();
   updateCount();

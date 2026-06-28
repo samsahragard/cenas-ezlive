@@ -1,0 +1,224 @@
+{% extends "corporate_order_shell.html" %}
+{% set active = active|default('corporate_order_orders') %}
+{% block title %}Corporate Order - Orders - Cenas Kitchen{% endblock %}
+
+{% block page_title %}<span class="word-primary">Store</span> <span class="ck-accent">Orders</span>{% endblock %}
+{% block page_subtitle %}
+  <p class="greeting-sub">{{ g.store_label }} - current and recent corporate orders</p>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .orders-panel {
+    margin-bottom: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.30);
+    padding: 12px;
+  }
+  .orders-panel h2 {
+    margin: 0 0 10px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .orders-list {
+    display: grid;
+    gap: 10px;
+  }
+  .order-card {
+    display: grid;
+    gap: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.26);
+    padding: 12px;
+  }
+  .order-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .order-card-title {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 800;
+  }
+  .order-card-meta {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 12px;
+  }
+  .order-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .order-button {
+    min-height: 36px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--accent, #eba43b);
+    color: #fff;
+    cursor: pointer;
+    padding: 8px 12px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .order-button.secondary {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.82);
+  }
+  .order-lines {
+    margin: 0;
+    padding-left: 18px;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 12px;
+  }
+  .order-lines li {
+    padding: 2px 0;
+  }
+  .corp-added-line {
+    display: inline-block;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: rgba(235, 164, 59, 0.16);
+    color: var(--accent-soft);
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .empty-corp {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.30);
+    color: rgba(255, 255, 255, 0.68);
+    padding: 18px;
+    text-align: center;
+  }
+  .recent-banner {
+    margin-bottom: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.30);
+    color: rgba(255, 255, 255, 0.68);
+    padding: 10px 12px;
+  }
+  .recent-banner.success {
+    border-color: rgba(122, 210, 122, 0.40);
+    background: rgba(122, 210, 122, 0.10);
+    color: #fff;
+  }
+  .recent-banner.warning {
+    border-color: rgba(240, 192, 96, 0.40);
+    background: rgba(240, 192, 96, 0.10);
+    color: #fff;
+  }
+  .recent-banner.error {
+    border-color: rgba(232, 80, 80, 0.40);
+    background: rgba(232, 80, 80, 0.10);
+    color: #fff;
+  }
+  @media (max-width: 620px) {
+    .order-card-head {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .order-button {
+      width: 100%;
+      text-align: center;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, msg in messages %}
+      <div class="recent-banner {{ category }}">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+{% if not configured %}
+  <div class="empty-corp">
+    <p style="margin:0;color:#fff;">Corporate Order is not connected.</p>
+  </div>
+{% else %}
+  <section class="orders-panel" aria-label="Current orders">
+    <h2>Current Orders</h2>
+    {% if current_orders %}
+      <div class="orders-list">
+        {% for o in current_orders %}
+          <article class="order-card">
+            <div class="order-card-head">
+              <div>
+                <div class="order-card-title">Order #{{ o.id }}</div>
+                <div class="order-card-meta">
+                  {{ o.submitted_at.strftime('%a %b %d, %I:%M %p') if o.submitted_at else '-' }}
+                  - {{ o.status }} - {{ o.total_quantity }} unit{{ 's' if o.total_quantity != 1 else '' }}
+                </div>
+              </div>
+              <div class="order-actions">
+                <a class="order-button" href="{{ url_for('corporate_order.add_to_order', order_id=o.id) }}">Add Items</a>
+                <a class="order-button secondary" href="{{ url_for('corporate_order.view') }}">New Order</a>
+              </div>
+            </div>
+            {% if o.lines %}
+              <details>
+                <summary style="cursor:pointer;color:var(--accent-soft);font-size:12px;">View items</summary>
+                <ul class="order-lines">
+                  {% for line in o.lines %}
+                    <li>
+                      {{ line.quantity }}x {{ line.name }}
+                      {% if line.added_at %}
+                        <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
+                      {% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+              </details>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-corp">No current orders. Start a new corporate order from the Order page.</div>
+    {% endif %}
+  </section>
+
+  <section class="orders-panel" aria-label="Recent orders">
+    <h2>Recent Orders</h2>
+    {% if orders %}
+      <div class="orders-list">
+        {% for o in orders[:12] %}
+          <article class="order-card">
+            <div class="order-card-head">
+              <div>
+                <div class="order-card-title">Order #{{ o.id }}</div>
+                <div class="order-card-meta">
+                  {{ o.submitted_at.strftime('%a %b %d, %I:%M %p') if o.submitted_at else '-' }}
+                  - {{ o.status }} - {{ o.total_quantity }} unit{{ 's' if o.total_quantity != 1 else '' }}
+                </div>
+              </div>
+              {% if o.status in ["Submitted", "In Progress"] %}
+                <a class="order-button" href="{{ url_for('corporate_order.add_to_order', order_id=o.id) }}">Add Items</a>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-corp">No orders yet.</div>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}

@@ -88,6 +88,7 @@ class OrderItem(CorporateBase):
     product_category = Column(String(100), nullable=False)
     quantity = Column(Integer, nullable=False)
     fulfilled_quantity = Column(Integer)
+    added_at = Column(DateTime)
 
 
 _engine = None
@@ -141,6 +142,9 @@ def _ensure_schema() -> None:
     if "fulfilled_quantity" not in order_item_cols:
         with _engine.begin() as conn:
             conn.execute(text("ALTER TABLE order_item ADD COLUMN fulfilled_quantity INTEGER"))
+    if "added_at" not in order_item_cols:
+        with _engine.begin() as conn:
+            conn.execute(text("ALTER TABLE order_item ADD COLUMN added_at TIMESTAMP"))
     try:
         product_cols = {c["name"] for c in insp.get_columns("product")}
     except Exception:
@@ -380,6 +384,42 @@ def list_categories() -> list[str]:
         return [r[0] for r in rows if r[0]]
 
 
+def _order_to_dict(o: Order) -> dict:
+    cust = o.customer
+    store_key = None
+    for k, e in STORE_CUSTOMER_EMAIL.items():
+        if cust and cust.email == e:
+            store_key = k
+            break
+    lines = [{
+        "id": it.id,
+        "name": it.product_name,
+        "category": it.product_category,
+        "quantity": it.quantity,
+        "fulfilled_quantity": it.fulfilled_quantity or 0,
+        "remaining_quantity": max(
+            0, (it.quantity or 0) - (it.fulfilled_quantity or 0)
+        ),
+        "added_at": it.added_at,
+        "is_added": bool(it.added_at),
+    } for it in (o.items or [])]
+    return {
+        "id": o.id,
+        "submitted_at": o.submitted_at,
+        "status": o.status,
+        "customer_email": cust.email if cust else None,
+        "customer_username": cust.username if cust else None,
+        "store_key": store_key,
+        # Key name 'lines' (not 'items') to dodge Jinja's dict.items
+        # method-vs-key collision when rendering with `o.items`.
+        "lines": lines,
+        "total_quantity": sum((it.quantity or 0) for it in (o.items or [])),
+        "total_fulfilled": sum(
+            (it.fulfilled_quantity or 0) for it in (o.items or [])
+        ),
+    }
+
+
 def list_orders(limit: int | None = 50, store_filter: str | None = None) -> list[dict]:
     """Recent orders. store_filter narrows to a store's synthetic Customer."""
     _ensure_engine()
@@ -395,39 +435,24 @@ def list_orders(limit: int | None = 50, store_filter: str | None = None) -> list
                     return []
         if limit:
             q = q.limit(limit)
-        out = []
-        for o in q.all():
-            cust = o.customer
-            store_key = None
-            for k, e in STORE_CUSTOMER_EMAIL.items():
-                if cust and cust.email == e:
-                    store_key = k
-                    break
-            out.append({
-                "id": o.id,
-                "submitted_at": o.submitted_at,
-                "status": o.status,
-                "customer_email": cust.email if cust else None,
-                "customer_username": cust.username if cust else None,
-                "store_key": store_key,
-                # Key name 'lines' (not 'items') to dodge Jinja's dict.items
-                # method-vs-key collision when rendering with `o.items`.
-                "lines": [{
-                    "id": it.id,
-                    "name": it.product_name,
-                    "category": it.product_category,
-                    "quantity": it.quantity,
-                    "fulfilled_quantity": it.fulfilled_quantity or 0,
-                    "remaining_quantity": max(
-                        0, (it.quantity or 0) - (it.fulfilled_quantity or 0)
-                    ),
-                } for it in (o.items or [])],
-                "total_quantity": sum((it.quantity or 0) for it in (o.items or [])),
-                "total_fulfilled": sum(
-                    (it.fulfilled_quantity or 0) for it in (o.items or [])
-                ),
-            })
-        return out
+        return [_order_to_dict(o) for o in q.all()]
+
+
+def get_order(order_id: int, store_filter: str | None = None) -> dict | None:
+    """Fetch one order, optionally scoped to a store's synthetic Customer."""
+    _ensure_engine()
+    with session() as s:
+        q = s.query(Order).filter(Order.id == int(order_id))
+        if store_filter:
+            email = STORE_CUSTOMER_EMAIL.get(store_filter)
+            if not email:
+                return None
+            cust = s.query(Customer).filter_by(email=email).one_or_none()
+            if not cust:
+                return None
+            q = q.filter(Order.customer_link == cust.id)
+        order = q.one_or_none()
+        return _order_to_dict(order) if order else None
 
 
 def add_product(
@@ -555,6 +580,70 @@ def place_order(store_key: str, items: list[tuple[int, int]]) -> dict:
         if not line_dicts:
             s.rollback()
             raise ValueError("no valid items to order")
+        s.commit()
+        return {
+            "order_id": order.id,
+            "submitted_at": order.submitted_at,
+            "store_key": store_key,
+            "store_label": STORE_CUSTOMER_NAME[store_key],
+            "items": line_dicts,
+        }
+
+
+def add_items_to_order(order_id: int, store_key: str, items: list[tuple[int, int]]) -> dict:
+    """Append newly requested items to an existing store order.
+
+    Added lines stay separate from the original order lines so corporate can
+    see exactly what was added later and when it happened.
+    """
+    _ensure_engine()
+    if store_key not in STORE_CUSTOMER_EMAIL:
+        raise ValueError(f"unknown store_key {store_key!r}")
+    with session() as s:
+        cust = _ensure_store_customer(s, store_key)
+        order = (
+            s.query(Order)
+            .filter(Order.id == int(order_id), Order.customer_link == cust.id)
+            .one_or_none()
+        )
+        if not order:
+            raise ValueError("order not found")
+        if order.status in ("Fulfilled", "Cancelled"):
+            raise ValueError("order is closed")
+        added_at = datetime.now(timezone.utc)
+        line_dicts = []
+        for pid, qty in items:
+            if qty <= 0:
+                continue
+            p = s.query(Product).filter_by(id=pid).one_or_none()
+            if not p:
+                continue
+            if (p.in_stock or 0) <= 0:
+                continue
+            if qty > (p.in_stock or 0):
+                raise ValueError(
+                    f"{_clean_product_name(p.product_name)} only has {p.in_stock} available"
+                )
+            clean_name = _clean_product_name(p.product_name)
+            oi = OrderItem(
+                order_link=order.id,
+                product_name=clean_name,
+                product_category=p.category,
+                quantity=qty,
+                added_at=added_at,
+            )
+            s.add(oi)
+            p.in_stock = max(0, (p.in_stock or 0) - qty)
+            line_dicts.append({
+                "name": clean_name,
+                "category": p.category,
+                "quantity": qty,
+                "remaining_stock": p.in_stock,
+                "added_at": added_at,
+            })
+        if not line_dicts:
+            s.rollback()
+            raise ValueError("no valid items to add")
         s.commit()
         return {
             "order_id": order.id,

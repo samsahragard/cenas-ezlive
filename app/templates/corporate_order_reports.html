@@ -53,6 +53,19 @@
   .stat-card .empty {
     color: rgba(255,255,255,0.35); font-style: italic; font-size: 12px; padding: 6px 0;
   }
+  .corp-added-line {
+    display: inline-block;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: rgba(235, 164, 59, 0.16);
+    color: var(--accent-soft);
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
 </style>
 {% endblock %}
 
@@ -142,6 +155,9 @@
                 {% for line in o.lines %}
                   <li style="padding:2px 0;color:rgba(255,255,255,0.75);">
                     ordered {{ line.quantity }} / fulfilled {{ line.fulfilled_quantity }} - {{ line.name }}
+                    {% if line.added_at %}
+                      <span class="corp-added-line">Added {{ line.added_at.strftime('%a %b %d, %I:%M %p') }}</span>
+                    {% endif %}
                     <span style="opacity:0.5;">- {{ line.category }}</span>
                   </li>
                 {% endfor %}

@@ -182,8 +182,11 @@
       <div class="corp-userbar">
         {% if is_admin is defined %}
           <span class="corp-badge {{ '' if is_admin else 'store' }}">{{ g.store_label|default('Corporate') }}</span>
-          <a class="corp-toplink" href="{{ url_for('corporate_order_public.entry', switch=1) }}">Switch</a>
+          {% if not is_admin %}
+            <a class="corp-toplink" href="{{ url_for('corporate_order.orders') }}">Orders</a>
+          {% endif %}
           <a class="corp-toplink" href="{{ url_for('corporate_order.reports') }}">Reports</a>
+          <a class="corp-toplink" href="{{ url_for('corporate_order_public.entry', switch=1) }}">Switch</a>
           <form class="corp-logout" method="POST" action="{{ url_for('corporate_order_public.portal_logout') }}">
             <button type="submit">Logout</button>
           </form>

@@ -231,6 +231,9 @@ def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkey
     assert "Departments" in html
     assert "corp-cat-pill active" in html
     assert 'href="/dos/corporate-order?category=Cleaning+Supplies"' in html
+    assert 'href="/dos/corporate-order/orders"' in html
+    assert 'data-draft-key="corpOrderDraft:v2:dos:new"' in html
+    assert "localStorage" in html
     assert "corporate_order_demo.html" not in html
 
 
@@ -264,6 +267,162 @@ def test_corporate_order_submit_maps_dos_to_tomball(dashboard_app, monkeypatch):
     resp = client.post("/dos/corporate-order/submit", data={"qty_42": "2"}, follow_redirects=False)
     assert resp.status_code == 302
     assert submitted == {"store_key": "tomball", "items": [(42, 2)]}
+
+
+def test_store_orders_page_links_current_order_for_additions(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=128, role="km", position="KM")
+    client = _client_as(flask_app, km)
+    _grant_corporate_order_scope(client, "dos")
+
+    from app.services import corporate_shop
+
+    seen = {}
+
+    monkeypatch.setattr(corporate_shop, "is_configured", lambda: True)
+
+    def _orders(limit=None, store_filter=None):
+        seen["limit"] = limit
+        seen["store_filter"] = store_filter
+        return [{
+            "id": 501,
+            "submitted_at": datetime(2026, 6, 28, 14, 10),
+            "status": "Submitted",
+            "customer_email": "store-tomball@cenaskitchen.com",
+            "customer_username": "Tomball Kitchen",
+            "store_key": "tomball",
+            "lines": [{
+                "id": 10,
+                "name": "Bleach (6/case)",
+                "category": "BOH",
+                "quantity": 2,
+                "fulfilled_quantity": 0,
+                "remaining_quantity": 2,
+                "added_at": None,
+                "is_added": False,
+            }],
+            "total_quantity": 2,
+            "total_fulfilled": 0,
+        }]
+
+    monkeypatch.setattr(corporate_shop, "list_orders", _orders)
+
+    resp = client.get("/dos/corporate-order/orders")
+    html = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert seen == {"limit": None, "store_filter": "tomball"}
+    assert "Current Orders" in html
+    assert 'href="/dos/corporate-order/orders/501/add"' in html
+    assert "Add Items" in html
+
+
+def test_store_can_add_items_to_existing_order(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=129, role="km", position="KM")
+    client = _client_as(flask_app, km)
+    _grant_corporate_order_scope(client, "dos")
+
+    from app.services import corporate_shop
+
+    captured = {}
+
+    monkeypatch.setattr(corporate_shop, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        corporate_shop,
+        "get_order",
+        lambda order_id, store_filter=None: {
+            "id": order_id,
+            "submitted_at": datetime(2026, 6, 28, 14, 10),
+            "status": "Submitted",
+            "store_key": store_filter,
+            "lines": [],
+            "total_quantity": 0,
+            "total_fulfilled": 0,
+        },
+    )
+
+    def _add(order_id, store_key, items):
+        captured["order_id"] = order_id
+        captured["store_key"] = store_key
+        captured["items"] = items
+        return {
+            "order_id": order_id,
+            "store_key": store_key,
+            "items": [{"quantity": 3}],
+        }
+
+    monkeypatch.setattr(corporate_shop, "add_items_to_order", _add)
+
+    resp = client.post(
+        "/dos/corporate-order/orders/501/add",
+        data={"qty_42": "3", "qty_77": "0"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/dos/corporate-order/orders")
+    assert captured == {"order_id": 501, "store_key": "tomball", "items": [(42, 3)]}
+
+
+def test_store_add_to_order_page_reuses_catalog_with_order_draft(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    km = _seed_actor(db, uid=130, role="km", position="KM")
+    client = _client_as(flask_app, km)
+    _grant_corporate_order_scope(client, "dos")
+
+    from app.services import corporate_shop
+
+    monkeypatch.setattr(corporate_shop, "is_configured", lambda: True)
+    monkeypatch.setattr(corporate_shop, "ensure_catalog_seeded", lambda: {"added": 0})
+    monkeypatch.setattr(
+        corporate_shop,
+        "get_order",
+        lambda order_id, store_filter=None: {
+            "id": order_id,
+            "submitted_at": datetime(2026, 6, 28, 14, 10),
+            "status": "Submitted",
+            "store_key": store_filter,
+            "lines": [{
+                "id": 10,
+                "name": "Original Cups",
+                "category": "Cups & Lids",
+                "quantity": 2,
+                "fulfilled_quantity": 0,
+                "remaining_quantity": 2,
+                "added_at": None,
+                "is_added": False,
+            }],
+            "total_quantity": 2,
+            "total_fulfilled": 0,
+        },
+    )
+    monkeypatch.setattr(
+        corporate_shop,
+        "list_products",
+        lambda category=None: [{
+            "id": 42,
+            "name": "Bleach (6/case)",
+            "in_stock": 15,
+            "picture": "",
+            "picture_url": "https://cenaskitchen.com/media/Bleach.webp",
+            "category": category or "BOH",
+            "sort_order": 10,
+            "date_added": None,
+        }],
+    )
+    monkeypatch.setattr(corporate_shop, "list_categories", lambda: ["BOH"])
+    monkeypatch.setattr(corporate_shop, "list_orders", lambda *args, **kwargs: [])
+
+    resp = client.get("/dos/corporate-order/orders/501/add?category=BOH")
+    html = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert "Adding to order #501" in html
+    assert 'action="/dos/corporate-order/orders/501/add"' in html
+    assert 'data-draft-key="corpOrderDraft:v2:dos:order:501"' in html
+    assert 'href="/dos/corporate-order/orders/501/add?category=BOH"' in html
+    assert "Add to Order" in html
 
 
 def test_corporate_order_public_pin_gate_opens_store_portal(dashboard_app, monkeypatch):
@@ -423,6 +582,8 @@ def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboa
                 "quantity": 12,
                 "fulfilled_quantity": 4,
                 "remaining_quantity": 8,
+                "added_at": datetime(2026, 6, 28, 14, 20),
+                "is_added": True,
             }],
             "total_quantity": 12,
             "total_fulfilled": 4,
@@ -446,6 +607,7 @@ def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboa
     assert 'name="fulfilled_10"' in html
     assert 'value="4"' in html
     assert "ordered 12" in html
+    assert "Added Sun Jun 28, 02:20 PM" in html
 
 
 def test_corporate_admin_can_adjust_inventory_by_signed_delta(dashboard_app, monkeypatch):

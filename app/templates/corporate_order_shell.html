@@ -53,7 +53,7 @@
     .corp-shell {
       width: min(1120px, calc(100% - 28px));
       margin: 0 auto;
-      padding: 12px 0 calc(72px + env(safe-area-inset-bottom));
+      padding: 12px 0 calc(96px + env(safe-area-inset-bottom));
     }
     html.is-framed .corp-shell {
       padding-bottom: calc(128px + env(safe-area-inset-bottom));
@@ -130,7 +130,7 @@
     .corp-flash.warning { border-color: rgba(240, 180, 84, 0.45); color: #ffd58a; }
     .corp-flash.error { border-color: rgba(226, 84, 63, 0.45); color: #ff9a86; }
     .corp-bottom-nav {
-      display: none;
+      display: block;
       position: fixed;
       left: 0;
       right: 0;
@@ -184,14 +184,6 @@
     }
     html.is-framed .corp-bottom-nav {
       display: none !important;
-    }
-    @media (max-width: 1024px) {
-      .corp-bottom-nav {
-        display: block;
-      }
-      .corp-shell {
-        padding-bottom: calc(96px + env(safe-area-inset-bottom));
-      }
     }
     @media (max-width: 720px) {
       .corp-topbar {

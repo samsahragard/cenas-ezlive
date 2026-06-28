@@ -644,6 +644,25 @@ def update_stock(product_id):
     return _catalog_redirect(_current_category())
 
 
+@corp_order.route("/corporate-order/admin/product/<int:product_id>/stock-adjust",
+                  methods=["POST"])
+def adjust_stock(product_id):
+    """Admin-only: add or subtract from the on-hand stock count."""
+    if not _is_admin():
+        abort(403)
+    try:
+        delta = int(request.form.get("stock_delta") or "0")
+    except ValueError:
+        flash("ADD must be a whole number, such as 5 or -2.", "error")
+        return _catalog_redirect(_current_category())
+    new_stock = corporate_shop.adjust_stock(product_id, delta)
+    if new_stock is None:
+        flash(f"Product #{product_id} not found.", "error")
+    else:
+        flash(f"Product #{product_id}: OH adjusted by {delta:+d}; now {new_stock}.", "success")
+    return _catalog_redirect(_current_category())
+
+
 @corp_order.route("/corporate-order/admin/products/order", methods=["POST"])
 def update_product_order():
     """Admin-only: save display order for one department."""

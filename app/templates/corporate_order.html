@@ -104,10 +104,10 @@
     background: rgba(0, 0, 0, 0.30);
     padding: 10px;
   }
-  .corp-card.is-dragging {
+  [data-product-card].is-dragging {
     opacity: 0.48;
   }
-  .corp-card.drag-over {
+  [data-product-card].drag-over {
     outline: 2px solid rgba(232, 122, 62, 0.72);
     outline-offset: 2px;
   }
@@ -214,6 +214,56 @@
     color: #fff;
     padding: 7px 8px;
     text-align: right;
+  }
+  .corp-inventory-table {
+    min-width: 680px;
+  }
+  .corp-inventory-table th:nth-child(2),
+  .corp-inventory-table td:nth-child(2) {
+    width: 78px;
+    text-align: right;
+  }
+  .corp-inventory-table th:nth-child(3),
+  .corp-inventory-table td:nth-child(3) {
+    width: 180px;
+  }
+  .corp-inventory-table th:nth-child(4),
+  .corp-inventory-table td:nth-child(4) {
+    width: 96px;
+  }
+  .corp-inventory-table th:nth-child(5),
+  .corp-inventory-table td:nth-child(5) {
+    width: 92px;
+  }
+  .corp-inventory-item {
+    color: #fff;
+    font-weight: 700;
+  }
+  .corp-oh-value {
+    color: #fff;
+    font-family: var(--font-mono, monospace);
+    font-size: 16px;
+    font-weight: 800;
+  }
+  .corp-oh-value.low { color: #f0c060; }
+  .corp-oh-value.out { color: #f08080; }
+  .corp-adjust-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .corp-adjust-form input {
+    width: 76px;
+    min-height: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.42);
+    color: #fff;
+    padding: 6px 8px;
+    text-align: right;
+  }
+  .corp-inventory-table .corp-reorder-tools {
+    margin: 0;
   }
   .corp-small-button,
   .corp-submit-button {
@@ -638,57 +688,84 @@
         </div>
       </section>
       {% endif %}
-      {% if not is_admin %}
-      <form method="POST" action="{{ url_for('corporate_order.submit') }}" id="corpOrderForm">
-      {% endif %}
-
-      <div class="corp-grid" id="corpProductGrid">
-        {% for p in products %}
-        <section class="corp-card" data-product-card data-product-id="{{ p.id }}"
-                 data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}"
-                 {% if is_admin and selected_category %}draggable="true"{% endif %}>
-          {% if is_admin and selected_category %}
-          <div class="corp-reorder-tools" aria-label="Move {{ p.name }}">
-            <button class="corp-move-button" type="button" data-move="up"
-                    aria-label="Move {{ p.name }} up" title="Move up">^</button>
-            <button class="corp-move-button" type="button" data-move="down"
-                    aria-label="Move {{ p.name }} down" title="Move down">v</button>
-          </div>
-          {% endif %}
-          {% if p.picture_url %}
-          <div class="corp-photo">
-            <img src="{{ p.picture_url }}" alt="{{ p.name }}" loading="lazy">
-          </div>
-          {% endif %}
-          <div class="corp-name">{{ p.name }}</div>
-          <div class="corp-stock {% if p.in_stock == 0 %}out{% elif p.in_stock <= 5 %}low{% endif %}">
-            {% if p.in_stock == 0 %}
-              Out of stock
-            {% elif p.in_stock <= 5 %}
-              Low stock ({{ p.in_stock }})
-            {% else %}
-              In stock ({{ p.in_stock }})
-            {% endif %}
-          </div>
-
-          <div class="corp-card-footer">
-            {% if is_admin %}
-              <div class="corp-product-tools">
-                <form class="corp-admin-stock" method="POST"
-                      action="{{ url_for('corporate_order.update_stock', product_id=p.id) }}">
+      {% if is_admin %}
+      <div class="corp-table-wrap">
+        <table class="corp-orders-table corp-inventory-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>OH</th>
+              <th>ADD</th>
+              <th>Remove</th>
+              {% if selected_category %}<th>Move</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody id="corpProductGrid">
+            {% for p in products %}
+            <tr data-product-card data-product-id="{{ p.id }}"
+                data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}"
+                {% if selected_category %}draggable="true"{% endif %}>
+              <td class="corp-inventory-item">{{ p.name }}</td>
+              <td>
+                <span class="corp-oh-value {% if p.in_stock == 0 %}out{% elif p.in_stock <= 5 %}low{% endif %}">
+                  {{ p.in_stock }}
+                </span>
+              </td>
+              <td>
+                <form class="corp-adjust-form" method="POST"
+                      action="{{ url_for('corporate_order.adjust_stock', product_id=p.id) }}">
                   <input type="hidden" name="category" value="{{ selected_category or '' }}">
-                  <label for="stock_{{ p.id }}">Stock</label>
-                  <input type="number" min="0" name="in_stock" id="stock_{{ p.id }}" value="{{ p.in_stock }}">
-                  <button class="corp-small-button" type="submit">Save</button>
+                  <input type="number" name="stock_delta" value="" placeholder="+/-"
+                         aria-label="Add or subtract OH for {{ p.name }}">
+                  <button class="corp-small-button" type="submit">Apply</button>
                 </form>
+              </td>
+              <td>
                 <form method="POST"
                       action="{{ url_for('corporate_order.delete_product', product_id=p.id) }}"
                       onsubmit="return confirm('Remove this item from the corporate order catalog?');">
                   <input type="hidden" name="category" value="{{ selected_category or '' }}">
                   <button class="corp-danger-button" type="submit">Remove</button>
                 </form>
-              </div>
-            {% else %}
+              </td>
+              {% if selected_category %}
+              <td>
+                <div class="corp-reorder-tools" aria-label="Move {{ p.name }}">
+                  <button class="corp-move-button" type="button" data-move="up"
+                          aria-label="Move {{ p.name }} up" title="Move up">^</button>
+                  <button class="corp-move-button" type="button" data-move="down"
+                          aria-label="Move {{ p.name }} down" title="Move down">v</button>
+                </div>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <form method="POST" action="{{ url_for('corporate_order.submit') }}" id="corpOrderForm">
+        <div class="corp-grid" id="corpProductGrid">
+          {% for p in products %}
+          <section class="corp-card" data-product-card data-product-id="{{ p.id }}"
+                   data-search="{{ (p.name ~ ' ' ~ p.category)|lower|e }}">
+            {% if p.picture_url %}
+            <div class="corp-photo">
+              <img src="{{ p.picture_url }}" alt="{{ p.name }}" loading="lazy">
+            </div>
+            {% endif %}
+            <div class="corp-name">{{ p.name }}</div>
+            <div class="corp-stock {% if p.in_stock == 0 %}out{% elif p.in_stock <= 5 %}low{% endif %}">
+              {% if p.in_stock == 0 %}
+                Out of stock
+              {% elif p.in_stock <= 5 %}
+                Low stock ({{ p.in_stock }})
+              {% else %}
+                In stock ({{ p.in_stock }})
+              {% endif %}
+            </div>
+
+            <div class="corp-card-footer">
               {% if p.in_stock == 0 %}
                 <button class="corp-small-button secondary" type="button" disabled>Unavailable</button>
               {% else %}
@@ -698,13 +775,10 @@
                          min="0" max="{{ p.in_stock }}" value="0" inputmode="numeric">
                 </div>
               {% endif %}
-            {% endif %}
-          </div>
-        </section>
-        {% endfor %}
-      </div>
-
-      {% if not is_admin %}
+            </div>
+          </section>
+          {% endfor %}
+        </div>
         <div class="corp-submit-bar">
           <span class="corp-submit-count" id="corpSubmitCount">No items selected</span>
           <button class="corp-submit-button" id="corpSubmitButton" type="submit" disabled>Submit Order</button>

@@ -579,6 +579,19 @@ def update_stock(product_id: int, new_in_stock: int) -> bool:
         return True
 
 
+def adjust_stock(product_id: int, delta: int) -> int | None:
+    """Corporate admin: add a signed delta to Product.in_stock."""
+    _ensure_engine()
+    with session() as s:
+        p = s.query(Product).filter_by(id=product_id).one_or_none()
+        if not p:
+            return None
+        p.in_stock = max(0, (p.in_stock or 0) + int(delta or 0))
+        new_stock = p.in_stock
+        s.commit()
+        return new_stock
+
+
 def update_order_status(order_id: int, new_status: str) -> bool:
     _ensure_engine()
     with session() as s:

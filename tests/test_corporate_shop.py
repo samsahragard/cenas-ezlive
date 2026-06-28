@@ -258,3 +258,27 @@ def test_update_product_order_persists_department_order(monkeypatch):
     assert count == 3
     assert [row["name"] for row in foh_rows] == ["C", "A", "B"]
     assert [row["name"] for row in boh_rows] == ["Salt"]
+
+
+def test_adjust_stock_adds_delta_and_clamps_at_zero(monkeypatch):
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
+    corporate_shop.CorporateBase.metadata.create_all(engine)
+    monkeypatch.setattr(corporate_shop, "_engine", engine)
+    monkeypatch.setattr(corporate_shop, "_Session", Session)
+    monkeypatch.setattr(corporate_shop, "_schema_checked", True)
+
+    with Session() as s:
+        s.add(corporate_shop.Product(
+            id=1,
+            product_name="Bleach",
+            in_stock=5,
+            product_picture="",
+            category="BOH",
+            sort_order=10,
+        ))
+        s.commit()
+
+    assert corporate_shop.adjust_stock(1, 3) == 8
+    assert corporate_shop.adjust_stock(1, -99) == 0
+    assert corporate_shop.adjust_stock(999, 1) is None

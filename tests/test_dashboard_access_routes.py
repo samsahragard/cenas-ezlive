@@ -431,11 +431,47 @@ def test_corporate_admin_page_renders_catalog_management_and_fulfillment(dashboa
     html = resp.get_data(as_text=True)
     assert resp.status_code == 200
     assert "Add Catalog Item" in html
+    assert "<th>Item</th>" in html
+    assert "<th>OH</th>" in html
+    assert "<th>ADD</th>" in html
+    assert 'name="stock_delta"' in html
+    assert 'action="/corporate/corporate-order/admin/product/42/stock-adjust"' in html
     assert 'action="/corporate/corporate-order/admin/product/add"' in html
     assert 'action="/corporate/corporate-order/admin/product/42/delete"' in html
+    assert 'name="qty_42"' not in html
     assert 'name="fulfilled_10"' in html
     assert 'value="4"' in html
     assert "ordered 12" in html
+
+
+def test_corporate_admin_can_adjust_inventory_by_signed_delta(dashboard_app, monkeypatch):
+    flask_app, db = dashboard_app
+    corp = _seed_actor(db, uid=126, role="corporate", position="GM")
+    client = _client_as(flask_app, corp)
+    _grant_corporate_order_scope(client, "corporate")
+
+    from app.services import corporate_shop
+
+    adjusted = {}
+
+    def _adjust(product_id, delta):
+        adjusted["product_id"] = product_id
+        adjusted["delta"] = delta
+        return 12
+
+    monkeypatch.setattr(corporate_shop, "adjust_stock", _adjust)
+
+    resp = client.post(
+        "/corporate/corporate-order/admin/product/42/stock-adjust",
+        data={"category": "BOH", "stock_delta": "-3"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith(
+        "/corporate/corporate-order?category=BOH"
+    )
+    assert adjusted == {"product_id": 42, "delta": -3}
 
 
 def test_corporate_admin_can_save_department_product_order(dashboard_app, monkeypatch):

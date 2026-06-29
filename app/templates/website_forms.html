@@ -109,6 +109,25 @@
     display: inline-flex;
     align-items: center;
   }
+  .wf-filters select,
+  .wf-share select {
+    color-scheme: dark;
+  }
+  .wf-filters select option,
+  .wf-share select option {
+    background: var(--wf-card);
+    color: var(--wf-cream);
+  }
+  .wf-filters select option:checked,
+  .wf-share select option:checked {
+    background: var(--wf-gold);
+    color: #3a1409;
+  }
+  .wf-filters select option:hover,
+  .wf-share select option:hover {
+    background: var(--wf-card-2);
+    color: var(--wf-cream);
+  }
   .wf-filters button {
     background: var(--wf-gold);
     color: #3a1409;

@@ -295,3 +295,13 @@ def test_manager_cannot_share_or_change_submission_status(monkeypatch, tmp_path)
 
     assert share_response.status_code == 403
     assert status_response.status_code == 403
+
+
+def test_sub_form_select_options_use_readable_dark_colors():
+    template = Path(__file__).resolve().parents[1] / "app" / "templates" / "website_forms.html"
+    source = template.read_text(encoding="utf-8")
+
+    assert ".wf-share select option" in source
+    assert "background: var(--wf-card);" in source
+    assert "color: var(--wf-cream);" in source
+    assert ".wf-share select option:checked" in source

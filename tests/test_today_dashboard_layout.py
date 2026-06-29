@@ -102,8 +102,14 @@ def test_today_has_single_sub_form_top_tab():
         routes.index("_TODAY_DASH_TABS = ["):
         routes.index("def _today_dash_full_url")
     ]
+    today_route = routes[
+        routes.index("def today_dashboard"):
+        routes.index("valid = {key for key, _ in dash_tabs}")
+    ]
 
     assert '("sub-form",      "SUB FORM")' in tabs_block
+    assert "_PARTNER_ONLY_KEYS" not in today_route
+    assert 'permission_level", None) != "partner"' not in today_route
     for legacy_key in [
         "form-careers",
         "form-catering",

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 from flask import Flask
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base, WebsiteFormSubmission
+from app.models import Base, User, WebsiteFormSubmission
 from app.web import website_forms as wf
 
 
@@ -17,10 +18,79 @@ def _test_app(monkeypatch, tmp_path):
     monkeypatch.setattr(wf, "SessionLocal", SessionLocal)
     monkeypatch.setenv("FORM_UPLOAD_DIR", str(tmp_path / "uploads"))
 
-    app = Flask(__name__)
+    template_dir = Path(__file__).resolve().parents[1] / "app" / "templates"
+    static_dir = Path(__file__).resolve().parents[1] / "app" / "static"
+    app = Flask(
+        __name__,
+        template_folder=str(template_dir),
+        static_folder=str(static_dir),
+    )
     app.secret_key = "test"
+    app.jinja_env.globals["current_user_stores"] = lambda: [
+        ("dos", "Tomball"),
+        ("uno", "Copperfield"),
+    ]
+    app.jinja_env.globals["has_dashboard_access"] = lambda *_args, **_kwargs: True
+    app.jinja_env.globals["has_permission"] = lambda *_args, **_kwargs: True
+    app.jinja_env.globals["subnav_for"] = lambda *_args, **_kwargs: []
+    app.jinja_env.globals["anomaly_signals_for"] = lambda *_args, **_kwargs: []
     app.register_blueprint(wf.website_forms_bp)
     return app, SessionLocal
+
+
+def _make_user(
+    SessionLocal,
+    *,
+    full_name="Test Manager",
+    email=None,
+    role="gm",
+    scope="tomball",
+):
+    db = SessionLocal()
+    try:
+        row = User(
+            full_name=full_name,
+            email=email,
+            passcode_hash="x",
+            permission_level=role,
+            store_scope=scope,
+            first_login_done=True,
+            active=True,
+            session_version=1,
+        )
+        db.add(row)
+        db.commit()
+        return row.id
+    finally:
+        db.close()
+
+
+def _login(client, user_id):
+    with client.session_transaction() as sess:
+        sess["user_id"] = user_id
+        sess["user_session_version"] = 1
+
+
+def _make_submission(SessionLocal, **overrides):
+    data = {
+        "form_type": "career",
+        "status": "new",
+        "location": "Tomball",
+        "position": "Server",
+        "applicant_name": "Test Applicant",
+        "fields": {},
+        "attachments": [],
+        "shared_locations": [],
+    }
+    data.update(overrides)
+    db = SessionLocal()
+    try:
+        row = WebsiteFormSubmission(**data)
+        db.add(row)
+        db.commit()
+        return row.id
+    finally:
+        db.close()
 
 
 def test_public_career_submission_persists_fields_and_upload(monkeypatch, tmp_path):
@@ -99,3 +169,129 @@ def test_public_submit_rejects_scheme_relative_next(monkeypatch, tmp_path):
 
     assert response.status_code == 303
     assert response.headers["Location"].startswith("/public/forms/thanks")
+
+
+def test_full_access_user_sees_unshared_submissions_and_share_controls(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    sam_id = _make_user(
+        SessionLocal,
+        full_name="Sam Sahragard",
+        email="sam@cenaskitchen.com",
+        role="partner",
+        scope=None,
+    )
+    _make_submission(
+        SessionLocal,
+        location="Copperfield",
+        position="Server",
+        applicant_name="Codex Career Test",
+        fields={"additional_comments": "private until shared"},
+    )
+
+    client = app.test_client()
+    _login(client, sam_id)
+    response = client.get("/partner/website-forms?type=career")
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Codex Career Test" in body
+    assert "Share with" in body
+    assert "Not shared" in body
+    assert "Live website inbox" in body
+
+
+def test_manager_only_sees_submissions_shared_to_their_store(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    sam_id = _make_user(
+        SessionLocal,
+        full_name="Sam Sahragard",
+        email="sam@cenaskitchen.com",
+        role="partner",
+        scope=None,
+    )
+    tomball_manager_id = _make_user(
+        SessionLocal,
+        full_name="Tomball Manager",
+        role="gm",
+        scope="tomball",
+    )
+    copperfield_manager_id = _make_user(
+        SessionLocal,
+        full_name="Copperfield Manager",
+        role="gm",
+        scope="copperfield",
+    )
+    submission_id = _make_submission(
+        SessionLocal,
+        form_type="career",
+        location="Copperfield",
+        position="Server",
+        applicant_name="Cross Store Applicant",
+    )
+    client = app.test_client()
+
+    _login(client, tomball_manager_id)
+    response = client.get("/partner/website-forms?type=career")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Cross Store Applicant" not in body
+    assert "Share with" not in body
+
+    _login(client, sam_id)
+    response = client.post(
+        f"/partner/website-forms/{submission_id}/share",
+        data={"share_target": "tomball"},
+    )
+    assert response.status_code == 303
+    db = SessionLocal()
+    try:
+        row = db.get(WebsiteFormSubmission, submission_id)
+        assert row.shared_locations == ["tomball"]
+        assert row.shared_by_user_id == sam_id
+        assert row.shared_at is not None
+    finally:
+        db.close()
+
+    _login(client, tomball_manager_id)
+    response = client.get("/partner/website-forms?type=career&location=Tomball")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Cross Store Applicant" in body
+    assert "Shared submissions for your location access only" in body
+    assert "Share with" not in body
+    assert "Mark reviewed" not in body
+
+    _login(client, copperfield_manager_id)
+    response = client.get("/partner/website-forms?type=career")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Cross Store Applicant" not in body
+
+
+def test_manager_cannot_share_or_change_submission_status(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    manager_id = _make_user(
+        SessionLocal,
+        full_name="Copperfield Manager",
+        role="gm",
+        scope="copperfield",
+    )
+    submission_id = _make_submission(
+        SessionLocal,
+        location="Copperfield",
+        shared_locations=["copperfield"],
+    )
+    client = app.test_client()
+    _login(client, manager_id)
+
+    share_response = client.post(
+        f"/partner/website-forms/{submission_id}/share",
+        data={"share_target": "both"},
+    )
+    status_response = client.post(
+        f"/partner/website-forms/{submission_id}/status",
+        data={"status": "reviewed"},
+    )
+
+    assert share_response.status_code == 403
+    assert status_response.status_code == 403

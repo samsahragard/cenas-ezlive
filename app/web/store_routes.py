@@ -7671,9 +7671,6 @@ def today_dashboard():
     # Today section's sidebar entries use.
     dash_tabs = []
     _SAM_ONLY_KEYS = {"agents", "pass", "docs", "automation"}
-    _PARTNER_ONLY_KEYS = {
-        "sub-form",
-    }
     _FORM_TAB_ALIASES = {
         "form-careers": "sub-form",
         "form-catering": "sub-form",
@@ -7698,10 +7695,6 @@ def today_dashboard():
                     continue
             except Exception:
                 pass  # fail open — the destination page enforces its own gate
-        elif key in _PARTNER_ONLY_KEYS:
-            user = getattr(g, "current_user", None)
-            if getattr(user, "permission_level", None) != "partner":
-                continue
         dash_tabs.append((key, caption))
 
     valid = {key for key, _ in dash_tabs}

@@ -6,6 +6,7 @@ from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from flask import (
     Blueprint,
@@ -17,14 +18,14 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
 from werkzeug.datastructures import MultiDict
 from werkzeug.utils import secure_filename
 
 from app.db import SessionLocal
-from app.models import WebsiteFormSubmission
-from app.web.developer_chat import _enforce_partner
+from app.models import User, WebsiteFormSubmission
 
 
 website_forms_bp = Blueprint("website_forms", __name__)
@@ -52,6 +53,27 @@ FORM_ALIASES = {
     "contact": "contact",
     "feedback": "contact",
 }
+
+FULL_ACCESS_EMAILS = {
+    "sam@cenaskitchen.com",
+    "samsahragard@gmail.com",
+    "masood@cenaskitchen.com",
+}
+
+FULL_ACCESS_NAMES = {
+    "sam",
+    "sam sahragard",
+    "masood",
+    "masood sahragard",
+    "angelica",
+    "angelica barton",
+    "angelica truss",
+}
+
+SHARE_LABELS = OrderedDict([
+    ("tomball", "Tomball"),
+    ("copperfield", "Copperfield"),
+])
 
 
 def _canonical_form_type(raw: str | None) -> str | None:
@@ -94,6 +116,84 @@ def _normalize_location(raw: str | None) -> str | None:
     if key in {"both", "either", "any"}:
         return "Either location"
     return value[:80]
+
+
+def _share_slug(raw: str | None) -> str | None:
+    loc = _normalize_location(raw)
+    if loc == "Tomball":
+        return "tomball"
+    if loc == "Copperfield":
+        return "copperfield"
+    return None
+
+
+def _share_labels(slugs: list[str] | None) -> list[str]:
+    return [SHARE_LABELS[s] for s in (slugs or []) if s in SHARE_LABELS]
+
+
+def _identity_key(value: str | None) -> str:
+    return " ".join((value or "").strip().lower().split())
+
+
+def _current_user() -> User | None:
+    user = getattr(g, "current_user", None)
+    if user is not None:
+        return user
+    uid = session.get("user_id")
+    if uid is None:
+        return None
+    db = SessionLocal()
+    try:
+        user = db.get(User, int(uid))
+        g.current_user = user if user and user.active else None
+        return g.current_user
+    except Exception:
+        g.current_user = None
+        return None
+    finally:
+        db.close()
+
+
+def _has_full_form_access(user: User | None) -> bool:
+    if user is None:
+        return False
+    email = _identity_key(getattr(user, "email", None))
+    name = _identity_key(getattr(user, "full_name", None))
+    if email in FULL_ACCESS_EMAILS or name in FULL_ACCESS_NAMES:
+        return True
+    return False
+
+
+def _user_share_locations(user: User | None) -> list[str]:
+    if user is None:
+        return []
+    if _has_full_form_access(user):
+        return list(SHARE_LABELS.keys())
+    scopes = {
+        (scope or "").strip().lower()
+        for scope in (getattr(user, "store_scope", None) or "").split(",")
+    }
+    out = [slug for slug in SHARE_LABELS if slug in scopes]
+    if not out and getattr(user, "permission_level", None) == "corporate":
+        out = list(SHARE_LABELS.keys())
+    return out
+
+
+def _can_user_see_row(row: WebsiteFormSubmission, user_locations: list[str]) -> bool:
+    shared = set(row.shared_locations or [])
+    return bool(shared.intersection(user_locations))
+
+
+def _require_forms_user() -> tuple[User, bool, list[str]] | Response:
+    user = _current_user()
+    if user is None:
+        target = request.full_path if request.query_string else request.path
+        return redirect("/keypad-login?next=" + quote(target, safe="/?=&"))
+    full_access = _has_full_form_access(user)
+    locations = _user_share_locations(user)
+    if not full_access and not locations:
+        abort(403)
+    return user, full_access, locations
 
 
 def _summary(form_type: str, fields: dict[str, Any]) -> dict[str, str | None]:
@@ -244,13 +344,15 @@ def _group_key(row: WebsiteFormSubmission, form_type: str) -> str:
 
 @website_forms_bp.route("/partner/website-forms", methods=["GET"])
 def partner_forms():
-    gate = _enforce_partner()
-    if gate is not None:
-        return gate
+    access = _require_forms_user()
+    if isinstance(access, Response):
+        return access
+    user, full_access, user_locations = access
     _set_partner_context()
 
     form_type = _canonical_form_type(request.args.get("type")) or "career"
     location_filter = _normalize_location(request.args.get("location"))
+    location_filter_slug = _share_slug(location_filter)
     status_filter = (request.args.get("status") or "").strip().lower()
 
     db = SessionLocal()
@@ -258,18 +360,36 @@ def partner_forms():
         q = db.query(WebsiteFormSubmission).filter(
             WebsiteFormSubmission.form_type == form_type
         )
-        if location_filter:
+        if location_filter and full_access:
             q = q.filter(WebsiteFormSubmission.location == location_filter)
         if status_filter:
             q = q.filter(WebsiteFormSubmission.status == status_filter)
-        rows = q.order_by(WebsiteFormSubmission.created_at.desc()).limit(250).all()
+        raw_rows = q.order_by(WebsiteFormSubmission.created_at.desc()).limit(250).all()
+        if full_access:
+            rows = raw_rows
+        else:
+            rows = [
+                row for row in raw_rows
+                if _can_user_see_row(row, user_locations)
+                and (
+                    not location_filter_slug
+                    or location_filter_slug in (row.shared_locations or [])
+                    or _share_slug(row.location) == location_filter_slug
+                )
+            ]
 
-        counts = {
-            key: db.query(WebsiteFormSubmission)
-            .filter(WebsiteFormSubmission.form_type == key)
-            .count()
-            for key in FORM_LABELS
-        }
+        counts = {}
+        for key in FORM_LABELS:
+            count_rows = (
+                db.query(WebsiteFormSubmission)
+                .filter(WebsiteFormSubmission.form_type == key)
+                .all()
+            )
+            counts[key] = (
+                len(count_rows)
+                if full_access
+                else sum(1 for row in count_rows if _can_user_see_row(row, user_locations))
+            )
     finally:
         db.close()
 
@@ -289,6 +409,10 @@ def partner_forms():
         selected_location=location_filter or "",
         selected_status=status_filter,
         store_label=g.store_label,
+        full_access=full_access,
+        user_locations=user_locations,
+        share_labels=SHARE_LABELS,
+        share_labels_for=_share_labels,
     )
 
 
@@ -297,15 +421,18 @@ def partner_forms():
     methods=["GET"],
 )
 def partner_form_attachment(submission_id: int, attachment_index: int):
-    gate = _enforce_partner()
-    if gate is not None:
-        return gate
+    access = _require_forms_user()
+    if isinstance(access, Response):
+        return access
+    _user, full_access, user_locations = access
 
     db = SessionLocal()
     try:
         row = db.get(WebsiteFormSubmission, submission_id)
         if row is None:
             abort(404)
+        if not full_access and not _can_user_see_row(row, user_locations):
+            abort(403)
         attachments = row.attachments or []
         if attachment_index < 0 or attachment_index >= len(attachments):
             abort(404)
@@ -326,9 +453,12 @@ def partner_form_attachment(submission_id: int, attachment_index: int):
 
 @website_forms_bp.route("/partner/website-forms/<int:submission_id>/status", methods=["POST"])
 def partner_form_status(submission_id: int):
-    gate = _enforce_partner()
-    if gate is not None:
-        return gate
+    access = _require_forms_user()
+    if isinstance(access, Response):
+        return access
+    user, full_access, _user_locations = access
+    if not full_access:
+        abort(403)
     status = (request.form.get("status") or "").strip().lower()
     if status not in {"new", "reviewed", "archived"}:
         abort(400)
@@ -339,8 +469,42 @@ def partner_form_status(submission_id: int):
             abort(404)
         row.status = status
         row.reviewed_at = datetime.utcnow() if status == "reviewed" else row.reviewed_at
-        user = getattr(g, "current_user", None)
         row.reviewed_by_user_id = getattr(user, "id", None) if status == "reviewed" else row.reviewed_by_user_id
+        db.commit()
+        form_type = row.form_type
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    return redirect(url_for("website_forms.partner_forms", type=form_type), code=303)
+
+
+@website_forms_bp.route("/partner/website-forms/<int:submission_id>/share", methods=["POST"])
+def partner_form_share(submission_id: int):
+    access = _require_forms_user()
+    if isinstance(access, Response):
+        return access
+    user, full_access, _user_locations = access
+    if not full_access:
+        abort(403)
+
+    target = (request.form.get("share_target") or "").strip().lower()
+    if target == "both":
+        shared = list(SHARE_LABELS.keys())
+    elif target in SHARE_LABELS:
+        shared = [target]
+    else:
+        abort(400)
+
+    db = SessionLocal()
+    try:
+        row = db.get(WebsiteFormSubmission, submission_id)
+        if row is None:
+            abort(404)
+        row.shared_locations = shared
+        row.shared_by_user_id = getattr(user, "id", None)
+        row.shared_at = datetime.utcnow()
         db.commit()
         form_type = row.form_type
     except Exception:

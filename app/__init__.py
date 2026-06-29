@@ -398,6 +398,39 @@ def create_app():
         logging.getLogger(__name__).exception(
             "manager_attendance_event report column backfill failed (non-fatal)")
 
+    # Website form sharing (2026-06-29): submissions are live-owner/private
+    # until Sam/Masood/Angelica shares them to one or both store scopes.
+    # website_form_submissions already exists in production, so create_all
+    # cannot add these columns.
+    try:
+        from sqlalchemy import inspect as _sa_insp_wfs, text as _sa_text_wfs
+        from app.db import engine as _eng_wfs
+        if _eng_wfs is not None:
+            _insp_wfs = _sa_insp_wfs(_eng_wfs)
+            if "website_form_submissions" in _insp_wfs.get_table_names():
+                _wfs_cols = {
+                    c["name"] for c in _insp_wfs.get_columns("website_form_submissions")
+                }
+                _wfs_additions = [
+                    ("shared_locations", "JSON NOT NULL DEFAULT '[]'"),
+                    ("shared_by_user_id", "INTEGER"),
+                    ("shared_at", "TIMESTAMP"),
+                ]
+                _wfs_added = []
+                with _eng_wfs.begin() as conn:
+                    for _cn, _cdef in _wfs_additions:
+                        if _cn not in _wfs_cols:
+                            conn.execute(_sa_text_wfs(
+                                f"ALTER TABLE website_form_submissions ADD COLUMN {_cn} {_cdef}"
+                            ))
+                            _wfs_added.append(_cn)
+                if _wfs_added:
+                    logging.getLogger(__name__).info(
+                        "website_form_submissions: backfilled columns %s", _wfs_added)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "website_form_submissions sharing column backfill failed (non-fatal)")
+
     # docck v1 - multi-agent reliability monitor seed (Sam #1191, samai #1208)
     try:
         from app.services.docck_seed import seed_docck_agents

@@ -115,6 +115,13 @@
     border-color: var(--wf-gold);
     font-weight: 900;
   }
+  .wf-access-note {
+    padding: 11px 18px;
+    color: var(--wf-muted);
+    font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: rgba(255, 217, 112, .06);
+  }
   .wf-body { padding: 18px; }
   .wf-empty {
     border: 1px dashed var(--wf-line);
@@ -244,6 +251,31 @@
     flex-wrap: wrap;
     margin-top: 12px;
   }
+  .wf-share {
+    border-top: 1px solid rgba(255,255,255,.08);
+    padding-top: 12px;
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .wf-share label {
+    color: var(--wf-faint);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .wf-share select {
+    height: 34px;
+    min-width: 150px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 217, 112, .24);
+    background: rgba(0,0,0,.28);
+    color: var(--wf-cream);
+    padding: 0 9px;
+    font: inherit;
+    font-size: 12px;
+  }
   .wf-actions button {
     border: 1px solid rgba(255,255,255,.12);
     background: rgba(255,255,255,.06);
@@ -252,6 +284,17 @@
     padding: 7px 9px;
     font: inherit;
     font-size: 12px;
+    cursor: pointer;
+  }
+  .wf-share button {
+    border: 1px solid var(--wf-gold);
+    background: var(--wf-gold);
+    color: #3a1409;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 900;
     cursor: pointer;
   }
   @media (max-width: 680px) {
@@ -298,6 +341,14 @@
       <a href="{{ url_for('website_forms.partner_forms', type=active_type) }}">Clear</a>
     </form>
 
+    <div class="wf-access-note">
+      {% if full_access %}
+        Live website inbox. Managers only see a submission after you share it to Tomball, Copperfield, or both.
+      {% else %}
+        Shared submissions for your location access only.
+      {% endif %}
+    </div>
+
     <div class="wf-body">
       {% if not rows %}
         <div class="wf-empty">No {{ active_label|lower }} submissions match this view yet.</div>
@@ -328,6 +379,7 @@
               {% if row.position %}<div class="wf-line"><b>Position</b><span>{{ row.position }}</span></div>{% endif %}
               {% if row.subject %}<div class="wf-line"><b>Subject</b><span>{{ row.subject }}</span></div>{% endif %}
               {% if row.organization %}<div class="wf-line"><b>Org</b><span>{{ row.organization }}</span></div>{% endif %}
+              <div class="wf-line"><b>Shared</b><span>{{ share_labels_for(row.shared_locations)|join(", ") or "Not shared" }}</span></div>
               {% if row.email %}<div class="wf-line"><b>Email</b><span><a href="mailto:{{ row.email }}" style="color:var(--wf-gold)">{{ row.email }}</a></span></div>{% endif %}
               {% if row.phone %}<div class="wf-line"><b>Phone</b><span>{{ row.phone }}</span></div>{% endif %}
               {% if row.fields.get("message") %}<div class="wf-line"><b>Message</b><span>{{ row.fields.get("message") }}</span></div>{% endif %}
@@ -364,6 +416,19 @@
               </table>
             </details>
 
+            {% if full_access %}
+            <form class="wf-share" method="post" action="{{ url_for('website_forms.partner_form_share', submission_id=row.id) }}">
+              <label for="share-{{ row.id }}">Share with</label>
+              <select id="share-{{ row.id }}" name="share_target" aria-label="Share submission with location">
+                <option value="tomball" {% if row.shared_locations == ["tomball"] %}selected{% endif %}>Tomball</option>
+                <option value="copperfield" {% if row.shared_locations == ["copperfield"] %}selected{% endif %}>Copperfield</option>
+                <option value="both" {% if row.shared_locations|length == 2 %}selected{% endif %}>Both</option>
+              </select>
+              <button type="submit">Share</button>
+            </form>
+            {% endif %}
+
+            {% if full_access %}
             <form class="wf-actions" method="post" action="{{ url_for('website_forms.partner_form_status', submission_id=row.id) }}">
               {% if row.status != "reviewed" %}
               <button type="submit" name="status" value="reviewed">Mark reviewed</button>
@@ -375,6 +440,7 @@
               <button type="submit" name="status" value="new">Back to new</button>
               {% endif %}
             </form>
+            {% endif %}
           </article>
           {% endfor %}
         </div>

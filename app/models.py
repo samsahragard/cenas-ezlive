@@ -3163,6 +3163,13 @@ class WebsiteFormSubmission(Base):
 
     fields: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     attachments: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    # Locations explicitly shared by a full-access reviewer. Empty means
+    # managers cannot see the submission yet.
+    shared_locations: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    shared_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    shared_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
     referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

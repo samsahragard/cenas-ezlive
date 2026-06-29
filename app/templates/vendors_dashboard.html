@@ -356,6 +356,9 @@
       z-index: 98;
       min-height: 64px;
       align-items: stretch;
+      justify-content: space-around;
+      gap: 0;
+      overflow: hidden;
       padding: 6px 8px 4px;
       background: linear-gradient(180deg, #940812 0%, #620309 100%);
       border-top: 1px solid rgba(255, 217, 112, 0.24);
@@ -366,22 +369,31 @@
     }
     .vendash .vend-tab {
       color: #d4af37;
+      flex: 1 1 0;
       flex-direction: column-reverse;
       justify-content: center;
-      min-width: 74px;
+      min-width: 0;
+      max-width: none;
       min-height: 54px;
       line-height: 1;
+      overflow: hidden;
+      text-align: center;
       text-transform: uppercase;
       text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);
     }
-    .vendash .vend-tab { padding: 7px 9px 5px; font-size: 9px; gap: 3px; }
+    .vendash .vend-tab { padding: 7px 4px 5px; font-size: 9px; gap: 3px; }
     .vendash .vend-tab-label {
       display: block;
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-size: 0;
       font-weight: 700;
+    }
+    .vendash .vend-tab-label::before {
+      content: attr(data-mobile-label);
+      font-size: 9px;
     }
     .vendash .vend-tab-icon { width: 15px; height: 15px; }
     .vendash .vend-tab-icon {
@@ -408,7 +420,8 @@
   @media (max-width: 380px) {
     .vendash .vend-title { font-size: 26px; }
     .vendash .vend-heading { padding-right: 0; }
-    .vendash .vend-tab { padding: 7px 7px 5px; font-size: 9px; min-width: 66px; }
+    .vendash .vend-tab { padding: 7px 3px 5px; font-size: 8px; min-width: 0; }
+    .vendash .vend-tab-label::before { font-size: 8px; }
   }
 </style>
 
@@ -423,6 +436,14 @@
   'restaurant-depot': '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
   'specs':            '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9 1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>',
   'reports':          '<path d="M4 19h16v2H2V3h2v16zm3-2H5v-7h2v7zm5 0H9V5h3v12zm5 0h-3V8h3v9zm4 0h-2v-5h2v5z"/>'
+} %}
+{% set _vend_mobile_labels = {
+  'produce': 'Produce',
+  'webstaurant': 'Web',
+  'performance-food': 'PFG',
+  'restaurant-depot': 'Depot',
+  'specs': 'Specs',
+  'reports': 'Reports'
 } %}
 
 <div class="vendash" id="vendash">
@@ -455,7 +476,7 @@
          data-tab="{{ t.key }}"
          aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
         <svg class="vend-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _vend_icons.get(t.key, _vend_icons['produce'])|safe }}</svg>
-        <span class="vend-tab-label">{{ t.label }}</span>
+        <span class="vend-tab-label" data-mobile-label="{{ _vend_mobile_labels.get(t.key, t.label) }}">{{ t.label }}</span>
       </a>
       {% endfor %}
     </div>

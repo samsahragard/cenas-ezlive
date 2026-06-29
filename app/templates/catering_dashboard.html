@@ -383,6 +383,9 @@
       z-index: 98;
       min-height: 64px;
       align-items: stretch;
+      justify-content: space-around;
+      gap: 0;
+      overflow: hidden;
       padding: 6px 8px 4px;
       background: linear-gradient(180deg, #940812 0%, #620309 100%);
       border-top: 1px solid rgba(255, 217, 112, 0.24);
@@ -393,22 +396,31 @@
     }
     .catdash .catd-tab {
       color: #d4af37;
+      flex: 1 1 0;
       flex-direction: column-reverse;
       justify-content: center;
-      min-width: 74px;
+      min-width: 0;
+      max-width: none;
       min-height: 54px;
       line-height: 1;
+      overflow: hidden;
+      text-align: center;
       text-transform: uppercase;
       text-shadow: 0 0 6px rgba(212, 175, 55, 0.45);
     }
-    .catdash .catd-tab { padding: 7px 9px 5px; font-size: 9px; gap: 3px; }
+    .catdash .catd-tab { padding: 7px 4px 5px; font-size: 9px; gap: 3px; }
     .catdash .catd-tab-label {
       display: block;
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-size: 0;
       font-weight: 700;
+    }
+    .catdash .catd-tab-label::before {
+      content: attr(data-mobile-label);
+      font-size: 9px;
     }
     .catdash .catd-tab-icon { width: 15px; height: 15px; }
     .catdash .catd-tab-icon {
@@ -435,7 +447,8 @@
   @media (max-width: 380px) {
     .catdash .catd-title { font-size: 26px; }
     .catdash .catd-heading { padding-right: 0; }
-    .catdash .catd-tab { padding: 7px 7px 5px; font-size: 9px; min-width: 66px; }
+    .catdash .catd-tab { padding: 7px 3px 5px; font-size: 8px; min-width: 0; }
+    .catdash .catd-tab-label::before { font-size: 8px; }
   }
 </style>
 
@@ -450,6 +463,15 @@
   'in-house':   '<path d="M12 3 4 9v12h5v-7h6v7h5V9z"/>',
   'live-map':   '<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>',
   'developer':  '<path d="M8.7 16.3 4.4 12l4.3-4.3L7.3 6.3 1.6 12l5.7 5.7 1.4-1.4zm6.6 0 4.3-4.3-4.3-4.3 1.4-1.4 5.7 5.7-5.7 5.7-1.4-1.4zM13.1 4l-4 16h1.8l4-16h-1.8z"/>'
+} %}
+{% set _catd_mobile_labels = {
+  'ez-orders': 'Orders',
+  'ez-market': 'Market',
+  'ez-manage': 'Manage',
+  'ez-drivers': 'Drivers',
+  'in-house': 'In-House',
+  'live-map': 'Map',
+  'developer': 'Dev'
 } %}
 
 <div class="catdash" id="catdash">
@@ -482,7 +504,7 @@
          data-tab="{{ t.key }}"
          aria-selected="{{ 'true' if t.key == active_tab else 'false' }}">
         <svg class="catd-tab-icon" viewBox="0 0 24 24" aria-hidden="true">{{ _catd_icons.get(t.key, _catd_icons['ez-orders'])|safe }}</svg>
-        <span class="catd-tab-label">{{ t.label }}</span>
+        <span class="catd-tab-label" data-mobile-label="{{ _catd_mobile_labels.get(t.key, t.label) }}">{{ t.label }}</span>
         {% if t.key == 'ez-manage' %}
         <span class="catd-pending-star{% if not ez_manage_pending_count %} is-hidden{% endif %}"
               data-ezm-pending-star

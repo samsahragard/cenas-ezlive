@@ -72,6 +72,10 @@ def test_mobile_dashboard_top_navs_use_red_bar_with_gold_tabs():
         assert "top: var(--ck-dashboard-top-nav-offset);" in template
         assert "padding-top: calc(64px + var(--ck-dashboard-top-nav-offset));" in template
         assert "margin-top: calc(0px - var(--ck-main-pad-top, 28px));" in template
+        assert "justify-content: space-around;" in template
+        assert "flex: 1 1 0;" in template
+        assert "min-width: 0;" in template
+        assert "overflow: hidden;" in template
         assert "flex-direction: column-reverse;" in template
         assert f"{tab_selector} {{" in template
         assert "color: #d4af37;" in template
@@ -87,6 +91,55 @@ def test_today_mobile_nav_uses_short_labels():
     assert "'task-reports': 'Tasks'" in template
     assert 'data-mobile-label="{{ _tdyd_mobile_labels.get(t.key, t.label) }}"' in template
     assert "content: attr(data-mobile-label);" in template
+
+
+def test_other_mobile_top_navs_use_short_labels():
+    dashboards = [
+        (
+            "manager_dashboard.html",
+            "_mgd_mobile_labels",
+            "'onboarding': 'Onboard'",
+            'data-mobile-label="{{ _mgd_mobile_labels.get(grp.key, grp.label) }}"',
+        ),
+        (
+            "catering_dashboard.html",
+            "_catd_mobile_labels",
+            "'ez-orders': 'Orders'",
+            'data-mobile-label="{{ _catd_mobile_labels.get(t.key, t.label) }}"',
+        ),
+        (
+            "operations_dashboard.html",
+            "_opsd_mobile_labels",
+            "'corp-order': 'Order'",
+            'data-mobile-label="{{ _opsd_mobile_labels.get(grp.key, grp.label) }}"',
+        ),
+        (
+            "kitchen_dashboard.html",
+            "_kitd_mobile_labels",
+            "'fresh-food': 'Fresh'",
+            'data-mobile-label="{{ _kitd_mobile_labels.get(t.key, t.label) }}"',
+        ),
+        (
+            "vendors_dashboard.html",
+            "_vend_mobile_labels",
+            "'restaurant-depot': 'Depot'",
+            'data-mobile-label="{{ _vend_mobile_labels.get(t.key, t.label) }}"',
+        ),
+        (
+            "legal_dashboard.html",
+            "_legd_mobile_labels",
+            "'audit-log': 'Audit'",
+            'data-mobile-label="{{ _legd_mobile_labels.get(t.key, t.label) }}"',
+        ),
+    ]
+
+    for template_name, map_name, sample_label, data_attr in dashboards:
+        template = Path(f"app/templates/{template_name}").read_text(encoding="utf-8")
+
+        assert map_name in template
+        assert sample_label in template
+        assert data_attr in template
+        assert "content: attr(data-mobile-label);" in template
 
 
 def test_today_menu_button_starts_tab_strip():

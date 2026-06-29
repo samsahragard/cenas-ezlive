@@ -198,8 +198,12 @@ def test_developer_calculation_explains_salad_dressing_and_side_units():
     chips = _row(detail, "Chips (Lb)")
     queso = _row(detail, "Queso")
 
-    assert chicken["amount"] == "1.12"
-    assert chicken["calculation"] == "9 x 2oz = 18oz = 1.12lb"
+    labels = [row["label"] for row in detail["rows"]]
+
+    assert chicken["section"] == "Hot Food"
+    assert labels.index("Chicken Diced (Lb)") < labels.index("Lettuce (Lb)")
+    assert chicken["amount"] == "2.25"
+    assert chicken["calculation"] == "9 x 4oz = 36oz = 2.25lb"
     assert dressing["amount"] == "27 Most Popular"
     assert dressing["calculation"] == "9 x 3oz Most Popular = 27oz"
     assert red_sauce["amount"] == "0.84"

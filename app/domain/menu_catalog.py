@@ -737,17 +737,29 @@ SHEET_COMPONENTS = {
          "kind": "lb", 
          "sort": 2
      },
+     "Chicken Diced": {
+         "section": "HOT_FOOD",
+         "label": "Chicken Diced (Lb)",
+         "kind": "lb",
+         "sort": 3
+     },
+     "Beef Diced": {
+         "section": "HOT_FOOD",
+         "label": "Beef Diced (Lb)",
+         "kind": "lb",
+         "sort": 4
+     },
      "Veggie": {
          "section": "HOT_FOOD", 
          "label": "Veggies (Lb)", 
          "kind": "lb", 
-         "sort": 3
+         "sort": 5
      },
      "Shrimp (4-Pack)": {
          "section": "HOT_FOOD", 
          "label": "Brochette Shrimp (4-pack)", 
          "kind": "packs", 
-         "sort": 4
+         "sort": 6
      },
      "Rice": {
          "section": "HOT_FOOD", 
@@ -863,18 +875,6 @@ SHEET_COMPONENTS = {
          "label": "Black Olives (Lb)",
          "kind": "lb",
          "sort": 78
-     },
-     "Beef Diced": {
-         "section": "COLD_FOOD",
-         "label": "Diced Beef (Lb)",
-         "kind": "lb",
-         "sort": 79
-     },
-     "Chicken Diced": {
-         "section": "COLD_FOOD",
-         "label": "Chicken Diced (Lb)",
-         "kind": "lb",
-         "sort": 80
      },
      "Red Sauce": {
          "section": "COLD_FOOD", 

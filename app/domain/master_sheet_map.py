@@ -289,6 +289,8 @@ def build_kitchen_output(master: FlatMap) -> FlatMap:
 
         "component.Chicken",
         "component.Beef",
+        "component.Chicken Diced",
+        "component.Beef Diced",
         "component.Veggie",
         "component.Shrimp (4-Pack)",
         "component.Rice",
@@ -392,6 +394,8 @@ def build_prep_expo_output(master: FlatMap) -> FlatMap:
 
         "component.Chicken",
         "component.Beef",
+        "component.Chicken Diced",
+        "component.Beef Diced",
         "component.Veggie",
         "component.Shrimp (4-Pack)",
         "component.Rice",
@@ -511,6 +515,8 @@ MASTER_ROWS: list[RowSpec] = [
     # hot food
     {"key": "component.Chicken", "label": "Chicken (Lb)", "section": "Hot Food", "sort": 200},
     {"key": "component.Beef", "label": "Beef (Lb)", "section": "Hot Food", "sort": 210},
+    {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Hot Food", "sort": 211},
+    {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Hot Food", "sort": 212},
     {"key": "component.Veggie", "label": "Veggies (Lb)", "section": "Hot Food", "sort": 220},
     {"key": "component.Shrimp (4-Pack)", "label": "Brochette Shrimp (4-Pack)", "section": "Hot Food", "sort": 230},
     {"key": "component.Onions", "label": "Onions (Lb)", "section": "Hot Food", "sort": 235},
@@ -533,8 +539,6 @@ MASTER_ROWS: list[RowSpec] = [
     {"key": "component.Bacon", "label": "Bacon (Lb)", "section": "Cold Food", "sort": 336},
     {"key": "component.Egg", "label": "Egg (Lb)", "section": "Cold Food", "sort": 337},
     {"key": "component.Black Olives", "label": "Black Olives (Lb)", "section": "Cold Food", "sort": 338},
-    {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Cold Food", "sort": 339},
-    {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Cold Food", "sort": 340},
     {"key": "item.salad_dressing", "label": "Salad Dressing (oz)", "section": "Cold Food", "sort": 341},
     {"key": "component.Red Sauce", "label": "Red Sauce (Lb)", "section": "Cold Food", "sort": 342},
     {"key": "component.Green Sauce", "label": "Green Sauce (Lb)", "section": "Cold Food", "sort": 350},
@@ -621,6 +625,8 @@ KITCHEN_ROWS: list[RowSpec] = [
     # hot food breakdown
     {"key": "component.Chicken", "label": "Chicken (Lb)", "section": "Hot Food", "sort": 100},
     {"key": "component.Beef", "label": "Beef (Lb)", "section": "Hot Food", "sort": 110},
+    {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Hot Food", "sort": 111},
+    {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Hot Food", "sort": 112},
     {"key": "component.Veggie", "label": "Veggies (Lb)", "section": "Hot Food", "sort": 120},
     {"key": "component.Shrimp (4-Pack)", "label": "Brochette Shrimp (4-Pack)", "section": "Hot Food", "sort": 130},
     {"key": "component.Onions", "label": "Onions (Lb)", "section": "Hot Food", "sort": 135},
@@ -639,8 +645,6 @@ KITCHEN_ROWS: list[RowSpec] = [
     {"key": "component.Bacon", "label": "Bacon (Lb)", "section": "Cold Food", "sort": 336},
     {"key": "component.Egg", "label": "Egg (Lb)", "section": "Cold Food", "sort": 337},
     {"key": "component.Black Olives", "label": "Black Olives (Lb)", "section": "Cold Food", "sort": 338},
-    {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Cold Food", "sort": 339},
-    {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Cold Food", "sort": 340},
     {"key": "item.salad_dressing", "label": "Salad Dressing (oz)", "section": "Cold Food", "sort": 341},
     {"key": "component.Churros", "label": "Churros (Pieces)", "section": "Drinks & Desserts", "sort": 342},
     # other menu items
@@ -738,6 +742,8 @@ PREP_EXPO_ROWS: list[RowSpec] = [
     # hot food
     {"key": "component.Chicken", "label": "Chicken (lb)", "section": "Hot Food", "sort": 200},
     {"key": "component.Beef", "label": "Beef (lb)", "section": "Hot Food", "sort": 210},
+    {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Hot Food", "sort": 211},
+    {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Hot Food", "sort": 212},
     {"key": "component.Veggie", "label": "Veggies (lb)", "section": "Hot Food", "sort": 220},
     {"key": "component.Shrimp (4-Pack)", "label": "Brochette Shrimp (4-pack pkts)", "section": "Hot Food", "sort": 230},
     {"key": "component.Onions", "label": "Onions (lb)", "section": "Hot Food", "sort": 235},
@@ -759,8 +765,6 @@ PREP_EXPO_ROWS: list[RowSpec] = [
     {"key": "component.Bacon", "label": "Bacon (Lb)", "section": "Cold Food", "sort": 336},
     {"key": "component.Egg", "label": "Egg (Lb)", "section": "Cold Food", "sort": 337},
     {"key": "component.Black Olives", "label": "Black Olives (Lb)", "section": "Cold Food", "sort": 338},
-    {"key": "component.Beef Diced", "label": "Beef Diced (Lb)", "section": "Cold Food", "sort": 339},
-    {"key": "component.Chicken Diced", "label": "Chicken Diced (Lb)", "section": "Cold Food", "sort": 340},
     {"key": "item.salad_dressing", "label": "Salad Dressing (oz)", "section": "Cold Food", "sort": 341},
     {"key": "component.Red Sauce", "label": "Red Sauce (lb)", "section": "Cold Food", "sort": 342},
     {"key": "component.Green Sauce", "label": "Green Sauce (lb)", "section": "Cold Food", "sort": 350},

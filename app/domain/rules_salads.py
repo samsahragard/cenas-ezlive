@@ -32,6 +32,35 @@ def _salad_party_chips_and_sauces(headcount: int) -> list[dict]:
         if line["name"] in _SALAD_PARTY_SIDE_NAMES
     ]
 
+
+def _cobb_protein_choice(item: NormalizedItem) -> str:
+    raw = next((e["raw_text"] for e in item["extras"] if e["name"] == "protein"), "combo")
+    text = str(raw or "").strip().lower().replace("_", " ")
+    if "chicken" in text and "beef" in text:
+        return "combo"
+    if text in {"combo", "mix", "mixed", "both"}:
+        return "combo"
+    if "chicken" in text:
+        return "chicken"
+    if "beef" in text:
+        return "beef"
+    return "combo"
+
+
+def _fajita_salad_protein_choice(item: NormalizedItem) -> str:
+    raw = next((e["raw_text"] for e in item["extras"] if e["name"] == "protein"), "mix")
+    text = str(raw or "").strip().lower().replace("_", " ")
+    if "chicken" in text and "beef" in text:
+        return "mix"
+    if text in {"combo", "mix", "mixed", "both"}:
+        return "mix"
+    if "chicken" in text:
+        return "chicken"
+    if "beef" in text:
+        return "beef"
+    return "mix"
+
+
 def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
     headcount = item["qty"]
     dressings = [e["raw_text"] for e in item["extras"] if e["name"] == "dressing"]
@@ -52,12 +81,15 @@ def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdo
             "flags": item["flags"][:] + ["INDIVIDUAL_PACKAGING_SUMMARY_ONLY"],
         }
 
-    protein_choice = next((e["raw_text"] for e in item["extras"] if e["name"] == "protein"), "combo")
+    protein_choice = _cobb_protein_choice(item)
 
     proteins = []
-    if protein_choice in ("chicken_diced", "chicken", "combo"):
+    if protein_choice == "chicken":
+        proteins.append(make_weight_line("Chicken Diced", 4.0 * headcount, 4.0, "none"))
+    elif protein_choice == "beef":
+        proteins.append(make_weight_line("Beef Diced", 4.0 * headcount, 4.0, "none"))
+    else:
         proteins.append(make_weight_line("Chicken Diced", 2.0 * headcount, 2.0, "none"))
-    if protein_choice in ("beef_diced", "beef", "combo"):
         proteins.append(make_weight_line("Beef Diced", 2.0 * headcount, 2.0, "none"))
 
     sides = [
@@ -87,6 +119,7 @@ def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdo
         "flags": item["flags"][:],
     }
 
+
 def rule_fajitas_and_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
     headcount = item["qty"]
     dressings = [e["raw_text"] for e in item["extras"] if e["name"] == "dressing"]
@@ -106,18 +139,20 @@ def rule_fajitas_and_salad(item: NormalizedItem, order: NormalizedOrder) -> Prep
             "summary_line": f"{individual_summary(item['qty'], 'Fajita Salad')} | Dressing: {dressing_note}",
             "flags": item["flags"][:] + ["INDIVIDUAL_PACKAGING_SUMMARY_ONLY"],
         }
-    
-    protein_choice = next((e["raw_text"] for e in item["extras"] if e["name"] == "protein"), "mix")
+    protein_choice = _fajita_salad_protein_choice(item)
 
     proteins = []
-    if protein_choice in ("chicken", "mix"):
+    if protein_choice == "chicken":
+        proteins.append(make_weight_line("Chicken", 5.0 * headcount, 5.0, "none"))
+    elif protein_choice == "beef":
+        proteins.append(make_weight_line("Beef", 5.0 * headcount, 5.0, "none"))
+    else:
         proteins.append(make_weight_line("Chicken", 2.5 * headcount, 2.5, "none"))
-    if protein_choice in ("beef", "mix"):
         proteins.append(make_weight_line("Beef", 2.5 * headcount, 2.5, "none"))
 
     sides = [
         make_weight_line("Lettuce", 4.0 * headcount, 4.0),
-        make_weight_line("Avocado Diced", 2.0 *headcount, 2.0),
+        make_weight_line("Avocado Diced", 2.0 * headcount, 2.0),
         make_weight_line("Tomatoes Diced", 2.0 * headcount, 2.0),
         make_weight_line("Cucumber Diced", 2.0 * headcount, 2.0),
         make_weight_line("Grated Cheese", 2.0 * headcount, 2.0),
@@ -139,6 +174,7 @@ def rule_fajitas_and_salad(item: NormalizedItem, order: NormalizedOrder) -> Prep
         "summary_line": f'{headcount}ppl - Fajita & Salad | Dressing: {dressing_note}',
         "flags": item["flags"][:],
     }
+
 
 def rule_salads(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
     if item["item_key"] == "cobb_salad":

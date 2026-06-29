@@ -215,8 +215,31 @@ def test_cobb_salad_chicken_choice_adds_chicken_diced():
     breakdown = rule_cobb_salad(item, {})
     chicken = _line_named(breakdown["proteins"], "Chicken Diced")
 
-    assert chicken["per_qty"] == 2.0
-    assert chicken["total"] == 18.0
+    assert chicken["per_qty"] == 4.0
+    assert chicken["total"] == 36.0
+
+
+def test_cobb_salad_single_meat_gets_four_oz_and_combo_splits_two_each():
+    base_item = {
+        "item_key": "cobb_salad",
+        "package_type": "salads",
+        "qty": 10,
+        "choices": {"packaging": "tray"},
+        "flags": [],
+    }
+
+    chicken = rule_cobb_salad({**base_item, "extras": [{"name": "protein", "raw_text": "chicken"}]}, {})
+    beef = rule_cobb_salad({**base_item, "extras": [{"name": "protein", "raw_text": "beef"}]}, {})
+    combo = rule_cobb_salad({**base_item, "extras": [{"name": "protein", "raw_text": "beef and chicken"}]}, {})
+
+    assert _line_named(chicken["proteins"], "Chicken Diced")["per_qty"] == 4.0
+    assert _line_named(chicken["proteins"], "Chicken Diced")["total"] == 40.0
+    assert _line_named(beef["proteins"], "Beef Diced")["per_qty"] == 4.0
+    assert _line_named(beef["proteins"], "Beef Diced")["total"] == 40.0
+    assert _line_named(combo["proteins"], "Chicken Diced")["per_qty"] == 2.0
+    assert _line_named(combo["proteins"], "Chicken Diced")["total"] == 20.0
+    assert _line_named(combo["proteins"], "Beef Diced")["per_qty"] == 2.0
+    assert _line_named(combo["proteins"], "Beef Diced")["total"] == 20.0
 
 
 def test_fajita_salad_lettuce_is_four_oz_per_person():
@@ -236,6 +259,29 @@ def test_fajita_salad_lettuce_is_four_oz_per_person():
     assert lettuce["unit"] == "oz"
     assert lettuce["total"] == 40.0
     assert lettuce["display_total"] == "2.5 lb / 40.0 oz"
+
+
+def test_fajita_salad_single_meat_gets_five_oz_and_combo_splits_two_and_half_each():
+    base_item = {
+        "item_key": "fajitas_and_salad",
+        "package_type": "salads",
+        "qty": 10,
+        "choices": {"packaging": "tray"},
+        "flags": [],
+    }
+
+    chicken = rule_fajitas_and_salad({**base_item, "extras": [{"name": "protein", "raw_text": "chicken"}]}, {})
+    beef = rule_fajitas_and_salad({**base_item, "extras": [{"name": "protein", "raw_text": "beef"}]}, {})
+    combo = rule_fajitas_and_salad({**base_item, "extras": [{"name": "protein", "raw_text": "mixed"}]}, {})
+
+    assert _line_named(chicken["proteins"], "Chicken")["per_qty"] == 5.0
+    assert _line_named(chicken["proteins"], "Chicken")["total"] == 50.0
+    assert _line_named(beef["proteins"], "Beef")["per_qty"] == 5.0
+    assert _line_named(beef["proteins"], "Beef")["total"] == 50.0
+    assert _line_named(combo["proteins"], "Chicken")["per_qty"] == 2.5
+    assert _line_named(combo["proteins"], "Chicken")["total"] == 25.0
+    assert _line_named(combo["proteins"], "Beef")["per_qty"] == 2.5
+    assert _line_named(combo["proteins"], "Beef")["total"] == 25.0
 
 
 def test_bulk_salads_include_party_chips_and_sauces():
@@ -303,7 +349,7 @@ def test_master_bulk_salad_dressing_displays_ounces():
     ])
 
     assert master["item.salad_dressing"] == "27 Most Popular"
-    assert master["component.Chicken Diced"] == "1.12"
+    assert master["component.Chicken Diced"] == "2.25"
 
 
 def test_bulk_salad_two_dressings_split_to_one_and_half_oz_each():
@@ -642,7 +688,7 @@ def test_active_saved_salad_order_refreshes_current_food_breakdown():
     )
     salad = next(b for b in bundle["kitchen_result"]["breakdowns"] if b["item_key"] == "cobb_salad")
 
-    assert _line_named(salad["proteins"], "Chicken Diced")["total"] == 18.0
+    assert _line_named(salad["proteins"], "Chicken Diced")["total"] == 36.0
     assert _line_named(salad["sauces"], "Dressing - Most Popular")["total"] == 27.0
     assert bundle["views"]["master"]["item.salad_dressing"] == "27 Most Popular"
 

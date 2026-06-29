@@ -238,6 +238,39 @@ def test_fajita_salad_lettuce_is_four_oz_per_person():
     assert lettuce["display_total"] == "2.5 lb / 40.0 oz"
 
 
+def test_bulk_salads_include_party_chips_and_sauces():
+    expected = {
+        line["name"]: line
+        for line in party_sides(31, "none")
+        if line["name"] in {"Chips", "Red Sauce", "Green Sauce"}
+    }
+    items = [
+        {
+            "item_key": "cobb_salad",
+            "package_type": "salads",
+            "qty": 31,
+            "choices": {"packaging": "tray"},
+            "extras": [],
+            "flags": [],
+        },
+        {
+            "item_key": "fajitas_and_salad",
+            "package_type": "salads",
+            "qty": 31,
+            "choices": {"packaging": "tray"},
+            "extras": [],
+            "flags": [],
+        },
+    ]
+
+    for breakdown in [rule_cobb_salad(items[0], {}), rule_fajitas_and_salad(items[1], {})]:
+        for name, expected_line in expected.items():
+            actual = _line_named(breakdown["sides"], name)
+            assert actual["per_qty"] == expected_line["per_qty"]
+            assert actual["total"] == expected_line["total"]
+            assert actual["display_total"] == expected_line["display_total"]
+
+
 def test_bulk_salad_single_dressing_is_three_oz_per_person():
     item = {
         "item_key": "cobb_salad",

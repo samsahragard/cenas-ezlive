@@ -193,12 +193,21 @@ def test_developer_calculation_explains_salad_dressing_and_side_units():
 
     chicken = _row(detail, "Chicken Diced (Lb)")
     dressing = _row(detail, "Salad Dressing (oz)")
+    red_sauce = _row(detail, "Red Sauce (Lb)")
+    green_sauce = _row(detail, "Green Sauce (Lb)")
+    chips = _row(detail, "Chips (Lb)")
     queso = _row(detail, "Queso")
 
     assert chicken["amount"] == "1.12"
     assert chicken["calculation"] == "9 x 2oz = 18oz = 1.12lb"
     assert dressing["amount"] == "27 Most Popular"
     assert dressing["calculation"] == "9 x 3oz Most Popular = 27oz"
+    assert red_sauce["amount"] == "0.84"
+    assert red_sauce["calculation"] == "9 x 1.5oz = 13.5oz = 0.84lb"
+    assert green_sauce["amount"] == "0.84"
+    assert green_sauce["calculation"] == "9 x 1.5oz = 13.5oz = 0.84lb"
+    assert chips["amount"] == "1.69"
+    assert chips["calculation"] == "9 x 3oz = 27oz = 1.69lb"
     assert queso["amount"] == "1 quart"
     assert queso["calculation"] == "1 ordered; unit shown as quart"
 

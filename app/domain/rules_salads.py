@@ -2,6 +2,10 @@
 from __future__ import annotations
 from app.domain.schemas import NormalizedItem, NormalizedOrder, PrepBreakdown
 from app.domain.rules_utils import make_weight_line, individual_summary
+from app.domain.party_pack_rules import party_sides
+
+
+_SALAD_PARTY_SIDE_NAMES = {"Chips", "Red Sauce", "Green Sauce"}
 
 
 def _dressing_note(dressings: list[str]) -> str:
@@ -17,6 +21,16 @@ def salad_dressing_lines(headcount: int, dressings: list[str]) -> list[dict]:
 
     name = dressings[0] if dressings else "Dressing"
     return [make_weight_line(f"Dressing - {name}", 3.0 * headcount, 3.0)]
+
+
+def _salad_party_chips_and_sauces(headcount: int) -> list[dict]:
+    if headcount <= 0:
+        return []
+    return [
+        line
+        for line in party_sides(headcount, "none")
+        if line["name"] in _SALAD_PARTY_SIDE_NAMES
+    ]
 
 def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdown:
     headcount = item["qty"]
@@ -56,6 +70,7 @@ def rule_cobb_salad(item: NormalizedItem, order: NormalizedOrder) -> PrepBreakdo
         make_weight_line("Egg", 2.0 * headcount, 2.0),
         make_weight_line("Black Olives", 1.0 * headcount, 1.0),
     ]
+    sides.extend(_salad_party_chips_and_sauces(headcount))
     sauces = salad_dressing_lines(headcount, dressings)
 
     return {
@@ -107,6 +122,7 @@ def rule_fajitas_and_salad(item: NormalizedItem, order: NormalizedOrder) -> Prep
         make_weight_line("Cucumber Diced", 2.0 * headcount, 2.0),
         make_weight_line("Grated Cheese", 2.0 * headcount, 2.0),
     ]
+    sides.extend(_salad_party_chips_and_sauces(headcount))
 
     sauces = salad_dressing_lines(headcount, dressings)
 

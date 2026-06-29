@@ -3123,6 +3123,55 @@ class Candidate(Base):
     urgent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
+class WebsiteFormSubmission(Base):
+    """First-party public website form submissions.
+
+    Captures the new cenaskitchen.com forms that used to post to Formspree:
+    career applications, spirit day requests, donation requests, catering
+    requests, and contact/feedback messages. Flexible fields stay in JSON so
+    the public form can evolve without a schema change, while common columns
+    support the partner dashboard filters.
+    """
+
+    __tablename__ = "website_form_submissions"
+    __table_args__ = (
+        Index("ix_website_forms_type_created", "form_type", "created_at"),
+        Index("ix_website_forms_location_type", "location", "form_type"),
+        Index("ix_website_forms_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    form_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(24), default="new", nullable=False)
+    source_page: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    location: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    position: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    subject: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    applicant_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    organization: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    contact_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+    fields: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    attachments: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 # ============================================================
 # RECIPES — Sam /sam/chat #1130-#1133 attached 14 PDFs; spec at
 # cena #1209 / Sam dev #3074. Single table; batch sizes + ingredients

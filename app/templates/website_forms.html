@@ -1,0 +1,386 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Website Forms - Cenas Kitchen{% endblock %}
+{% block page_module %}FORMS{% endblock %}
+{% block page_title %}Website Forms{% endblock %}
+
+{% block content %}
+<style>
+  .wforms {
+    --wf-red: #9B2A26;
+    --wf-red-bright: #E85852;
+    --wf-gold: #FFD970;
+    --wf-cream: #FAF6EC;
+    --wf-muted: rgba(250, 246, 236, .66);
+    --wf-faint: rgba(250, 246, 236, .42);
+    --wf-card: #21120c;
+    --wf-card-2: #2d1a10;
+    --wf-line: rgba(255, 217, 112, .18);
+    color: var(--wf-cream);
+    font-family: Manrope, system-ui, sans-serif;
+  }
+  .wforms * { box-sizing: border-box; }
+  .wf-shell {
+    background: linear-gradient(135deg, rgba(44, 22, 14, .98), rgba(14, 7, 5, .98));
+    border: 1px solid var(--wf-line);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 22px 70px rgba(0,0,0,.35);
+  }
+  .wf-head {
+    padding: 22px 24px 18px;
+    border-bottom: 1px solid var(--wf-line);
+  }
+  .wf-kicker {
+    font-family: "JetBrains Mono", monospace;
+    color: var(--wf-gold);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+  .wf-title-row {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .wf-title {
+    margin: 0;
+    font-size: clamp(30px, 5vw, 48px);
+    line-height: 1;
+    letter-spacing: -.03em;
+  }
+  .wf-count {
+    font-family: "JetBrains Mono", monospace;
+    color: var(--wf-muted);
+    font-size: 12px;
+  }
+  .wf-tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 10px 12px 0;
+    background: rgba(0,0,0,.22);
+  }
+  .wf-tab {
+    color: var(--wf-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    padding: 12px 14px;
+    border-bottom: 2px solid transparent;
+    font-weight: 800;
+    font-size: 13px;
+  }
+  .wf-tab:hover { color: #fff; }
+  .wf-tab.is-active {
+    color: #fff;
+    border-bottom-color: var(--wf-gold);
+    background: rgba(255,255,255,.04);
+  }
+  .wf-tab small {
+    color: var(--wf-gold);
+    font-family: "JetBrains Mono", monospace;
+    margin-left: 4px;
+  }
+  .wf-filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 16px 18px;
+    border-top: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid var(--wf-line);
+    background: rgba(0,0,0,.16);
+  }
+  .wf-filters select,
+  .wf-filters button,
+  .wf-filters a {
+    height: 40px;
+    border-radius: 9px;
+    border: 1px solid rgba(255, 217, 112, .24);
+    background: rgba(0,0,0,.28);
+    color: var(--wf-cream);
+    padding: 0 12px;
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+  }
+  .wf-filters button {
+    background: var(--wf-gold);
+    color: #3a1409;
+    border-color: var(--wf-gold);
+    font-weight: 900;
+  }
+  .wf-body { padding: 18px; }
+  .wf-empty {
+    border: 1px dashed var(--wf-line);
+    border-radius: 14px;
+    padding: 34px;
+    text-align: center;
+    color: var(--wf-muted);
+    background: rgba(0,0,0,.18);
+  }
+  .wf-group { margin-bottom: 22px; }
+  .wf-group-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    margin: 0 2px 10px;
+    color: var(--wf-gold);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    font-family: "JetBrains Mono", monospace;
+  }
+  .wf-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+  }
+  .wf-card {
+    background: linear-gradient(180deg, rgba(45,26,16,.96), rgba(22,12,8,.98));
+    border: 1px solid var(--wf-line);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .wf-card-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .wf-name {
+    margin: 0 0 3px;
+    font-size: 19px;
+    line-height: 1.15;
+  }
+  .wf-meta {
+    color: var(--wf-muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .wf-badge {
+    border: 1px solid rgba(255, 217, 112, .35);
+    color: var(--wf-gold);
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .wf-badge.reviewed { color: #8ff0b1; border-color: rgba(143,240,177,.35); }
+  .wf-badge.archived { color: var(--wf-faint); border-color: rgba(250,246,236,.18); }
+  .wf-lines {
+    display: grid;
+    gap: 6px;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  .wf-line {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 10px;
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding-top: 6px;
+  }
+  .wf-line b {
+    color: var(--wf-faint);
+    font-weight: 700;
+  }
+  .wf-details {
+    margin-top: 12px;
+    border-top: 1px solid rgba(255,255,255,.08);
+    padding-top: 10px;
+  }
+  .wf-details summary {
+    cursor: pointer;
+    color: var(--wf-gold);
+    font-weight: 800;
+    font-size: 13px;
+  }
+  .wf-field-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .wf-field-table th,
+  .wf-field-table td {
+    text-align: left;
+    vertical-align: top;
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding: 7px 4px;
+  }
+  .wf-field-table th {
+    color: var(--wf-faint);
+    width: 35%;
+    font-weight: 700;
+  }
+  .wf-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .wf-attachments a {
+    color: #3a1409;
+    background: var(--wf-gold);
+    border-radius: 999px;
+    padding: 6px 9px;
+    font-size: 12px;
+    text-decoration: none;
+    font-weight: 900;
+  }
+  .wf-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .wf-actions button {
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.06);
+    color: var(--wf-cream);
+    border-radius: 8px;
+    padding: 7px 9px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  @media (max-width: 680px) {
+    .wf-head, .wf-body { padding-left: 14px; padding-right: 14px; }
+    .wf-grid { grid-template-columns: 1fr; }
+    .wf-line { grid-template-columns: 1fr; gap: 2px; }
+  }
+</style>
+
+<div class="wforms">
+  <section class="wf-shell">
+    <header class="wf-head">
+      <div class="wf-kicker">Cenas / Website / Submissions</div>
+      <div class="wf-title-row">
+        <h1 class="wf-title">{{ active_label }}</h1>
+        <div class="wf-count">{{ rows|length }} visible - {{ counts.get(active_type, 0) }} total</div>
+      </div>
+    </header>
+
+    <nav class="wf-tabs" aria-label="Website form types">
+      {% for key, label in form_labels.items() %}
+      <a class="wf-tab{% if key == active_type %} is-active{% endif %}"
+         href="{{ url_for('website_forms.partner_forms', type=key) }}">
+        {{ label }} <small>{{ counts.get(key, 0) }}</small>
+      </a>
+      {% endfor %}
+    </nav>
+
+    <form class="wf-filters" method="get">
+      <input type="hidden" name="type" value="{{ active_type }}">
+      <select name="location" aria-label="Location">
+        <option value="">All locations</option>
+        {% for loc in ["Copperfield", "Tomball", "Either location"] %}
+        <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc }}</option>
+        {% endfor %}
+      </select>
+      <select name="status" aria-label="Status">
+        <option value="">All statuses</option>
+        {% for st in ["new", "reviewed", "archived"] %}
+        <option value="{{ st }}" {% if selected_status == st %}selected{% endif %}>{{ st|title }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Filter</button>
+      <a href="{{ url_for('website_forms.partner_forms', type=active_type) }}">Clear</a>
+    </form>
+
+    <div class="wf-body">
+      {% if not rows %}
+        <div class="wf-empty">No {{ active_label|lower }} submissions match this view yet.</div>
+      {% endif %}
+
+      {% for group, items in groups.items() %}
+      <section class="wf-group">
+        <h2 class="wf-group-title">
+          <span>{{ group }}</span>
+          <span>{{ items|length }}</span>
+        </h2>
+        <div class="wf-grid">
+          {% for row in items %}
+          {% set display_name = row.applicant_name or row.contact_name or row.organization or row.email or row.subject or "Website submission" %}
+          <article class="wf-card">
+            <div class="wf-card-top">
+              <div>
+                <h3 class="wf-name">{{ display_name }}</h3>
+                <div class="wf-meta">
+                  #{{ row.id }} - {{ row.created_at.strftime("%b %d, %Y %I:%M %p") }}
+                </div>
+              </div>
+              <span class="wf-badge {{ row.status }}">{{ row.status }}</span>
+            </div>
+
+            <div class="wf-lines">
+              {% if row.location %}<div class="wf-line"><b>Location</b><span>{{ row.location }}</span></div>{% endif %}
+              {% if row.position %}<div class="wf-line"><b>Position</b><span>{{ row.position }}</span></div>{% endif %}
+              {% if row.subject %}<div class="wf-line"><b>Subject</b><span>{{ row.subject }}</span></div>{% endif %}
+              {% if row.organization %}<div class="wf-line"><b>Org</b><span>{{ row.organization }}</span></div>{% endif %}
+              {% if row.email %}<div class="wf-line"><b>Email</b><span><a href="mailto:{{ row.email }}" style="color:var(--wf-gold)">{{ row.email }}</a></span></div>{% endif %}
+              {% if row.phone %}<div class="wf-line"><b>Phone</b><span>{{ row.phone }}</span></div>{% endif %}
+              {% if row.fields.get("message") %}<div class="wf-line"><b>Message</b><span>{{ row.fields.get("message") }}</span></div>{% endif %}
+              {% if row.fields.get("additional_comments") %}<div class="wf-line"><b>Comments</b><span>{{ row.fields.get("additional_comments") }}</span></div>{% endif %}
+            </div>
+
+            {% if row.attachments %}
+            <div class="wf-attachments">
+              {% for file in row.attachments %}
+              <a href="{{ url_for('website_forms.partner_form_attachment', submission_id=row.id, attachment_index=loop.index0) }}">
+                {{ file.filename or ("Attachment " ~ loop.index) }}
+              </a>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <details class="wf-details">
+              <summary>Full submission</summary>
+              <table class="wf-field-table">
+                <tbody>
+                  {% for key, value in row.fields.items() %}
+                  <tr>
+                    <th>{{ key.replace("_", " ")|title }}</th>
+                    <td>
+                      {% if value is sequence and value is not string %}
+                        {{ value|join(", ") }}
+                      {% else %}
+                        {{ value }}
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </details>
+
+            <form class="wf-actions" method="post" action="{{ url_for('website_forms.partner_form_status', submission_id=row.id) }}">
+              {% if row.status != "reviewed" %}
+              <button type="submit" name="status" value="reviewed">Mark reviewed</button>
+              {% endif %}
+              {% if row.status != "archived" %}
+              <button type="submit" name="status" value="archived">Archive</button>
+              {% endif %}
+              {% if row.status != "new" %}
+              <button type="submit" name="status" value="new">Back to new</button>
+              {% endif %}
+            </form>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

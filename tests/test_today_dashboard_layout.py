@@ -68,7 +68,9 @@ def test_mobile_dashboard_top_navs_use_red_bar_with_gold_tabs():
         assert nav_selector in template
         assert "background: linear-gradient(180deg, #940812 0%, #620309 100%);" in template
         assert "position: fixed;" in template
-        assert "top: 0;" in template
+        assert "--ck-dashboard-top-nav-offset: max(env(safe-area-inset-top, 0px), 24px);" in template
+        assert "top: var(--ck-dashboard-top-nav-offset);" in template
+        assert "padding-top: calc(64px + var(--ck-dashboard-top-nav-offset));" in template
         assert "margin-top: calc(0px - var(--ck-main-pad-top, 28px));" in template
         assert "flex-direction: column-reverse;" in template
         assert f"{tab_selector} {{" in template

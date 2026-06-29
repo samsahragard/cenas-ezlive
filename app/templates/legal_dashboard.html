@@ -384,7 +384,11 @@
 
   /* MOBILE — mirror the reference design's phone treatment. */
   @media (max-width: 760px) {
-    .legdash { margin-top: calc(0px - var(--ck-main-pad-top, 28px)); padding-top: 64px; }
+    .legdash {
+      --ck-dashboard-top-nav-offset: max(env(safe-area-inset-top, 0px), 24px);
+      margin-top: calc(0px - var(--ck-main-pad-top, 28px));
+      padding-top: calc(64px + var(--ck-dashboard-top-nav-offset));
+    }
     .legdash .legd-card {
       background: transparent;
       border: 0;
@@ -401,7 +405,7 @@
     .legdash .legd-meta { font-size: 10px; gap: 6px; margin-bottom: 4px; }
     .legdash .legd-tabs {
       position: fixed;
-      top: 0;
+      top: var(--ck-dashboard-top-nav-offset);
       left: 0;
       right: 0;
       z-index: 98;

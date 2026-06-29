@@ -5654,7 +5654,7 @@ def recipes_update(recipe_id: int):
 # ============================================================
 _FRESH_FOOD_ITEMS = [
     ("MEAT",     ["beef-fajita", "chicken-fajita", "ribs", "cochinita", "ground-beef", "pollo-ranchero"]),
-    ("SAUCES",   ["poblano", "queso-dzlf", "chili-gravy", "seafood", "ranchera", "bbq",
+    ("SAUCES",   ["poblano", "queso-dzlf", "chili-gravy", "seafood", "ranchera", "ranch", "bbq",
                   "tomatillo", "street-taco", "cilantro-ginger", "chipotle-mayo", "chipotle-cream"]),
     ("BEANS",    ["black", "charros", "charros-mix", "refried"]),
     ("MISC",     ["spinach", "mexican-butter", "steam-vegetables", "chicken-stock",
@@ -5704,6 +5704,7 @@ _FRESH_FOOD_ORDER_LAYOUT = [
         {"slug": "refried",     "label": "Refried",     "size": "Bag"},
     ]},
     {"name": "DRESSING", "items": [
+        {"slug": "ranch",             "label": "Ranch",         "size": "Bag"},
         {"slug": "ranchera-dressing", "label": "Ranchera",      "size": "Bag"},
         {"slug": "sweet-ginger",      "label": "Sweet Ginger",  "size": "Bag"},
         {"slug": "honey-mustard",     "label": "Honey Mustard", "size": "Bag"},

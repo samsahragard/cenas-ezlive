@@ -7575,11 +7575,7 @@ def operations_dashboard():
 _TODAY_DASH_TABS = [
     ("dashboard",     "Dashboard"),
     ("notifications", "Notifications"),
-    ("form-careers",  "Careers"),
-    ("form-catering", "Catering"),
-    ("form-spirit",   "Spirit Days"),
-    ("form-donations","Donations"),
-    ("form-contact",  "Contact"),
+    ("sub-form",      "SUB FORM"),
     ("task-reports",  "Task Reports"),
     ("agents",        "Agents"),
     ("pass",          "Pass"),
@@ -7613,16 +7609,8 @@ def _today_dash_full_url(tab_key):
         return url_for("store.home")
     if tab_key == "notifications":
         return url_for("store.notifications_page")
-    if tab_key == "form-careers":
+    if tab_key == "sub-form":
         return "/partner/website-forms?type=career"
-    if tab_key == "form-catering":
-        return "/partner/website-forms?type=catering"
-    if tab_key == "form-spirit":
-        return "/partner/website-forms?type=spirit"
-    if tab_key == "form-donations":
-        return "/partner/website-forms?type=donation"
-    if tab_key == "form-contact":
-        return "/partner/website-forms?type=contact"
     if tab_key == "task-reports":
         return "/partner/team-reports/"
     if tab_key == "agents":
@@ -7684,11 +7672,14 @@ def today_dashboard():
     dash_tabs = []
     _SAM_ONLY_KEYS = {"agents", "pass", "docs", "automation"}
     _PARTNER_ONLY_KEYS = {
-        "form-careers",
-        "form-catering",
-        "form-spirit",
-        "form-donations",
-        "form-contact",
+        "sub-form",
+    }
+    _FORM_TAB_ALIASES = {
+        "form-careers": "sub-form",
+        "form-catering": "sub-form",
+        "form-spirit": "sub-form",
+        "form-donations": "sub-form",
+        "form-contact": "sub-form",
     }
     for key, caption in _TODAY_DASH_TABS:
         if current_role_is("expo") and key != "notifications":
@@ -7715,6 +7706,7 @@ def today_dashboard():
 
     valid = {key for key, _ in dash_tabs}
     active_tab = (request.args.get("tab") or "").strip().lower()
+    active_tab = _FORM_TAB_ALIASES.get(active_tab, active_tab)
     if active_tab not in valid:
         active_tab = dash_tabs[0][0]
     tabs = [

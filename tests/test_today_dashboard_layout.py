@@ -88,10 +88,36 @@ def test_today_mobile_nav_uses_short_labels():
 
     assert "'dashboard': 'Dash'" in template
     assert "'notifications': 'Notice'" in template
+    assert "'sub-form': 'SUB FORM'" in template
     assert "'task-reports': 'Tasks'" in template
     assert "'automation': 'Auto'" in template
     assert 'data-mobile-label="{{ _tdyd_mobile_labels.get(t.key, t.label) }}"' in template
     assert "content: attr(data-mobile-label);" in template
+
+
+def test_today_has_single_sub_form_top_tab():
+    routes = Path("app/web/store_routes.py").read_text(encoding="utf-8")
+    template = Path("app/templates/today_dashboard.html").read_text(encoding="utf-8")
+    tabs_block = routes[
+        routes.index("_TODAY_DASH_TABS = ["):
+        routes.index("def _today_dash_full_url")
+    ]
+
+    assert '("sub-form",      "SUB FORM")' in tabs_block
+    for legacy_key in [
+        "form-careers",
+        "form-catering",
+        "form-spirit",
+        "form-donations",
+        "form-contact",
+    ]:
+        assert legacy_key not in tabs_block
+        assert f'"{legacy_key}": "sub-form"' in routes
+
+    assert 'if tab_key == "sub-form":' in routes
+    assert 'return "/partner/website-forms?type=career"' in routes
+    assert "'sub-form':      '<path" in template
+    assert "'sub-form': 'SUB FORM'" in template
 
 
 def test_other_mobile_top_navs_use_short_labels():

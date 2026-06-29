@@ -89,6 +89,7 @@ def test_today_mobile_nav_uses_short_labels():
     assert "'dashboard': 'Dash'" in template
     assert "'notifications': 'Notice'" in template
     assert "'task-reports': 'Tasks'" in template
+    assert "'automation': 'Auto'" in template
     assert 'data-mobile-label="{{ _tdyd_mobile_labels.get(t.key, t.label) }}"' in template
     assert "content: attr(data-mobile-label);" in template
 

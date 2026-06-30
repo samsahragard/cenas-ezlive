@@ -87,6 +87,8 @@ def test_ez_market_driver_stats_strip_removed():
     assert "background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template
     assert "em-card-head" in template
     assert ".em-card {\n    background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template
+    assert ".em-day-header" in template
+    assert "background: linear-gradient(145deg, #6B241B 0%, #491511 100%);\n    border-radius: 0;" in template
     assert "border: 0.5px solid rgba(243,111,77,0.58);" in template
     assert "border-left: 0;\n    border-right: 0;\n    border-radius: 0;" in template
     assert "border-left:0; border-right:0; border-radius:0;" in template

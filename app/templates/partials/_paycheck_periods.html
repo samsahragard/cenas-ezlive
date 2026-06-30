@@ -45,6 +45,7 @@
   <input type="hidden" name="rowids" value="{{ ns.ids|join(',') }}">
   <input type="hidden" name="return_to" value="{{ request.path }}">
   {% endif %}
+  {% if manager_edit %}
   <div class="table-scroll ph-table-scroll">
     <table class="log-table log-table-view ph-log-table">
       <thead>
@@ -181,6 +182,60 @@
       </tfoot>
     </table>
   </div>
+  {% else %}
+  <div class="table-scroll ph-table-scroll ph-driver-scroll">
+    <table class="log-table log-table-view ph-log-table ph-driver-table">
+      <thead>
+        <tr class="group-header">
+          <th class="ph-col-date">Date</th>
+          <th class="ph-col-order">Order</th>
+          <th class="ph-col-gps">GPS</th>
+          <th class="ph-col-mi" title="Verified miles over 20">Mi</th>
+          <th class="ph-col-money">$10</th>
+          <th class="ph-col-notes">Notes</th>
+          <th class="ph-col-money">$5</th>
+          <th class="ph-col-total">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in period.deliveries %}
+        <tr>
+          <td class="ph-date-cell">
+            {% if d.delivery_date %}
+              {{ d.delivery_date[5:7]|int }}/{{ d.delivery_date[8:10]|int }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="ph-order-cell">
+            {% if d.order_number and d.order_number != '?' %}
+              <span style="color:var(--accent-soft);font-weight:700;">{{ d.order_number }}</span>
+            {% else %}{{ d.order_number }}{% endif %}
+          </td>
+          <td class="ph-gps-cell">
+            {% if d.route_point_count %}
+              <span class="ph-gps-badge">GPS {{ d.route_point_count }}pts</span>
+            {% elif d.bonus_tracked > 0 %}
+              <span class="ph-gps-badge">GPS</span>
+            {% else %}
+              <span style="opacity:0.42;">—</span>
+            {% endif %}
+          </td>
+          <td class="ph-num-cell{% if d.verified_miles == 0 %} muted{% endif %}">{{ '%.1f'|format(d.verified_miles) }}</td>
+          <td class="ph-money-cell{% if d.bonus_tracked == 0 %} muted{% endif %}">${{ '%.0f'|format(d.bonus_tracked) }}</td>
+          <td class="ph-notes-cell">{% if d.notes %}{{ d.notes }}{% else %}—{% endif %}</td>
+          <td class="ph-money-cell{% if d.bonus_five_star == 0 %} muted{% endif %}">${{ '%.0f'|format(d.bonus_five_star) }}</td>
+          <td class="ph-total-cell">${{ '%.2f'|format(d.total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="background:rgba(255,255,255,0.04);">
+          <td colspan="7" style="text-align:right;font-weight:600;">Period total</td>
+          <td class="ph-total-cell">${{ '%.2f'|format(period.grand_total) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% endif %}
   {% if can_edit %}
   <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:10px;">
     <span style="font-size:11px;color:var(--text-3);">Verify miles, $10, notes and the 5★, then save — pay updates on the driver's page.</span>

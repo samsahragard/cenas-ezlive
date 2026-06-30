@@ -35,6 +35,7 @@ def test_driver_orders_uses_mobile_cards_not_wide_table():
     assert "do-start-status" in template
     assert '<span class="do-badge{% if o.status == \'delivered\' %} done{% endif %}">' in template
     assert ".do-card {\n    background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template
+    assert "border-left: 0;\n    border-right: 0;\n    border-radius: 0;" in template
     assert "background: rgba(28,8,6,0.38);" in template
     assert ".do-date { color: #FFD970; font-weight: 800; font-size: 15px;" in template
     assert ".do-time { color: #FAF6EC; font-weight: 700; font-size: 15px;" in template
@@ -56,6 +57,9 @@ def test_driver_pay_history_hides_header_menu():
     assert "class=\"ph-period-summary\"" in partial
     assert "class=\"table-scroll ph-table-scroll\"" in partial
     assert "class=\"log-table log-table-view ph-log-table\"" in partial
+    assert "border-left: 0 !important;" in template
+    assert "border-right: 0 !important;" in template
+    assert "border-radius: 0 !important;" in template
 
 
 def test_driver_order_photo_uploads_allow_photo_library_on_mobile():
@@ -84,6 +88,8 @@ def test_ez_market_driver_stats_strip_removed():
     assert "em-card-head" in template
     assert ".em-card {\n    background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template
     assert "border: 0.5px solid rgba(243,111,77,0.58);" in template
+    assert "border-left: 0;\n    border-right: 0;\n    border-radius: 0;" in template
+    assert "border-left:0; border-right:0; border-radius:0;" in template
     assert ".em-date" in template
     assert ".em-card-head .em-time {\n    font-size: 15px;" in template
     assert ".em-card-head .em-payout { font-size: 15px;" in template
@@ -135,6 +141,7 @@ def test_driver_profile_hides_role_badge():
     assert ".ck-topbar .topbar-right .dash-role-banner" in template
     assert "display: none !important;" in template
     assert ".mp-hero { background: linear-gradient(145deg, #6B241B 0%, #491511 100%)" in template
+    assert "border-left: 0; border-right: 0; border-radius: 0;" in template
     assert '<div class="mp-score-block">' in template
     foot_block = template.split('<div class="mp-hero-foot">', 1)[1].split("</div>\n</div>", 1)[0]
     assert "more points to unlock" in foot_block
@@ -145,6 +152,7 @@ def test_driver_profile_hides_role_badge():
     assert ".mp-hub-kpi:last-child { text-align: right; }" in template
     assert "body.ck-role-driver .ck-topbar" in base
     assert "background-image: linear-gradient(145deg, #6B241B 0%, #491511 100%)" in base
+    assert "border-left: 0;\n      border-right: 0;\n      border-radius: 0;" in base
 
 
 def test_driver_profile_is_hub_and_info_holds_reference_sections():

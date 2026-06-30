@@ -43,14 +43,82 @@
   .ph-flash { padding: 8px 14px; margin-bottom: 10px; border-radius: 8px; font-size: 13px; }
   .ph-flash.ok { color: #9CCB76; }
   .ph-flash.error { color: #E2645C; }
-  .ph-period-summary { border-radius: 8px; }
-  .ph-table-scroll { border-radius: 12px; }
+  .ph-disclaimer,
+  .ph-check,
+  .ph-period-summary,
+  .ph-table-scroll,
+  .ph-empty,
+  .ph-flash {
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-radius: 0 !important;
+  }
+  .ph-period-summary { border-radius: 0 !important; }
+  .ph-table-scroll { border-radius: 0 !important; }
   .ph-log-table thead th,
   .ph-log-table tr.group-header th {
     background: rgba(28,8,6,0.40);
   }
   .ph-log-table tfoot tr {
     background: rgba(28,8,6,0.30) !important;
+  }
+  .ph-driver-scroll {
+    overflow-x: hidden;
+  }
+  .ph-driver-table {
+    table-layout: fixed;
+    font-size: 11px;
+  }
+  .ph-driver-table thead th,
+  .ph-driver-table tbody td,
+  .ph-driver-table tfoot td {
+    padding: 8px 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ph-driver-table thead th {
+    font-size: 9px;
+    letter-spacing: 0.03em;
+  }
+  .ph-col-date { width: 11%; }
+  .ph-col-order { width: 18%; }
+  .ph-col-gps { width: 16%; }
+  .ph-col-mi { width: 9%; text-align: right !important; }
+  .ph-col-money { width: 10%; text-align: right !important; }
+  .ph-col-notes { width: 13%; }
+  .ph-col-total { width: 13%; text-align: right !important; }
+  .ph-date-cell,
+  .ph-order-cell,
+  .ph-notes-cell {
+    color: rgba(250,246,236,0.86);
+  }
+  .ph-gps-badge {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 2px 5px;
+    border: 1px solid rgba(156,203,118,0.48);
+    border-radius: 999px;
+    color: #9CCB76;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1.15;
+    text-transform: uppercase;
+  }
+  .ph-num-cell,
+  .ph-money-cell,
+  .ph-total-cell {
+    text-align: right;
+    color: rgba(250,246,236,0.88);
+    font-weight: 700;
+  }
+  .ph-total-cell {
+    color: #FAF6EC;
+  }
+  .ph-driver-table .muted {
+    opacity: 0.48;
+    font-weight: 600;
   }
 </style>
 {% endblock %}

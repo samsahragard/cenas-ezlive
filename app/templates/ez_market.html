@@ -54,7 +54,9 @@
     cursor: pointer;
     font-size: 13px;
     font-weight: 700;
-    border-radius: 8px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.05),
                 0 6px 14px rgba(0,0,0,0.20);
   }
@@ -72,7 +74,7 @@
     font-size: 20px; font-weight: 600; color: #FFD970; padding: 10px 14px;
     border-bottom: 1px solid rgba(228,179,64,0.22); margin-bottom: 12px;
     text-shadow: 0 0 12px rgba(255,200,80,0.35);
-    background: #241610; border-radius: 8px;
+    background: #241610; border-radius: 0;
   }
   .em-day-header-count {
     font-size: 12px; font-weight: 500; color: rgba(236,227,208,0.55); margin-left: 8px;
@@ -99,7 +101,9 @@
   .em-card {
     background: linear-gradient(145deg, #6B241B 0%, #491511 100%);
     border: 0.5px solid rgba(243,111,77,0.58);
-    border-radius: 12px; padding: 14px 16px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0; padding: 14px 16px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.05),
                 0 8px 18px rgba(0,0,0,0.24);
   }
@@ -264,7 +268,7 @@
   {% if flashes %}
   <div class="em-flash-stack" style="margin-bottom:14px;">
     {% for cat, msg in flashes %}
-    <div class="em-flash em-flash-{{ cat }}" style="background: #241610; border:0.5px solid {% if cat == 'error' %}rgba(220,80,80,0.5){% else %}rgba(217,164,54,0.45){% endif %}; border-left:3px solid {% if cat == 'error' %}#dc5050{% else %}#E4B340{% endif %}; border-radius:8px; padding:10px 12px; margin-bottom:8px; color:rgba(236,227,208,0.92); font-size:13px;">{{ msg }}</div>
+    <div class="em-flash em-flash-{{ cat }}" style="background:linear-gradient(145deg, #6B241B 0%, #491511 100%); border-top:0.5px solid {% if cat == 'error' %}rgba(220,80,80,0.5){% else %}rgba(243,111,77,0.58){% endif %}; border-bottom:0.5px solid {% if cat == 'error' %}rgba(220,80,80,0.5){% else %}rgba(243,111,77,0.58){% endif %}; border-left:0; border-right:0; border-radius:0; padding:10px 12px; margin-bottom:8px; color:rgba(236,227,208,0.92); font-size:13px;">{{ msg }}</div>
     {% endfor %}
   </div>
   {% endif %}

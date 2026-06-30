@@ -24,6 +24,14 @@ def test_driver_orders_uses_mobile_cards_not_wide_table():
     assert ".ck-topbar .topbar-right .dash-role-banner" in template
 
 
+def test_driver_order_photo_uploads_allow_photo_library_on_mobile():
+    template = _read("driver_orders.html")
+
+    assert '<input type="file" name="delivery_photo" accept="image/*">' in template
+    assert '<input type="file" name="parking_photo" accept="image/*">' in template
+    assert "capture=" not in template
+
+
 def test_ez_market_driver_stats_strip_removed():
     template = _read("ez_market.html")
 

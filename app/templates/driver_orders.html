@@ -310,7 +310,7 @@
             <div class="do-proof-grid">
               <label class="do-field do-file">
                 <span class="do-field-label">Picture</span>
-                <input type="file" name="delivery_photo" accept="image/*" capture="environment">
+                <input type="file" name="delivery_photo" accept="image/*">
                 {% if o.setup_photo_view_url and not o.setup_photo_missing %}
                   <a class="do-proof-link" href="{{ o.setup_photo_view_url }}" target="_blank">View picture</a>
                   {% if o.setup_photo_uploaded_at %}
@@ -326,7 +326,7 @@
 
               <label class="do-field do-file">
                 <span class="do-field-label">Parking picture</span>
-                <input type="file" name="parking_photo" accept="image/*" capture="environment">
+                <input type="file" name="parking_photo" accept="image/*">
                 {% if o.parking_photo_view_url and not o.parking_photo_missing %}
                   <a class="do-proof-link" href="{{ o.parking_photo_view_url }}" target="_blank">View receipt</a>
                   {% if o.parking_photo_uploaded_at %}

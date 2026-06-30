@@ -46,6 +46,8 @@ from app.models import (
     DeliveryRequest,
     Driver,
     DriverApplication,
+    DriverEvent,
+    DriverFile,
     DriverLocation,
     DriverLog,
     DriverNotification,
@@ -227,6 +229,8 @@ def driver_local_export():
                 "drivers": _all_rows(db, Driver),
                 "driver_application": _all_rows(db, DriverApplication),
                 "driver_logs": _all_rows(db, DriverLog),
+                "driver_file": _all_rows(db, DriverFile),
+                "driver_event": _all_rows(db, DriverEvent),
                 "driver_shift": _all_rows(db, DriverShift),
                 "driver_location": _all_rows(db, DriverLocation),
                 "delivery_request": _all_rows(db, DeliveryRequest),
@@ -243,6 +247,8 @@ def driver_local_export():
             "counts": {
                 "upload_file_refs": len(upload_files),
                 "upload_files_available": sum(1 for f in upload_files if f["available"]),
+                "driver_file_rows": db.query(DriverFile).count(),
+                "driver_event_rows": db.query(DriverEvent).count(),
             },
         })
     finally:

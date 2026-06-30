@@ -362,6 +362,33 @@ def create_app():
     except Exception:
         logging.getLogger(__name__).exception("Base.metadata.create_all failed (non-fatal)")
 
+    # Driver profile loop: keep a driver-centered file registry alongside the
+    # legacy Order.setup_photo_url / parking_photo_url fields. Idempotent; old
+    # missing bytes stay represented as exists=false so local driver DB exports
+    # preserve the reference without producing broken links.
+    try:
+        from app.db import SessionLocal
+        from app.services.driver_profile_audit import backfill_driver_files_from_orders
+        if SessionLocal is not None:
+            db = SessionLocal()
+            try:
+                result = backfill_driver_files_from_orders(db)
+                db.commit()
+                if result.get("file_refs"):
+                    logging.getLogger(__name__).info(
+                        "driver_file registry backfill: refs=%d available=%d",
+                        result.get("file_refs", 0),
+                        result.get("available", 0),
+                    )
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "driver_file registry backfill failed (non-fatal)")
+
     # Manager reports (2026-06-25): attendance issue reports need to show
     # which manager logged each event. AttendanceEvent is an existing table,
     # so create_all cannot add these columns; backfill them idempotently.

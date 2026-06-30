@@ -479,6 +479,78 @@ class DriverLocation(Base):
     heading_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class DriverFile(Base):
+    """Registry row for every driver-uploaded proof/receipt/document.
+
+    Orders still keep setup_photo_url / parking_photo_url for backwards
+    compatibility. This table is the driver-centered file ledger that lets the
+    profile, payroll, manager views, and local DB mirror all point at the same
+    upload record.
+    """
+    __tablename__ = "driver_file"
+    __table_args__ = (
+        UniqueConstraint("order_id", "kind", "public_route", name="uq_driver_file_order_kind_route"),
+        Index("ix_driver_file_driver_created", "driver_id", "created_at"),
+        Index("ix_driver_file_order_created", "order_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    driver_id: Mapped[int | None] = mapped_column(
+        ForeignKey("drivers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    public_route: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    storage_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exists: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    meta_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class DriverEvent(Base):
+    """Driver-centered timeline.
+
+    This is the small connective layer Sam asked for: driver actions are still
+    stored in their operational tables, but every meaningful action also has a
+    timeline row tied back to driver_id/order_id/file_id.
+    """
+    __tablename__ = "driver_event"
+    __table_args__ = (
+        Index("ix_driver_event_driver_time", "driver_id", "created_at"),
+        Index("ix_driver_event_order_time", "order_id", "created_at"),
+        Index("ix_driver_event_type_time", "event_type", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    driver_id: Mapped[int | None] = mapped_column(
+        ForeignKey("drivers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("driver_file.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    source: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    actor_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
 class EzcaterTrackingPoint(Base):
     """One sampled ezCater live-tracking location for a delivery.
 

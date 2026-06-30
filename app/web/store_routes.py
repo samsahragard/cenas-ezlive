@@ -800,6 +800,7 @@ def driver_payroll_save():
     pay page."""
     from app.models import Order
     from app.services.ezcater_payroll import payroll_ready
+    from app.services.driver_profile_audit import record_driver_event
 
     rowids = [x.strip() for x in (request.form.get("rowids", "") or "").split(",")
               if x.strip().isdigit()]
@@ -828,6 +829,22 @@ def driver_payroll_save():
             o.pay_notes = note[:500] or None
             o.pay_verified_at = now
             o.pay_verified_by = str(saved_by)[:80]
+            record_driver_event(
+                db,
+                "payroll_updated",
+                driver_id=o.assigned_driver_id,
+                order_id=o.id,
+                source="manager_payroll",
+                actor_type="user",
+                actor_id=getattr(user, "id", None),
+                payload={
+                    "verified_miles": o.pay_verified_miles,
+                    "driven_miles": o.pay_driven_miles,
+                    "bonus_tracked": o.pay_bonus_tracked,
+                    "five_star": o.pay_five_star,
+                    "verified_by": o.pay_verified_by,
+                },
+            )
             saved += 1
         db.commit()
     finally:

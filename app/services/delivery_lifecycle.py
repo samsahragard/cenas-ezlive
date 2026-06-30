@@ -92,6 +92,33 @@ def _snapshot_potential_payout(order: Order) -> float | None:
         return None
 
 
+def _event(
+    db: Session,
+    event_type: str,
+    order: Order,
+    *,
+    driver_id: int | None = None,
+    source: str = "delivery_lifecycle",
+    actor_type: str | None = None,
+    actor_id: str | int | None = None,
+    payload: dict | None = None,
+) -> None:
+    try:
+        from app.services.driver_profile_audit import record_driver_event
+        record_driver_event(
+            db,
+            event_type,
+            driver_id=driver_id if driver_id is not None else order.assigned_driver_id,
+            order_id=order.id,
+            source=source,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            payload=payload,
+        )
+    except Exception:
+        logger.exception("driver event write failed type=%s order_id=%s", event_type, order.id)
+
+
 # ---- transitions ----
 
 def open_for_bidding(db: Session, order: Order) -> None:
@@ -116,6 +143,7 @@ def request_delivery(db: Session, order: Order, driver: Driver) -> DeliveryReque
     )
     db.add(req)
     order.status = "requested"
+    _event(db, "delivery_requested", order, driver_id=driver.id)
     return req
 
 
@@ -190,6 +218,15 @@ def approve_request(
     order.approved_by_user_id = decided_by_user_id
     order.approved_at = now
     _snapshot_potential_payout(order)
+    _event(
+        db,
+        "delivery_approved",
+        order,
+        driver_id=driver.id,
+        actor_type="user" if decided_by_user_id else None,
+        actor_id=decided_by_user_id,
+        payload={"decided_by_user_id": decided_by_user_id},
+    )
     db.add(DriverNotification(
         driver_id=driver.id,
         kind="approved_by_manager",
@@ -252,6 +289,14 @@ def back_to_bidding(db: Session, order: Order, decided_by_user_id: int | None) -
             related_delivery_id=order.id,
         ))
     order.status = "available"
+    _event(
+        db,
+        "delivery_reopened",
+        order,
+        actor_type="user" if decided_by_user_id else None,
+        actor_id=decided_by_user_id,
+        payload={"decided_by_user_id": decided_by_user_id},
+    )
 
 
 def decline_all(db: Session, order: Order, decided_by_user_id: int | None) -> None:
@@ -280,18 +325,28 @@ def decline_all(db: Session, order: Order, decided_by_user_id: int | None) -> No
             related_delivery_id=order.id,
         ))
     order.status = "cancelled"
+    _event(
+        db,
+        "delivery_cancelled_by_manager",
+        order,
+        actor_type="user" if decided_by_user_id else None,
+        actor_id=decided_by_user_id,
+        payload={"decided_by_user_id": decided_by_user_id},
+    )
 
 
 def mark_picked_up(db: Session, order: Order) -> None:
     _check("mark_picked_up", order.status)
     order.status = "picked_up"
     order.pickup_actual_at = datetime.utcnow()
+    _event(db, "delivery_picked_up", order)
 
 
 def mark_en_route(db: Session, order: Order) -> None:
     _check("mark_en_route", order.status)
     order.status = "en_route"
     order.en_route_at = datetime.utcnow()
+    _event(db, "delivery_en_route", order)
 
 
 def mark_delivered(
@@ -312,6 +367,12 @@ def mark_delivered(
         driver = db.get(Driver, order.assigned_driver_id)
         if driver:
             driver.lifetime_delivery_count = (driver.lifetime_delivery_count or 0) + 1
+    _event(
+        db,
+        "delivery_completed",
+        order,
+        payload={"setup_photo_url": setup_photo_url} if setup_photo_url else None,
+    )
 
 
 def driver_cancel(db: Session, order: Order, reason: str | None) -> Cancellation:
@@ -329,6 +390,13 @@ def driver_cancel(db: Session, order: Order, reason: str | None) -> Cancellation
     )
     db.add(cx)
     order.status = "available"
+    _event(
+        db,
+        "delivery_cancelled_by_driver",
+        order,
+        driver_id=order.assigned_driver_id,
+        payload={"reason": reason},
+    )
     order.assigned_driver_id = None
     order.approved_at = None
     order.approved_by_user_id = None
@@ -373,5 +441,6 @@ def detect_no_shows(db: Session) -> list[Order]:
                     "no_show termination driver_id=%s delivery_id=%s",
                     driver.id, o.id,
                 )
+        _event(db, "delivery_no_show", o)
         flagged.append(o)
     return flagged

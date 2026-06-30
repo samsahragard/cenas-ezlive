@@ -38,6 +38,10 @@ from werkzeug.utils import secure_filename
 from app.db import get_db
 from app.models import Driver, DriverLog, DriverShift, DriverLocation, Order
 from app.services import delivery_lifecycle as lifecycle
+from app.services.driver_profile_audit import (
+    record_driver_event,
+    upsert_driver_file_for_order,
+)
 
 driver = Blueprint("driver", __name__)
 
@@ -494,6 +498,16 @@ def driver_signup_submit():
         )
         db.add(new_driver)
         try:
+            db.flush()
+            record_driver_event(
+                db,
+                "driver_profile_created",
+                driver_id=new_driver.id,
+                source="driver_signup",
+                actor_type="driver",
+                actor_id=new_driver.id,
+                payload={"location": new_driver.location},
+            )
             db.commit()
         except IntegrityError:
             # (name, location) collision with a legacy admin-added row
@@ -755,9 +769,49 @@ def driver_order_complete(order_id: int):
             if delivery_photo_url:
                 order.setup_photo_url = delivery_photo_url
                 order.setup_photo_uploaded_at = now
+                file_row = upsert_driver_file_for_order(
+                    db,
+                    order,
+                    "delivery",
+                    delivery_photo_url,
+                    source="driver_upload",
+                    uploaded_at=now,
+                )
+                db.flush()
+                record_driver_event(
+                    db,
+                    "delivery_photo_uploaded",
+                    driver_id=driver_id,
+                    order_id=order.id,
+                    file_id=file_row.id if file_row else None,
+                    source="driver_portal",
+                    actor_type="driver",
+                    actor_id=driver_id,
+                    payload={"url": delivery_photo_url},
+                )
             if parking_photo_url:
                 order.parking_photo_url = parking_photo_url
                 order.parking_photo_uploaded_at = now
+                file_row = upsert_driver_file_for_order(
+                    db,
+                    order,
+                    "parking",
+                    parking_photo_url,
+                    source="driver_upload",
+                    uploaded_at=now,
+                )
+                db.flush()
+                record_driver_event(
+                    db,
+                    "parking_receipt_uploaded",
+                    driver_id=driver_id,
+                    order_id=order.id,
+                    file_id=file_row.id if file_row else None,
+                    source="driver_portal",
+                    actor_type="driver",
+                    actor_id=driver_id,
+                    payload={"url": parking_photo_url},
+                )
             if parking_cost is not None:
                 order.parking_cost = parking_cost
             order.assigned_driver = found.name
@@ -841,6 +895,16 @@ def driver_shift_start():
             s.ended_at = now
         new_shift = DriverShift(driver_id=driver_id, started_at=now)
         db.add(new_shift)
+        db.flush()
+        record_driver_event(
+            db,
+            "shift_started",
+            driver_id=driver_id,
+            source="driver_portal",
+            actor_type="driver",
+            actor_id=driver_id,
+            payload={"shift_id": new_shift.id},
+        )
         db.commit()
         db.refresh(new_shift)
         return jsonify({"shift_id": new_shift.id, "started_at": new_shift.started_at.isoformat()})
@@ -863,6 +927,15 @@ def driver_shift_end():
         if open_shift:
             open_shift.ended_at = datetime.utcnow()
             session.pop("driver_active_order_id", None)
+            record_driver_event(
+                db,
+                "shift_ended",
+                driver_id=driver_id,
+                source="driver_portal",
+                actor_type="driver",
+                actor_id=driver_id,
+                payload={"shift_id": open_shift.id},
+            )
             db.commit()
             return jsonify({"ended_shift_id": open_shift.id})
         return jsonify({"ended_shift_id": None, "note": "no open shift"})
@@ -889,6 +962,18 @@ def driver_battery_opt_status():
             return jsonify({"error": "driver not found"}), 404
         d.battery_opt_ignored = granted
         d.battery_opt_checked_at = datetime.utcnow()
+        record_driver_event(
+            db,
+            "battery_optimization_status",
+            driver_id=driver_id,
+            source="driver_portal",
+            actor_type="driver",
+            actor_id=driver_id,
+            payload={
+                "granted": granted,
+                "prompted": bool(data.get("prompted")),
+            },
+        )
         db.commit()
         return jsonify({"ok": True, "granted": granted})
     finally:
@@ -930,7 +1015,18 @@ def driver_track():
                 and active_order.status in {"approved", "picked_up", "en_route"}
             ):
                 order_id = active_order.id
+                was_tracked = (active_order.tracking_status or "").strip().lower() == "tracked"
                 active_order.tracking_status = "Tracked"
+                if not was_tracked:
+                    record_driver_event(
+                        db,
+                        "gps_tracking_started",
+                        driver_id=driver_id,
+                        order_id=active_order.id,
+                        source="driver_portal",
+                        actor_type="driver",
+                        actor_id=driver_id,
+                    )
             else:
                 session.pop("driver_active_order_id", None)
         loc = DriverLocation(

@@ -95,28 +95,6 @@
   .do-start-status .do-sub { margin-top: 0; }
   .do-sub.ok { color: #9CCB76; font-weight: 700; }
 
-  .do-btn {
-    width: 100%;
-    min-height: 42px;
-    border: none;
-    border-radius: 8px;
-    padding: 9px 12px;
-    background: #E4B340;
-    color: #140A06;
-    font-weight: 800;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .do-btn.secondary {
-    background: transparent;
-    color: #FFD970;
-    border: 1px solid rgba(217,164,54,0.42);
-  }
-  .do-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
   .do-complete-form {
     display: grid;
     gap: 12px;
@@ -257,11 +235,6 @@
 
     <div class="do-card-body">
       <div class="do-panel">
-        <form method="POST" action="{{ url_for('driver.driver_order_start', order_id=o.id) }}">
-          <button class="do-btn secondary" type="submit" {% if o.status in ['en_route', 'delivered'] %}disabled{% endif %}>
-            Start Delivery
-          </button>
-        </form>
         <div class="do-start-status">
           {% if o.en_route_at %}
             <span class="do-sub">Started {{ fmt_driver_dt(o.en_route_at) }}</span>

@@ -28,6 +28,9 @@ def test_driver_orders_uses_mobile_cards_not_wide_table():
     assert "do-client" not in template
     assert "do-panel-title" not in template
     assert "Order details pending" not in template
+    assert "driver.driver_order_start" not in template
+    assert "Start Delivery" not in template
+    assert "do-btn secondary" not in template
     assert "do-start-status" in template
     assert '<span class="do-badge{% if o.status == \'delivered\' %} done{% endif %}">' in template
     assert ".do-card {\n    background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template

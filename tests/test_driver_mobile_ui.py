@@ -24,6 +24,12 @@ def test_driver_orders_uses_mobile_cards_not_wide_table():
     assert ".ck-topbar .topbar-right .dash-role-banner" in template
     assert "driver.driver_logout" not in template
     assert "Sign out" not in template
+    assert "do-address" not in template
+    assert "do-client" not in template
+    assert "do-panel-title" not in template
+    assert "Order details pending" not in template
+    assert "do-start-status" in template
+    assert '<span class="do-badge{% if o.status == \'delivered\' %} done{% endif %}">' in template
 
 
 def test_driver_pay_history_hides_header_menu():
@@ -54,6 +60,11 @@ def test_ez_market_driver_stats_strip_removed():
     assert "Potential today" not in template
     assert "Potential week" not in template
     assert "Estimates only" not in template
+    assert "em-card-head" in template
+    assert ".em-date" in template
+    assert "grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);" in template
+    assert "<div class=\"em-date\">{{ o.delivery_date or 'No date' }}</div>" in template
+    assert "<div class=\"em-time\">{{ o.deliver_at or '—' }}</div>" in template
 
 
 def test_driver_bottom_nav_order_and_status_removed():
@@ -94,6 +105,7 @@ def test_driver_profile_hides_role_badge():
 
     assert ".ck-topbar .topbar-right .dash-role-banner" in template
     assert "display: none !important;" in template
+    assert "linear-gradient(145deg, #6B241B 0%, #491511 100%)" in template
 
 
 def test_driver_profile_is_hub_and_info_holds_reference_sections():

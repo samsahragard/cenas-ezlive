@@ -40,20 +40,14 @@
   }
   .do-card-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(92px, max-content);
+    grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);
+    align-items: start;
     gap: 14px;
     padding: 13px 14px;
     border-bottom: 1px solid rgba(236,227,208,0.08);
   }
   .do-date { color: #FFD970; font-weight: 800; font-size: 15px; }
-  .do-time { color: #FAF6EC; font-weight: 700; margin-top: 4px; }
-  .do-address {
-    margin-top: 4px;
-    color: rgba(236,227,208,0.68);
-    font-size: 12px;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
-  }
+  .do-time { color: #FAF6EC; font-weight: 700; text-align: center; }
   .do-order-meta {
     text-align: right;
     min-width: 92px;
@@ -61,16 +55,9 @@
   }
   .do-link { color: #FFD970; text-decoration: none; font-weight: 800; }
   .do-link:hover { text-decoration: underline; }
-  .do-client {
-    margin-top: 4px;
-    color: rgba(236,227,208,0.58);
-    font-size: 11px;
-    overflow-wrap: anywhere;
-  }
   .do-badge {
     display: inline-flex;
     align-items: center;
-    margin-top: 8px;
     padding: 4px 8px;
     border-radius: 999px;
     border: 1px solid rgba(217,164,54,0.25);
@@ -95,16 +82,15 @@
     padding: 12px;
     background: rgba(0,0,0,0.12);
   }
-  .do-panel-title {
-    color: rgba(236,227,208,0.54);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 8px;
+  .do-start-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
   }
   .do-sub { margin-top: 6px; color: rgba(236,227,208,0.58); font-size: 11px; line-height: 1.35; }
+  .do-start-status .do-sub { margin-top: 0; }
   .do-sub.ok { color: #9CCB76; font-weight: 700; }
 
   .do-btn {
@@ -233,7 +219,7 @@
     .do-card-head {
       gap: 8px;
       padding: 12px;
-      grid-template-columns: minmax(0, 1fr) minmax(92px, max-content);
+      grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);
     }
     .do-card-body {
       padding: 12px;
@@ -256,37 +242,34 @@
   {% set gps_linked = (o.tracking_status or '')|lower == 'tracked' %}
   <article class="do-card">
     <div class="do-card-head">
-      <div>
-        <div class="do-date">{{ o.delivery_date or 'No date' }}</div>
-        <div class="do-time">{{ o.deliver_at or 'No time' }}</div>
-        <div class="do-address">{{ o.delivery_address or '' }}</div>
-      </div>
+      <div class="do-date">{{ o.delivery_date or 'No date' }}</div>
+      <div class="do-time">{{ o.deliver_at or 'No time' }}</div>
       <div class="do-order-meta">
         {% if o.external_order_id %}
           <a class="do-link" href="{{ url_for('orders_browse.view_order', external_order_id=o.external_order_id) }}" target="_blank">{{ o.external_order_id }}</a>
         {% else %}
           <span class="do-link">#{{ o.id }}</span>
         {% endif %}
-        <div class="do-client">{{ o.client or 'Order details pending' }}</div>
-        <div class="do-badge{% if o.status == 'delivered' %} done{% endif %}">{{ (o.status or 'pending')|replace('_', ' ') }}</div>
       </div>
     </div>
 
     <div class="do-card-body">
       <div class="do-panel">
-        <div class="do-panel-title">Start delivery</div>
         <form method="POST" action="{{ url_for('driver.driver_order_start', order_id=o.id) }}">
           <button class="do-btn secondary" type="submit" {% if o.status in ['en_route', 'delivered'] %}disabled{% endif %}>
             Start Delivery
           </button>
         </form>
-        {% if o.en_route_at %}
-          <div class="do-sub">Started {{ fmt_driver_dt(o.en_route_at) }}</div>
-        {% elif o.pickup_actual_at %}
-          <div class="do-sub">Picked up {{ fmt_driver_dt(o.pickup_actual_at) }}</div>
-        {% else %}
-          <div class="do-sub">Not started</div>
-        {% endif %}
+        <div class="do-start-status">
+          {% if o.en_route_at %}
+            <span class="do-sub">Started {{ fmt_driver_dt(o.en_route_at) }}</span>
+          {% elif o.pickup_actual_at %}
+            <span class="do-sub">Picked up {{ fmt_driver_dt(o.pickup_actual_at) }}</span>
+          {% else %}
+            <span class="do-sub">Not started</span>
+          {% endif %}
+          <span class="do-badge{% if o.status == 'delivered' %} done{% endif %}">{{ (o.status or 'pending')|replace('_', ' ') }}</span>
+        </div>
         {% if gps_linked %}
           <div class="do-sub ok">GPS linked</div>
         {% endif %}

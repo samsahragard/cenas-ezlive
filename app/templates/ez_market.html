@@ -81,9 +81,32 @@
   }
   .em-card.urgent { border-color: rgba(226,100,92,0.5); }
   .em-card-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+  .em-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+  .em-date {
+    color: #FFD970;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
   .em-time { font-size: 18px; font-weight: 500; color: #FAF6EC; }
+  .em-card-head .em-time {
+    font-size: 16px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.2;
+  }
   .em-time-sub { font-size: 11px; color: rgba(236,227,208,0.55); }
   .em-time-sub.urgent { color: #E2645C; font-weight: 500; }
+  .em-card-pay {
+    min-width: 72px;
+    text-align: right;
+  }
   .em-payout { font-size: 22px; font-weight: 500; color: #FFD970; text-align: right;
                text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); }
   .em-payout-label { font-size: 10px; color: rgba(236,227,208,0.55); text-align: right;
@@ -337,12 +360,10 @@
       <div class="em-cards">
         {% for o in grp.orders %}
         <div class="em-card">
-          <div class="em-card-row">
-            <div>
-              <div class="em-time">{{ o.deliver_at or '—' }}</div>
-              <div class="em-time-sub">{{ o.delivery_date or '' }}</div>
-            </div>
-            <div>
+          <div class="em-card-head">
+            <div class="em-date">{{ o.delivery_date or 'No date' }}</div>
+            <div class="em-time">{{ o.deliver_at or '—' }}</div>
+            <div class="em-card-pay">
               <div class="em-payout">${{ "%.0f"|format(projected_payouts.get(o.id, 35)) }}</div>
               <div class="em-payout-label">Est. earn</div>
             </div>
@@ -416,12 +437,10 @@
   {% for o in my_active %}
     <div class="em-card">
       <div class="em-banner approved">Approved · status: {{ o.status }}</div>
-      <div class="em-card-row">
-        <div>
-          <div class="em-time">{{ o.deliver_at or '—' }}</div>
-          <div class="em-time-sub">{{ o.delivery_date or '' }}</div>
-        </div>
-        <div>
+      <div class="em-card-head">
+        <div class="em-date">{{ o.delivery_date or 'No date' }}</div>
+        <div class="em-time">{{ o.deliver_at or '—' }}</div>
+        <div class="em-card-pay">
           <div class="em-payout">${{ "%.0f"|format(projected_payouts.get(o.id, 35)) }}</div>
           <div class="em-payout-label">Est. earn</div>
         </div>

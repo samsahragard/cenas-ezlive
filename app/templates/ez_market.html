@@ -118,13 +118,13 @@
   }
   .em-date {
     color: #FFD970;
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 800;
     line-height: 1.2;
   }
   .em-time { font-size: 18px; font-weight: 500; color: #FAF6EC; }
   .em-card-head .em-time {
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 700;
     text-align: center;
     line-height: 1.2;
@@ -137,11 +137,41 @@
   }
   .em-payout { font-size: 22px; font-weight: 500; color: #FFD970; text-align: right;
                text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); }
-  .em-card-head .em-payout { font-size: 15px; line-height: 1.2; }
+  .em-card-head .em-payout { font-size: 18px; line-height: 1.2; }
   .em-payout-label { font-size: 10px; color: rgba(236,227,208,0.55); text-align: right;
                      text-transform: uppercase; letter-spacing: 0.1em; }
   .em-trip { display: flex; flex-direction: column; gap: 4px; font-size: 12px;
              color: rgba(236,227,208,0.85); margin: 10px 0; }
+  .em-route-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 12px 0 14px;
+  }
+  .em-route-pickup {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #FAF6EC;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+  .em-route-pickup i {
+    color: #E4B340;
+    font-size: 15px;
+    text-shadow: 0 0 8px rgba(255,200,80,0.35);
+  }
+  .em-route-address {
+    min-width: 0;
+    color: #FAF6EC;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-align: right;
+  }
   .em-meta { display: flex; gap: 10px; font-size: 11px; color: rgba(236,227,208,0.55); margin-bottom: 10px; }
   .em-meta .em-compete-red { color: #E2645C; font-weight: 500; }
   .em-meta .em-compete-green { color: #9CCB76; font-weight: 500; }
@@ -397,19 +427,12 @@
               <div class="em-payout-label">Est. earn</div>
             </div>
           </div>
-          <div class="em-trip">
-            <div class="em-trip-leg">
-              <span class="em-trip-icon"><i class="ti ti-building-store" aria-hidden="true"></i></span>
-              <div class="em-trip-text">
-                <div class="em-trip-name">{{ pickup_label(o) or 'n/a' }}</div>
-              </div>
+          <div class="em-route-row">
+            <div class="em-route-pickup">
+              <i class="ti ti-building-store" aria-hidden="true"></i>
+              <span>{{ (pickup_label(o) or 'n/a')|replace(' Kitchen', '') }}</span>
             </div>
-            <div class="em-trip-leg">
-              <span class="em-trip-icon"><i class="ti ti-map-pin" aria-hidden="true"></i></span>
-              <div class="em-trip-text">
-                <div class="em-trip-name">{{ o.delivery_address or 'n/a' }}</div>
-              </div>
-            </div>
+            <div class="em-route-address">{{ o.delivery_address or 'n/a' }}</div>
           </div>
           <div class="em-meta">
             {% set comp = competing.get(o.id, 0) %}
@@ -470,9 +493,12 @@
           <div class="em-payout-label">Est. earn</div>
         </div>
       </div>
-      <div class="em-trip">
-        <div><strong>Pickup:</strong> {{ pickup_label(o) or '—' }}</div>
-        <div><strong>Drop:</strong> {{ o.delivery_address or '—' }}</div>
+      <div class="em-route-row">
+        <div class="em-route-pickup">
+          <i class="ti ti-building-store" aria-hidden="true"></i>
+          <span>{{ (pickup_label(o) or '—')|replace(' Kitchen', '') }}</span>
+        </div>
+        <div class="em-route-address">{{ o.delivery_address or '—' }}</div>
       </div>
     </div>
   {% endfor %}

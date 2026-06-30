@@ -91,14 +91,21 @@ def test_ez_market_driver_stats_strip_removed():
     assert "border-left: 0;\n    border-right: 0;\n    border-radius: 0;" in template
     assert "border-left:0; border-right:0; border-radius:0;" in template
     assert ".em-date" in template
-    assert ".em-card-head .em-time {\n    font-size: 15px;" in template
-    assert ".em-card-head .em-payout { font-size: 15px;" in template
+    assert "font-size: 18px;" in template
+    assert ".em-card-head .em-time {\n    font-size: 18px;" in template
+    assert ".em-card-head .em-payout { font-size: 18px;" in template
+    assert "em-route-row" in template
+    assert "em-route-pickup" in template
+    assert "em-route-address" in template
     assert "grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);" in template
     assert "<div class=\"em-date\">{{ o.delivery_date or 'No date' }}</div>" in template
     assert "<div class=\"em-time\">{{ o.deliver_at or '—' }}</div>" in template
+    assert "{{ (pickup_label(o) or 'n/a')|replace(' Kitchen', '') }}" in template
+    assert '<div class="em-route-address">{{ o.delivery_address or \'n/a\' }}</div>' in template
     available_block = template.split('<div id="tab-available">', 1)[1].split('{% if not public_demo|default(false) %}', 1)[0]
     assert "mi from pickup" not in available_block
     assert "{{ o.headcount or '—' }} heads" not in available_block
+    assert "em-trip-leg" not in available_block
 
 
 def test_driver_bottom_nav_order_and_status_removed():

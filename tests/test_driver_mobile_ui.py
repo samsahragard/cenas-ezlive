@@ -123,6 +123,8 @@ def test_driver_bottom_nav_order_and_status_removed():
     assert positions == sorted(positions)
     assert "driver_logs" not in template
     assert "'Status'" not in template
+    assert "body.ck-role-driver .ck-bnav" in template
+    assert "background: linear-gradient(180deg, rgba(15, 18, 26, 0.96), rgba(5, 6, 10, 0.98));" in template
 
 
 def test_driver_sidebar_matches_driver_nav_order():
@@ -160,6 +162,9 @@ def test_driver_profile_hides_role_badge():
     assert "body.ck-role-driver .ck-topbar" in base
     assert "background-image: linear-gradient(145deg, #6B241B 0%, #491511 100%)" in base
     assert "border-left: 0;\n      border-right: 0;\n      border-radius: 0;" in base
+    assert "html:has(body.ck-role-driver)" in base
+    assert "--app-bg: #05060a;" in base
+    assert "radial-gradient(circle at 10% 20%, rgba(143, 178, 214, 0.10), transparent 24%)" in base
 
 
 def test_driver_profile_is_hub_and_info_holds_reference_sections():

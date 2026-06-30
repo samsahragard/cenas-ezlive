@@ -318,6 +318,22 @@
   }
   @media (max-width: 680px) {
     .wf-head, .wf-body { padding-left: 14px; padding-right: 14px; }
+    .wf-tabs {
+      flex-wrap: wrap;
+      overflow-x: visible;
+      gap: 6px;
+      padding: 8px;
+    }
+    .wf-tab {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1 1 calc(33.333% - 6px);
+      min-width: 96px;
+      padding: 9px 8px;
+      text-align: center;
+      white-space: normal;
+    }
     .wf-grid { grid-template-columns: 1fr; }
     .wf-line { grid-template-columns: 1fr; gap: 2px; }
   }

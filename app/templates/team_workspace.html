@@ -338,9 +338,28 @@
   .tws-btn-ghost { font-family: inherit; font-size: 13px; color: var(--tws-cream-dim); background: transparent; border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 9px 16px; cursor: pointer; }
   @media (max-width: 780px) {
     .tws { max-width: 100%; overflow-x: hidden; }
-    .tws-tabs, .tws-store-tabs, .tws-subbar { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
-    .tws-tabs::-webkit-scrollbar, .tws-store-tabs::-webkit-scrollbar, .tws-subbar::-webkit-scrollbar { display: none; }
-    .tws-tab, .tws-store-tab, .tws-subtab { flex: 0 0 auto; }
+    .tws-tabs, .tws-store-tabs, .tws-subbar { max-width: 100%; flex-wrap: wrap; overflow-x: visible; gap: 6px; }
+    .tws-tab {
+      flex: 1 1 calc(33.333% - 6px);
+      min-width: 96px;
+      justify-content: center;
+      padding: 8px 9px;
+      font-size: 12px;
+      text-align: center;
+      white-space: normal;
+    }
+    .tws-store-tab {
+      flex: 1 1 calc(50% - 6px);
+      justify-content: center;
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .tws-subtab {
+      flex: 1 1 calc(33.333% - 6px);
+      min-width: 82px;
+      padding: 8px;
+      text-align: center;
+    }
     #tws-panel-market, #tws-panel-market .tws-store-shell, #tws-panel-market .tws-embed-wrap { max-width: 100%; overflow-x: hidden; }
     #tws-panel-market .tws-embed-frame { max-width: 100%; }
   }

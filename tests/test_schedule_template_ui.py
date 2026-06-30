@@ -232,7 +232,8 @@ def test_market_iframe_skips_auto_height_feedback_loop():
     assert 'if (!isPhoneMarket) {\n          frame.style.setProperty("height", "78vh", "important");' in template
     assert "new ResizeObserver(fitMarket).observe(box)" in template
     assert "reveal(frame);\n        return;\n      }\n    }\n    reveal(frame);" in template
-    assert ".tws-tabs, .tws-store-tabs, .tws-subbar { max-width: 100%; flex-wrap: nowrap; overflow-x: auto;" in template
+    assert ".tws-tabs, .tws-store-tabs, .tws-subbar { max-width: 100%; flex-wrap: wrap; overflow-x: visible;" in template
+    assert ".tws-tab {\n      flex: 1 1 calc(33.333% - 6px);" in template
     assert "#tws-panel-market, #tws-panel-market .tws-store-shell, #tws-panel-market .tws-embed-wrap { max-width: 100%; overflow-x: hidden; }" in template
 
 

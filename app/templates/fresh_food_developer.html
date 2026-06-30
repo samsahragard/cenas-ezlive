@@ -211,7 +211,26 @@
   }
   @media (max-width: 560px) {
     .ffdev-cards { grid-template-columns: 1fr 1fr; }
-    .ff-tab { padding: 10px 12px; }
+    .ff-tabs {
+      flex-wrap: wrap;
+      gap: 6px;
+      border-bottom: 0;
+    }
+    .ff-tab {
+      flex: 1 1 calc(33.333% - 6px);
+      min-width: 92px;
+      padding: 9px 8px;
+      border: 1px solid rgba(217,164,54,0.18);
+      border-radius: 6px;
+      margin-bottom: 0;
+      background: rgba(0,0,0,0.18);
+      text-align: center;
+      white-space: normal;
+    }
+    .ff-tab.is-active {
+      background: rgba(228,179,64,0.12);
+      border-color: #E4B340;
+    }
   }
 </style>
 

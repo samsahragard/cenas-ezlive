@@ -368,3 +368,12 @@ def test_sub_form_select_options_use_readable_dark_colors():
     assert "background: var(--wf-card);" in source
     assert "color: var(--wf-cream);" in source
     assert ".wf-share select option:checked" in source
+
+
+def test_sub_form_mobile_tabs_wrap_without_horizontal_scroll():
+    template = Path(__file__).resolve().parents[1] / "app" / "templates" / "website_forms.html"
+    source = template.read_text(encoding="utf-8")
+
+    assert ".wf-tabs {\n      flex-wrap: wrap;\n      overflow-x: visible;" in source
+    assert ".wf-tab {\n      display: inline-flex;" in source
+    assert "flex: 1 1 calc(33.333% - 6px);" in source

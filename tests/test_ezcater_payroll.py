@@ -7,6 +7,7 @@ bi-weekly period boundary math (anchor + 14-day rollover).
 from __future__ import annotations
 
 from datetime import date, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -77,6 +78,37 @@ def test_ezcater_route_history_counts_as_tracked_and_auto_fills_driven_miles():
     assert pay.route_miles == 26.4
     assert pay.route_minutes == 42
     assert pay.route_point_count == 3
+
+
+def test_uploaded_driver_photos_surface_as_payroll_files():
+    order = _order(tracking_status="Tracked", pickup_miles=10)
+    order.setup_photo_url = "/static/uploads/driver_orders/1/2/delivery.jpg"
+    order.parking_photo_url = "/static/uploads/driver_orders/1/2/parking.jpg"
+    order.parking_cost = 12.5
+
+    pay = payroll.compute_one(order)
+
+    assert pay.files == [
+        {
+            "label": "Photo",
+            "url": "/static/uploads/driver_orders/1/2/delivery.jpg",
+            "title": "Delivery setup/proof photo",
+        },
+        {
+            "label": "Receipt",
+            "url": "/static/uploads/driver_orders/1/2/parking.jpg",
+            "title": "Parking receipt ($12.50)",
+        },
+    ]
+
+
+def test_manager_payroll_template_includes_uploaded_file_links():
+    template = Path("app/templates/partials/_paycheck_periods.html").read_text(encoding="utf-8")
+
+    assert "<th>Files</th>" in template
+    assert "{% if d.files %}" in template
+    assert 'href="{{ file.url }}"' in template
+    assert "{{ file.label }}" in template
 
 
 # ---- period math ----

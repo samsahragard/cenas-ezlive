@@ -51,6 +51,7 @@
         <tr class="group-header">
           <th>Date</th>
           <th>Order #</th>
+          {% if manager_edit %}<th>Files</th>{% endif %}
           <th style="text-align:right;" title="Expected extra miles over 20, from the route">E-Miles</th>
           <th style="text-align:right;" title="Driven extra miles over 20 from ezCater route history unless manager-entered">D-Miles</th>
           <th style="text-align:right;" title="Verified extra miles a manager signs off — this is what pays">V-Miles</th>
@@ -90,6 +91,23 @@
               </div>
             {% endif %}
           </td>
+          {% if manager_edit %}
+          <td style="font-size:11px;line-height:1.5;white-space:nowrap;">
+            {% if d.files %}
+              {% for file in d.files %}
+                <a href="{{ file.url }}" target="_blank" rel="noopener"
+                   title="{{ file.title }}"
+                   style="display:inline-block;margin:1px 4px 1px 0;padding:2px 6px;
+                          border:1px solid rgba(244,180,138,0.35);border-radius:999px;
+                          color:var(--accent-soft);text-decoration:none;font-weight:600;">
+                  {{ file.label }}
+                </a>
+              {% endfor %}
+            {% else %}
+              <span style="opacity:0.4;">—</span>
+            {% endif %}
+          </td>
+          {% endif %}
           <td style="text-align:right;{% if d.expected_miles == 0 %}opacity:0.4;{% endif %}">{{ '%.1f'|format(d.expected_miles) }}</td>
           <td style="text-align:right;{% if not row_edit and d.driven_miles is none %}opacity:0.4;{% endif %}"
               title="{% if d.driven_miles_source == 'ezcater' %}Auto-filled from ezCater route history; managers can override before saving{% elif d.driven_miles_source == 'manager' %}Manager-entered driven miles{% else %}Driven miles will appear when ezCater route history is available{% endif %}">
@@ -148,7 +166,7 @@
       </tbody>
       <tfoot>
         <tr style="background:rgba(255,255,255,0.04);">
-          <td colspan="9" style="text-align:right;font-weight:600;">Period total</td>
+          <td colspan="{{ 10 if manager_edit else 9 }}" style="text-align:right;font-weight:600;">Period total</td>
           <td style="text-align:right;font-weight:700;color:var(--accent-soft);">${{ '%.2f'|format(period.grand_total) }}</td>
         </tr>
       </tfoot>

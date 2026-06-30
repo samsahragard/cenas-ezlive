@@ -123,6 +123,30 @@ class DeliveryPay:
     route_started_at: datetime | None = None
     route_ended_at: datetime | None = None
     driven_miles_source: str = ""
+    files: list[dict[str, str]] = field(default_factory=list)
+
+
+def _order_file_links(order: Order) -> list[dict[str, str]]:
+    files: list[dict[str, str]] = []
+    setup_url = getattr(order, "setup_photo_url", None)
+    if setup_url:
+        files.append({
+            "label": "Photo",
+            "url": setup_url,
+            "title": "Delivery setup/proof photo",
+        })
+    parking_url = getattr(order, "parking_photo_url", None)
+    if parking_url:
+        parking_cost = getattr(order, "parking_cost", None)
+        title = "Parking receipt"
+        if parking_cost is not None:
+            title = f"{title} (${parking_cost:.2f})"
+        files.append({
+            "label": "Receipt",
+            "url": parking_url,
+            "title": title,
+        })
+    return files
 
 
 def _is_tracked(tracking_status: str | None) -> bool:
@@ -247,6 +271,7 @@ def compute_one(order: Order, five_star: bool = False, route_summary=None) -> De
         route_started_at=getattr(route_summary, "started_at", None) if route_point_count else None,
         route_ended_at=getattr(route_summary, "ended_at", None) if route_point_count else None,
         driven_miles_source=driven_source,
+        files=_order_file_links(order),
     )
 
 

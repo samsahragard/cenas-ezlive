@@ -94,11 +94,36 @@ def test_uploaded_driver_photos_surface_as_payroll_files():
             "label": "Photo",
             "url": "/driver/order-uploads/2/delivery/delivery.jpg",
             "title": "Delivery setup/proof photo",
+            "exists": "",
         },
         {
             "label": "Receipt",
             "url": "/driver/order-uploads/2/parking/parking.jpg",
             "title": "Parking receipt ($12.50)",
+            "exists": "",
+        },
+    ]
+
+
+def test_uploaded_driver_photos_mark_existing_persistent_files(tmp_path, monkeypatch):
+    upload_root = tmp_path / "driver-order-uploads"
+    monkeypatch.setenv("DRIVER_ORDER_UPLOADS_DIR", str(upload_root))
+    target = upload_root / "2" / "delivery"
+    target.mkdir(parents=True)
+    (target / "delivery.jpg").write_bytes(b"x")
+
+    order = _order(tracking_status="Tracked", pickup_miles=10)
+    order.id = 2
+    order.setup_photo_url = "/driver/order-uploads/2/delivery/delivery.jpg"
+
+    pay = payroll.compute_one(order)
+
+    assert pay.files == [
+        {
+            "label": "Photo",
+            "url": "/driver/order-uploads/2/delivery/delivery.jpg",
+            "title": "Delivery setup/proof photo",
+            "exists": "1",
         },
     ]
 
@@ -108,8 +133,10 @@ def test_manager_payroll_template_includes_uploaded_file_links():
 
     assert "<th>Files</th>" in template
     assert "{% if d.files %}" in template
+    assert "{% if file.exists %}" in template
     assert 'href="{{ file.url }}"' in template
     assert "{{ file.label }}" in template
+    assert "Missing {{ file.label|lower }}" in template
 
 
 # ---- period math ----

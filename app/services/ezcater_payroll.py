@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 import re
 from urllib.parse import quote
@@ -132,10 +133,12 @@ def _order_file_links(order: Order) -> list[dict[str, str]]:
     files: list[dict[str, str]] = []
     setup_url = getattr(order, "setup_photo_url", None)
     if setup_url:
+        exists = _stored_order_file_exists(order, "delivery", setup_url)
         files.append({
             "label": "Photo",
             "url": _payroll_file_url(order, "delivery", setup_url),
             "title": "Delivery setup/proof photo",
+            "exists": "1" if exists else "",
         })
     parking_url = getattr(order, "parking_photo_url", None)
     if parking_url:
@@ -147,6 +150,7 @@ def _order_file_links(order: Order) -> list[dict[str, str]]:
             "label": "Receipt",
             "url": _payroll_file_url(order, "parking", parking_url),
             "title": title,
+            "exists": "1" if _stored_order_file_exists(order, "parking", parking_url) else "",
         })
     return files
 
@@ -159,6 +163,27 @@ def _payroll_file_url(order: Order, kind: str, stored_url: str) -> str:
     if not filename:
         return stored_url
     return f"/driver/order-uploads/{order_id}/{kind}/{quote(filename)}"
+
+
+def _stored_order_file_exists(order: Order, kind: str, stored_url: str) -> bool:
+    order_id = getattr(order, "id", None)
+    filename = Path(str(stored_url).split("?", 1)[0]).name
+    if not filename:
+        return False
+    if order_id is not None:
+        persistent_root = Path(os.environ.get("DRIVER_ORDER_UPLOADS_DIR", "/var/data/driver-order-uploads"))
+        if (persistent_root / str(order_id) / kind / filename).exists():
+            return True
+    if str(stored_url).startswith("/static/"):
+        static_root = Path(__file__).resolve().parents[1] / "static"
+        relative = str(stored_url).split("?", 1)[0][len("/static/"):]
+        candidate = (static_root / relative).resolve()
+        try:
+            candidate.relative_to(static_root.resolve())
+        except ValueError:
+            return False
+        return candidate.exists()
+    return False
 
 
 def _is_tracked(tracking_status: str | None) -> bool:

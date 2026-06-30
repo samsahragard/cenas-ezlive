@@ -311,8 +311,13 @@
               <label class="do-field do-file">
                 <span class="do-field-label">Picture</span>
                 <input type="file" name="delivery_photo" accept="image/*" capture="environment">
-                {% if o.setup_photo_url %}
-                  <a class="do-proof-link" href="{{ o.setup_photo_url }}" target="_blank">View picture</a>
+                {% if o.setup_photo_view_url and not o.setup_photo_missing %}
+                  <a class="do-proof-link" href="{{ o.setup_photo_view_url }}" target="_blank">View picture</a>
+                  {% if o.setup_photo_uploaded_at %}
+                    <span class="do-sub">{{ fmt_driver_dt(o.setup_photo_uploaded_at) }}</span>
+                  {% endif %}
+                {% elif o.setup_photo_missing %}
+                  <span class="do-sub">Picture missing</span>
                   {% if o.setup_photo_uploaded_at %}
                     <span class="do-sub">{{ fmt_driver_dt(o.setup_photo_uploaded_at) }}</span>
                   {% endif %}
@@ -322,8 +327,13 @@
               <label class="do-field do-file">
                 <span class="do-field-label">Parking picture</span>
                 <input type="file" name="parking_photo" accept="image/*" capture="environment">
-                {% if o.parking_photo_url %}
-                  <a class="do-proof-link" href="{{ o.parking_photo_url }}" target="_blank">View receipt</a>
+                {% if o.parking_photo_view_url and not o.parking_photo_missing %}
+                  <a class="do-proof-link" href="{{ o.parking_photo_view_url }}" target="_blank">View receipt</a>
+                  {% if o.parking_photo_uploaded_at %}
+                    <span class="do-sub">{{ fmt_driver_dt(o.parking_photo_uploaded_at) }}</span>
+                  {% endif %}
+                {% elif o.parking_photo_missing %}
+                  <span class="do-sub">Receipt missing</span>
                   {% if o.parking_photo_uploaded_at %}
                     <span class="do-sub">{{ fmt_driver_dt(o.parking_photo_uploaded_at) }}</span>
                   {% endif %}

@@ -125,6 +125,28 @@ def _legacy_static_upload_path(stored_url: str | None) -> Path | None:
     return candidate
 
 
+def _driver_order_upload_url(order_id: int, kind: str, stored_url: str | None) -> str | None:
+    if not stored_url:
+        return None
+    filename = Path(str(stored_url).split("?", 1)[0]).name
+    if not filename:
+        return None
+    return url_for("driver.driver_order_upload", order_id=order_id, kind=kind, filename=filename)
+
+
+def _driver_order_upload_exists(order_id: int, kind: str, stored_url: str | None) -> bool:
+    if not stored_url:
+        return False
+    filename = Path(str(stored_url).split("?", 1)[0]).name
+    if not filename:
+        return False
+    persistent = _driver_order_uploads_dir() / str(order_id) / kind / filename
+    if persistent.exists() and persistent.is_file():
+        return True
+    legacy = _legacy_static_upload_path(stored_url)
+    return bool(legacy and legacy.name == filename and legacy.exists() and legacy.is_file())
+
+
 @driver.route("/driver/order-uploads/<int:order_id>/<kind>/<path:filename>")
 def driver_order_upload(order_id: int, kind: str, filename: str):
     if kind not in {"delivery", "parking"}:
@@ -642,6 +664,15 @@ def driver_orders():
         orders = oq.order_by(
             Order.delivery_date.asc(), Order.deliver_at.asc(), Order.id.asc()
         ).all()
+        for order in orders:
+            order.setup_photo_view_url = _driver_order_upload_url(order.id, "delivery", order.setup_photo_url)
+            order.setup_photo_missing = bool(order.setup_photo_url) and not _driver_order_upload_exists(
+                order.id, "delivery", order.setup_photo_url
+            )
+            order.parking_photo_view_url = _driver_order_upload_url(order.id, "parking", order.parking_photo_url)
+            order.parking_photo_missing = bool(order.parking_photo_url) and not _driver_order_upload_exists(
+                order.id, "parking", order.parking_photo_url
+            )
         return render_template(
             "driver_orders.html",
             active="driver_orders",

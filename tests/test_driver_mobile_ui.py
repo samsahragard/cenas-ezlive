@@ -72,6 +72,8 @@ def test_ez_market_driver_stats_strip_removed():
     assert ".em-tab {\n    display: inline-flex;" in template
     assert "background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template
     assert "em-card-head" in template
+    assert ".em-card {\n    background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template
+    assert "border: 0.5px solid rgba(243,111,77,0.58);" in template
     assert ".em-date" in template
     assert "grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);" in template
     assert "<div class=\"em-date\">{{ o.delivery_date or 'No date' }}</div>" in template

@@ -91,7 +91,11 @@ def test_driver_profile_is_hub_and_info_holds_reference_sections():
     info = _read("driver_info.html")
 
     assert "mp-hub-card" in profile
+    assert "mp-hub-main" in profile
+    assert "mp-hub-kpi-line" in profile
     assert "Score details" in profile
+    assert "active order" not in profile
+    assert "estimated for this pay period" not in profile
     assert "Score breakdown" not in profile
     assert "How your pay works" not in profile
     assert "The rules" not in profile

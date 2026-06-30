@@ -68,6 +68,9 @@ def test_ez_market_driver_stats_strip_removed():
     assert "Potential today" not in template
     assert "Potential week" not in template
     assert "Estimates only" not in template
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in template
+    assert ".em-tab {\n    display: inline-flex;" in template
+    assert "background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template
     assert "em-card-head" in template
     assert ".em-date" in template
     assert "grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);" in template

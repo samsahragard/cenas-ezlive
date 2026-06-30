@@ -34,10 +34,30 @@ import hashlib
 import math
 import json as _json
 
+import base64
+from datetime import datetime
+from pathlib import Path
+
 from flask import Blueprint, abort, jsonify, request
 
 from app.db import SessionLocal
-from app.models import Order, OrderItem, Driver, DriverScore, DriverLocation, EzcaterOrderDetails
+from app.models import (
+    Cancellation,
+    DeliveryRequest,
+    Driver,
+    DriverApplication,
+    DriverLocation,
+    DriverLog,
+    DriverNotification,
+    DriverScore,
+    DriverShift,
+    EzcaterOrderDetails,
+    EzcaterTrackingPoint,
+    ManagerMessage,
+    Order,
+    OrderItem,
+    PayCheck,
+)
 
 driverdc_export_bp = Blueprint("driverdc_export", __name__)
 
@@ -111,6 +131,122 @@ def _gps_summary(db, driver_id, order_id):
 
 def _iso(dt):
     return dt.isoformat() if dt else None
+
+
+def _row_dict(row) -> dict:
+    out = {}
+    for col in row.__table__.columns:
+        value = getattr(row, col.name)
+        if hasattr(value, "isoformat"):
+            value = value.isoformat()
+        out[col.name] = value
+    return out
+
+
+def _all_rows(db, model) -> list[dict]:
+    return [_row_dict(row) for row in db.query(model).all()]
+
+
+def _driver_order_uploads_dir() -> Path:
+    return Path(os.environ.get("DRIVER_ORDER_UPLOADS_DIR", "/var/data/driver-order-uploads"))
+
+
+def _legacy_static_upload_path(stored_url: str | None) -> Path | None:
+    if not stored_url or not stored_url.startswith("/static/"):
+        return None
+    relative = stored_url.split("?", 1)[0][len("/static/"):]
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    candidate = (static_root / relative).resolve()
+    try:
+        candidate.relative_to(static_root.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+def _upload_payload(order: Order, kind: str, stored_url: str | None) -> dict | None:
+    if not stored_url:
+        return None
+    filename = Path(str(stored_url).split("?", 1)[0]).name
+    if not filename:
+        return None
+    candidates = [
+        _driver_order_uploads_dir() / str(order.id) / kind / filename,
+    ]
+    legacy = _legacy_static_upload_path(stored_url)
+    if legacy is not None and legacy.name == filename:
+        candidates.append(legacy)
+    found = next((path for path in candidates if path.exists() and path.is_file()), None)
+    payload = {
+        "order_id": order.id,
+        "external_order_id": order.external_order_id,
+        "driver_id": order.assigned_driver_id,
+        "kind": kind,
+        "filename": filename,
+        "stored_url": stored_url,
+        "available": bool(found),
+        "size_bytes": found.stat().st_size if found else None,
+        "file_b64": None,
+    }
+    if found and found.stat().st_size <= int(os.getenv("DRIVER_LOCAL_EXPORT_MAX_FILE_BYTES", "8000000")):
+        payload["file_b64"] = base64.b64encode(found.read_bytes()).decode("ascii")
+    return payload
+
+
+@driverdc_export_bp.route("/cron/driver-local-export", methods=["GET"])
+def driver_local_export():
+    """Owner-only full driver mirror export.
+
+    Unlike /cron/driverdc-export, this is intentionally NOT R1-minimized. Sam
+    asked for an internal local DB for everything drivers do: driver records,
+    applications, shifts, GPS, requests, notifications, paychecks, messages,
+    cancellations, assigned orders, order items, tracking points, and uploaded
+    proof/receipt files when the bytes still exist on server storage.
+    """
+    expected = os.getenv("DRIVERDC_EXPORT_TOKEN")
+    if not expected or _extract_token() != expected:
+        abort(403)
+
+    db = SessionLocal()
+    try:
+        orders = db.query(Order).all()
+        upload_files = []
+        for order in orders:
+            for payload in (
+                _upload_payload(order, "delivery", order.setup_photo_url),
+                _upload_payload(order, "parking", order.parking_photo_url),
+            ):
+                if payload:
+                    upload_files.append(payload)
+
+        return jsonify({
+            "ok": True,
+            "contract": "driver-local-v1-complete",
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "tables": {
+                "drivers": _all_rows(db, Driver),
+                "driver_application": _all_rows(db, DriverApplication),
+                "driver_logs": _all_rows(db, DriverLog),
+                "driver_shift": _all_rows(db, DriverShift),
+                "driver_location": _all_rows(db, DriverLocation),
+                "delivery_request": _all_rows(db, DeliveryRequest),
+                "driver_notification": _all_rows(db, DriverNotification),
+                "driver_score": _all_rows(db, DriverScore),
+                "paycheck": _all_rows(db, PayCheck),
+                "cancellation": _all_rows(db, Cancellation),
+                "manager_message": _all_rows(db, ManagerMessage),
+                "orders": [_row_dict(order) for order in orders],
+                "order_items": _all_rows(db, OrderItem),
+                "ezcater_tracking_point": _all_rows(db, EzcaterTrackingPoint),
+            },
+            "upload_files": upload_files,
+            "counts": {
+                "upload_file_refs": len(upload_files),
+                "upload_files_available": sum(1 for f in upload_files if f["available"]),
+            },
+        })
+    finally:
+        db.close()
 
 
 @driverdc_export_bp.route("/cron/driverdc-export", methods=["GET"])

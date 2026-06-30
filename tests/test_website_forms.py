@@ -153,6 +153,38 @@ def test_public_contact_submission_uses_subject_summary(monkeypatch, tmp_path):
         db.close()
 
 
+def test_public_email_list_submission_persists_email(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+
+    response = app.test_client().post(
+        "/public/forms/newsletter",
+        data={
+            "_source_page": "https://www.cenaskitchen.com/#footer",
+            "email": "guest@example.com",
+        },
+    )
+
+    assert response.status_code == 303
+    db = SessionLocal()
+    try:
+        row = db.query(WebsiteFormSubmission).one()
+        assert row.form_type == "email-list"
+        assert row.subject == "Email list signup"
+        assert row.email == "guest@example.com"
+        assert row.source_page == "https://www.cenaskitchen.com/#footer"
+        assert row.fields == {"email": "guest@example.com"}
+    finally:
+        db.close()
+
+
+def test_public_email_list_submission_requires_email(monkeypatch, tmp_path):
+    app, _SessionLocal = _test_app(monkeypatch, tmp_path)
+
+    response = app.test_client().post("/public/forms/email-list", data={})
+
+    assert response.status_code == 400
+
+
 def test_public_submit_rejects_scheme_relative_next(monkeypatch, tmp_path):
     app, _SessionLocal = _test_app(monkeypatch, tmp_path)
 
@@ -198,6 +230,37 @@ def test_full_access_user_sees_unshared_submissions_and_share_controls(monkeypat
     assert "Share with" in body
     assert "Not shared" in body
     assert "Live website inbox" in body
+
+
+def test_email_list_tab_renders_for_full_access_user(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    sam_id = _make_user(
+        SessionLocal,
+        full_name="Sam Sahragard",
+        email="sam@cenaskitchen.com",
+        role="partner",
+        scope=None,
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="email-list",
+        location=None,
+        position=None,
+        subject="Email list signup",
+        applicant_name=None,
+        email="guest@example.com",
+        fields={"email": "guest@example.com"},
+    )
+
+    client = app.test_client()
+    _login(client, sam_id)
+    response = client.get("/partner/website-forms?type=email-list")
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Email List" in body
+    assert "guest@example.com" in body
+    assert "Email List <small>1</small>" in body
 
 
 def test_manager_only_sees_submissions_shared_to_their_store(monkeypatch, tmp_path):

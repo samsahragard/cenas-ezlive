@@ -36,6 +36,7 @@ FORM_LABELS = OrderedDict([
     ("spirit", "Spirit Days"),
     ("donation", "Donations"),
     ("contact", "Contact"),
+    ("email-list", "Email List"),
 ])
 
 FORM_ALIASES = {
@@ -52,6 +53,15 @@ FORM_ALIASES = {
     "donations": "donation",
     "contact": "contact",
     "feedback": "contact",
+    "email-list": "email-list",
+    "email_list": "email-list",
+    "email list": "email-list",
+    "emails": "email-list",
+    "newsletter": "email-list",
+    "mailing-list": "email-list",
+    "mailing_list": "email-list",
+    "signup": "email-list",
+    "sign-up": "email-list",
 }
 
 FULL_ACCESS_EMAILS = {
@@ -213,6 +223,8 @@ def _summary(form_type: str, fields: dict[str, Any]) -> dict[str, str | None]:
         subject = _field(fields, "support_type") or "Donation request"
     elif form_type == "catering":
         subject = "Catering request"
+    elif form_type == "email-list":
+        subject = "Email list signup"
 
     return {
         "location": _normalize_location(_field(fields, "location", "preferred_location")),
@@ -286,6 +298,8 @@ def public_submit(form_type: str):
 
     fields = _as_plain_fields(request.form)
     summary = _summary(canonical, fields)
+    if canonical == "email-list" and not summary.get("email"):
+        abort(400)
     source_page = (request.form.get("_source_page") or request.referrer or "").strip()[:255] or None
 
     db = SessionLocal()
@@ -314,7 +328,7 @@ def public_submit(form_type: str):
 @website_forms_bp.route("/public/forms/thanks", methods=["GET"])
 def thanks():
     form_type = _canonical_form_type(request.args.get("type")) or "contact"
-    label = FORM_LABELS.get(form_type, "message")
+    label = "email list signup" if form_type == "email-list" else FORM_LABELS.get(form_type, "message")
     html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Thank you - Cenas Kitchen</title>
@@ -337,6 +351,8 @@ def _group_key(row: WebsiteFormSubmission, form_type: str) -> str:
     location = row.location or "No location selected"
     if form_type == "career":
         return f"{location} - {row.position or 'General application'}"
+    if form_type == "email-list":
+        return "Email list"
     if form_type in {"catering", "spirit", "donation"}:
         return location
     return row.subject or "General messages"

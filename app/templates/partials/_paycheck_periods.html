@@ -15,8 +15,8 @@
 {% set manager_edit = manager_edit if manager_edit is defined else false %}
 {% set can_edit = manager_edit and has_permission('drivers.admin') %}
 {% for period in history %}
-<section style="margin-bottom:32px;">
-  <div style="display:flex;justify-content:space-between;align-items:baseline;
+<section class="ph-period-section" style="margin-bottom:32px;">
+  <div class="ph-period-summary" style="display:flex;justify-content:space-between;align-items:baseline;
               padding:10px 14px;background:rgba(255,255,255,0.04);
               border:1px solid var(--glass-border);border-radius:8px;margin-bottom:10px;">
     <div>
@@ -45,8 +45,8 @@
   <input type="hidden" name="rowids" value="{{ ns.ids|join(',') }}">
   <input type="hidden" name="return_to" value="{{ request.path }}">
   {% endif %}
-  <div class="table-scroll">
-    <table class="log-table log-table-view">
+  <div class="table-scroll ph-table-scroll">
+    <table class="log-table log-table-view ph-log-table">
       <thead>
         <tr class="group-header">
           <th>Date</th>

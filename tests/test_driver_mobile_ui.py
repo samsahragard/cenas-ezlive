@@ -43,10 +43,19 @@ def test_driver_orders_uses_mobile_cards_not_wide_table():
 
 def test_driver_pay_history_hides_header_menu():
     template = _read("pay_history.html")
+    partial = _read("partials/_paycheck_periods.html")
 
     assert ".ck-topbar .menu-toggle" in template
     assert ".ck-mobile-trigger" in template
     assert "display: none !important;" in template
+    assert ".ph-disclaimer," in template
+    assert ".ph-check," in template
+    assert ".ph-period-summary," in template
+    assert ".ph-table-scroll," in template
+    assert "background: linear-gradient(145deg, #6B241B 0%, #491511 100%) !important;" in template
+    assert "class=\"ph-period-summary\"" in partial
+    assert "class=\"table-scroll ph-table-scroll\"" in partial
+    assert "class=\"log-table log-table-view ph-log-table\"" in partial
 
 
 def test_driver_order_photo_uploads_allow_photo_library_on_mobile():
@@ -76,9 +85,14 @@ def test_ez_market_driver_stats_strip_removed():
     assert ".em-card {\n    background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in template
     assert "border: 0.5px solid rgba(243,111,77,0.58);" in template
     assert ".em-date" in template
+    assert ".em-card-head .em-time {\n    font-size: 15px;" in template
+    assert ".em-card-head .em-payout { font-size: 15px;" in template
     assert "grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr);" in template
     assert "<div class=\"em-date\">{{ o.delivery_date or 'No date' }}</div>" in template
     assert "<div class=\"em-time\">{{ o.deliver_at or '—' }}</div>" in template
+    available_block = template.split('<div id="tab-available">', 1)[1].split('{% if not public_demo|default(false) %}', 1)[0]
+    assert "mi from pickup" not in available_block
+    assert "{{ o.headcount or '—' }} heads" not in available_block
 
 
 def test_driver_bottom_nav_order_and_status_removed():

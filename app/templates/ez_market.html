@@ -120,7 +120,7 @@
   }
   .em-time { font-size: 18px; font-weight: 500; color: #FAF6EC; }
   .em-card-head .em-time {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     text-align: center;
     line-height: 1.2;
@@ -133,6 +133,7 @@
   }
   .em-payout { font-size: 22px; font-weight: 500; color: #FFD970; text-align: right;
                text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); }
+  .em-card-head .em-payout { font-size: 15px; line-height: 1.2; }
   .em-payout-label { font-size: 10px; color: rgba(236,227,208,0.55); text-align: right;
                      text-transform: uppercase; letter-spacing: 0.1em; }
   .em-trip { display: flex; flex-direction: column; gap: 4px; font-size: 12px;
@@ -403,14 +404,10 @@
               <span class="em-trip-icon"><i class="ti ti-map-pin" aria-hidden="true"></i></span>
               <div class="em-trip-text">
                 <div class="em-trip-name">{{ o.delivery_address or 'n/a' }}</div>
-                {% if o.pickup_miles %}
-                <div class="em-trip-sub">{{ "%.1f"|format(o.pickup_miles) }} mi from pickup</div>
-                {% endif %}
               </div>
             </div>
           </div>
           <div class="em-meta">
-            <span>{{ o.headcount or '—' }} heads</span>
             {% set comp = competing.get(o.id, 0) %}
             {% if comp >= 3 %}
               <span class="em-compete-red">🔥 {{ comp }} drivers competing</span>

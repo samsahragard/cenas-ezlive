@@ -18,11 +18,20 @@
     padding-right: 0;
   }
 
-  .ph-disclaimer { background: #241610; border-left: 2px solid rgba(228,179,64,0.35);
-                   padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
-                   border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-  .ph-check { background: #241610; border: 0.5px solid rgba(217,164,54,0.18);
-              border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .ph-disclaimer,
+  .ph-check,
+  .ph-period-summary,
+  .ph-table-scroll,
+  .ph-empty,
+  .ph-flash {
+    background: linear-gradient(145deg, #6B241B 0%, #491511 100%) !important;
+    border: 0.5px solid rgba(243,111,77,0.58) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05),
+                0 8px 18px rgba(0,0,0,0.24);
+  }
+  .ph-disclaimer { padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
+                   border-radius: 8px; margin-bottom: 16px; }
+  .ph-check { border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
   .ph-check-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
   .ph-period { font-size: 13px; color: rgba(236,227,208,0.85); font-weight: 500; }
   .ph-meta { font-size: 11px; color: rgba(236,227,208,0.55); margin-top: 2px; }
@@ -32,8 +41,17 @@
                      text-transform: uppercase; letter-spacing: 0.1em; }
   .ph-empty { padding: 32px; text-align: center; color: rgba(236,227,208,0.55); font-size: 13px; }
   .ph-flash { padding: 8px 14px; margin-bottom: 10px; border-radius: 8px; font-size: 13px; }
-  .ph-flash.ok { background: #241610; color: #9CCB76; border-left: 3px solid #9CCB76; }
-  .ph-flash.error { background: #241610; color: #E2645C; border-left: 3px solid #E2645C; }
+  .ph-flash.ok { color: #9CCB76; }
+  .ph-flash.error { color: #E2645C; }
+  .ph-period-summary { border-radius: 8px; }
+  .ph-table-scroll { border-radius: 12px; }
+  .ph-log-table thead th,
+  .ph-log-table tr.group-header th {
+    background: rgba(28,8,6,0.40);
+  }
+  .ph-log-table tfoot tr {
+    background: rgba(28,8,6,0.30) !important;
+  }
 </style>
 {% endblock %}
 

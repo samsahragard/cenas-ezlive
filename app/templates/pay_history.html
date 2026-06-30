@@ -9,6 +9,15 @@
 
 {% block head_extra %}
 <style>
+  .ck-topbar .menu-toggle,
+  .ck-mobile-trigger,
+  .ck-topbar .topbar-right .dash-role-banner {
+    display: none !important;
+  }
+  .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-header {
+    padding-right: 0;
+  }
+
   .ph-disclaimer { background: #241610; border-left: 2px solid rgba(228,179,64,0.35);
                    padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
                    border-radius: 0 8px 8px 0; margin-bottom: 16px; }

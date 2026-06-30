@@ -6,11 +6,6 @@
 {% block page_subtitle %}
   <p class="greeting-sub">{{ driver.name }} · {{ location_label }} · {{ orders|length }} assigned orders</p>
 {% endblock %}
-{% block topbar_right %}
-  <form action="{{ url_for('driver.driver_logout') }}" method="POST" style="margin:0;">
-    <button type="submit" class="btn-logout">Sign out</button>
-  </form>
-{% endblock %}
 
 {% block head_extra %}
 <style>
@@ -20,17 +15,11 @@
     display: none !important;
   }
   .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-header {
-    padding-right: 104px;
-  }
-  .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .topbar-right {
-    top: 10px;
-  }
-  .ck-topbar .btn-logout {
-    white-space: nowrap;
+    padding-right: 0;
   }
   @media (max-width: 900px) {
     .ck-topbar:has(.dash-role-banner[src*="role_only/driver"]) .ck-header {
-      padding-right: 94px;
+      padding-right: 0;
     }
   }
 

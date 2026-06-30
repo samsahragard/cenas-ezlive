@@ -22,6 +22,16 @@ def test_driver_orders_uses_mobile_cards_not_wide_table():
     assert "do-proof-grid" in template
     assert ".ck-mobile-trigger" in template
     assert ".ck-topbar .topbar-right .dash-role-banner" in template
+    assert "driver.driver_logout" not in template
+    assert "Sign out" not in template
+
+
+def test_driver_pay_history_hides_header_menu():
+    template = _read("pay_history.html")
+
+    assert ".ck-topbar .menu-toggle" in template
+    assert ".ck-mobile-trigger" in template
+    assert "display: none !important;" in template
 
 
 def test_driver_order_photo_uploads_allow_photo_library_on_mobile():

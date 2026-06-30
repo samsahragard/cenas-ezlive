@@ -110,7 +110,7 @@
     gap: 10px;
     padding: 12px;
     cursor: pointer;
-    color: rgba(236,227,208,0.54);
+    color: #FFFFFF;
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     font-weight: 800;
@@ -251,7 +251,7 @@
       </div>
 
       <details class="do-panel do-proof-dropdown">
-        <summary class="do-proof-summary">Complete delivery</summary>
+        <summary class="do-proof-summary">UPLOAD PHOTOS</summary>
         <div class="do-proof-body">
           <form id="{{ form_id }}" class="do-complete-form" method="POST" action="{{ url_for('driver.driver_order_complete', order_id=o.id) }}" enctype="multipart/form-data">
             <div class="do-proof-grid">

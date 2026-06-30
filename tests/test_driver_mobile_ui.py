@@ -18,7 +18,8 @@ def test_driver_orders_uses_mobile_cards_not_wide_table():
     assert "Start Delivery timestamps" not in template
     assert "do-card" in template
     assert "<details class=\"do-panel do-proof-dropdown\">" in template
-    assert "<summary class=\"do-proof-summary\">Complete delivery</summary>" in template
+    assert "<summary class=\"do-proof-summary\">UPLOAD PHOTOS</summary>" in template
+    assert "color: #FFFFFF;" in template
     assert "do-proof-grid" in template
     assert ".ck-mobile-trigger" in template
     assert ".ck-topbar .topbar-right .dash-role-banner" in template

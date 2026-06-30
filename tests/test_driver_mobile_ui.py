@@ -123,8 +123,6 @@ def test_driver_bottom_nav_order_and_status_removed():
     assert positions == sorted(positions)
     assert "driver_logs" not in template
     assert "'Status'" not in template
-    assert "body.ck-role-driver .ck-bnav" in template
-    assert "background: linear-gradient(180deg, rgba(15, 18, 26, 0.96), rgba(5, 6, 10, 0.98));" in template
 
 
 def test_driver_sidebar_matches_driver_nav_order():

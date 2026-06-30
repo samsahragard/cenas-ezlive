@@ -32,11 +32,13 @@
     gap: 12px;
   }
   .do-card {
-    background: #241610;
-    border: 0.5px solid rgba(217,164,54,0.18);
+    background: linear-gradient(145deg, #6B241B 0%, #491511 100%);
+    border: 0.5px solid rgba(243,111,77,0.58);
     border-radius: 12px;
     overflow: hidden;
     color: #FAF6EC;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05),
+                0 8px 18px rgba(0,0,0,0.24);
   }
   .do-card-head {
     display: grid;
@@ -46,14 +48,14 @@
     padding: 13px 14px;
     border-bottom: 1px solid rgba(236,227,208,0.08);
   }
-  .do-date { color: #FFD970; font-weight: 800; font-size: 15px; }
-  .do-time { color: #FAF6EC; font-weight: 700; text-align: center; }
+  .do-date { color: #FFD970; font-weight: 800; font-size: 15px; line-height: 1.2; }
+  .do-time { color: #FAF6EC; font-weight: 700; font-size: 15px; line-height: 1.2; text-align: center; }
   .do-order-meta {
     text-align: right;
     min-width: 92px;
     max-width: 132px;
   }
-  .do-link { color: #FFD970; text-decoration: none; font-weight: 800; }
+  .do-link { color: #FFD970; text-decoration: none; font-weight: 800; font-size: 15px; line-height: 1.2; }
   .do-link:hover { text-decoration: underline; }
   .do-badge {
     display: inline-flex;
@@ -77,10 +79,10 @@
     padding: 14px;
   }
   .do-panel {
-    border: 1px solid rgba(236,227,208,0.08);
+    border: 1px solid rgba(243,111,77,0.28);
     border-radius: 10px;
     padding: 12px;
-    background: rgba(0,0,0,0.12);
+    background: rgba(28,8,6,0.38);
   }
   .do-start-status {
     display: flex;
@@ -108,7 +110,7 @@
   .do-btn.secondary {
     background: transparent;
     color: #FFD970;
-    border: 1px solid rgba(217,164,54,0.38);
+    border: 1px solid rgba(217,164,54,0.42);
   }
   .do-btn:disabled {
     opacity: 0.55;

@@ -19,7 +19,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from dataclasses import dataclass, field
+from pathlib import Path
 import re
+from urllib.parse import quote
 
 from app.db import SessionLocal
 from app.models import Order, DriverLog
@@ -132,7 +134,7 @@ def _order_file_links(order: Order) -> list[dict[str, str]]:
     if setup_url:
         files.append({
             "label": "Photo",
-            "url": setup_url,
+            "url": _payroll_file_url(order, "delivery", setup_url),
             "title": "Delivery setup/proof photo",
         })
     parking_url = getattr(order, "parking_photo_url", None)
@@ -143,10 +145,20 @@ def _order_file_links(order: Order) -> list[dict[str, str]]:
             title = f"{title} (${parking_cost:.2f})"
         files.append({
             "label": "Receipt",
-            "url": parking_url,
+            "url": _payroll_file_url(order, "parking", parking_url),
             "title": title,
         })
     return files
+
+
+def _payroll_file_url(order: Order, kind: str, stored_url: str) -> str:
+    order_id = getattr(order, "id", None)
+    if order_id is None:
+        return stored_url
+    filename = Path(str(stored_url).split("?", 1)[0]).name
+    if not filename:
+        return stored_url
+    return f"/driver/order-uploads/{order_id}/{kind}/{quote(filename)}"
 
 
 def _is_tracked(tracking_status: str | None) -> bool:

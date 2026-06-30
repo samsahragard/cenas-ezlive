@@ -82,6 +82,7 @@ def test_ezcater_route_history_counts_as_tracked_and_auto_fills_driven_miles():
 
 def test_uploaded_driver_photos_surface_as_payroll_files():
     order = _order(tracking_status="Tracked", pickup_miles=10)
+    order.id = 2
     order.setup_photo_url = "/static/uploads/driver_orders/1/2/delivery.jpg"
     order.parking_photo_url = "/static/uploads/driver_orders/1/2/parking.jpg"
     order.parking_cost = 12.5
@@ -91,12 +92,12 @@ def test_uploaded_driver_photos_surface_as_payroll_files():
     assert pay.files == [
         {
             "label": "Photo",
-            "url": "/static/uploads/driver_orders/1/2/delivery.jpg",
+            "url": "/driver/order-uploads/2/delivery/delivery.jpg",
             "title": "Delivery setup/proof photo",
         },
         {
             "label": "Receipt",
-            "url": "/static/uploads/driver_orders/1/2/parking.jpg",
+            "url": "/driver/order-uploads/2/parking/parking.jpg",
             "title": "Parking receipt ($12.50)",
         },
     ]

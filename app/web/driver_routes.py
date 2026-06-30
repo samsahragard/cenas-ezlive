@@ -11,6 +11,7 @@ them via the per-store Drivers admin page (see store_routes.driver_admin).
 """
 from __future__ import annotations
 
+import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -26,6 +27,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     session,
     url_for,
 )
@@ -79,8 +81,23 @@ def _format_driver_dt(value: datetime | None) -> str:
         return value.strftime("%b %d %I:%M %p")
 
 
+def _driver_order_uploads_dir() -> Path:
+    """Persistent storage for driver delivery proof files.
+
+    Render keeps /var/data across deploys. Local dev falls back to instance/.
+    """
+    base = os.environ.get("DRIVER_ORDER_UPLOADS_DIR", "/var/data/driver-order-uploads")
+    p = Path(base)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except (OSError, PermissionError):
+        p = Path(current_app.root_path).parent / "instance" / "driver-order-uploads"
+        p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def _save_driver_order_image(file_storage, driver_id: int, order_id: int, kind: str) -> str | None:
-    """Persist one driver order image under static/uploads and return its URL."""
+    """Persist one driver order image under persistent storage and return its URL."""
     if not file_storage or not file_storage.filename:
         return None
     safe = secure_filename(file_storage.filename)
@@ -89,11 +106,55 @@ def _save_driver_order_image(file_storage, driver_id: int, order_id: int, kind: 
         raise ValueError("Only image uploads are allowed.")
     stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
     filename = f"{kind}-{stamp}{ext}"
-    rel_dir = Path("uploads") / "driver_orders" / str(driver_id) / str(order_id)
-    target_dir = Path(current_app.static_folder) / rel_dir
+    target_dir = _driver_order_uploads_dir() / str(order_id) / kind
     target_dir.mkdir(parents=True, exist_ok=True)
     file_storage.save(target_dir / filename)
-    return url_for("static", filename=(rel_dir / filename).as_posix())
+    return url_for("driver.driver_order_upload", order_id=order_id, kind=kind, filename=filename)
+
+
+def _legacy_static_upload_path(stored_url: str | None) -> Path | None:
+    if not stored_url or not stored_url.startswith("/static/"):
+        return None
+    relative = stored_url.split("?", 1)[0][len("/static/"):]
+    candidate = (Path(current_app.static_folder) / relative).resolve()
+    static_root = Path(current_app.static_folder).resolve()
+    try:
+        candidate.relative_to(static_root)
+    except ValueError:
+        return None
+    return candidate
+
+
+@driver.route("/driver/order-uploads/<int:order_id>/<kind>/<path:filename>")
+def driver_order_upload(order_id: int, kind: str, filename: str):
+    if kind not in {"delivery", "parking"}:
+        abort(404)
+    safe_filename = Path(filename).name
+    if not safe_filename or safe_filename != filename:
+        abort(404)
+
+    db = next(get_db())
+    try:
+        order = db.get(Order, order_id)
+        if not order:
+            abort(404)
+        stored_url = order.setup_photo_url if kind == "delivery" else order.parking_photo_url
+        if not stored_url or safe_filename not in stored_url:
+            abort(404)
+
+        candidates = [
+            _driver_order_uploads_dir() / str(order_id) / kind / safe_filename,
+        ]
+        legacy = _legacy_static_upload_path(stored_url)
+        if legacy is not None and legacy.name == safe_filename:
+            candidates.append(legacy)
+
+        for path in candidates:
+            if path.exists() and path.is_file():
+                return send_file(str(path), max_age=0)
+        abort(404)
+    finally:
+        db.close()
 
 
 def _parse_parking_cost(raw: str | None) -> float | None:

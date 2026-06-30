@@ -173,3 +173,9 @@ def test_driver_profile_is_hub_and_info_holds_reference_sections():
     assert "How your pay works" in info
     assert "The rules" in info
     assert "Unlock at" in info
+    assert ".mp-info-band" in info
+    assert "background: linear-gradient(145deg, #6B241B 0%, #491511 100%);" in info
+    assert "border-left: 0;\n    border-right: 0;\n    border-radius: 0;" in info
+    assert '<div class="mp-score-box mp-info-band">' in info
+    assert '<div class="mp-pay-box mp-info-band">' in info
+    assert '<div class="mp-rules mp-info-band">' in info

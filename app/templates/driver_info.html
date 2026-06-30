@@ -15,8 +15,16 @@
     padding-right: 0;
   }
 
-  .mp-hero { background: #241610; border: 0.5px solid rgba(217,164,54,0.18);
-             border-radius: 8px; padding: 18px 20px; margin-bottom: 14px; }
+  .mp-info-band {
+    background: linear-gradient(145deg, #6B241B 0%, #491511 100%);
+    border: 0.5px solid rgba(243,111,77,0.58);
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05),
+                0 8px 18px rgba(0,0,0,0.24);
+  }
+  .mp-hero { padding: 18px 20px; margin-bottom: 14px; }
   .mp-hero-row { display: flex; gap: 16px; align-items: center; }
   .mp-avatar { width: 56px; height: 56px; border-radius: 50%; background: rgba(199,59,54,0.65);
                color: #FFFAEC; display: flex; align-items: center; justify-content: center;
@@ -47,8 +55,7 @@
   .mp-section-label { font-size: 11px; color: rgba(236,227,208,0.55); text-transform: uppercase;
                       letter-spacing: 0.14em; margin-bottom: 10px; }
   .mp-ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
-               position: relative; margin: 18px 0 4px;
-               background: #241610; border-radius: 8px; padding: 14px 0 12px; }
+               position: relative; margin: 18px 0 4px; padding: 14px 0 12px; }
   .mp-ladder::before {
     content: ''; position: absolute; top: 32px; left: 12.5%; right: 12.5%;
     height: 2px; background: rgba(255,255,255,0.10); z-index: 0;
@@ -57,7 +64,7 @@
              gap: 6px; position: relative; z-index: 1; }
   .mp-step-circle {
     width: 36px; height: 36px; border-radius: 50%;
-    background: #241610; border: 1.5px solid rgba(255,255,255,0.12);
+    background: #491511; border: 1.5px solid rgba(255,255,255,0.12);
     display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: 600; color: rgba(236,227,208,0.55);
   }
@@ -76,8 +83,7 @@
                        text-align: center; margin-top: 1px; }
 
   .mp-privs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-  .mp-priv-col { background: #241610; border: 0.5px solid rgba(255,255,255,0.06);
-                 border-radius: 8px; padding: 14px 16px; }
+  .mp-priv-col { padding: 14px 16px; }
   .mp-priv-col.unlock { border-color: rgba(228,179,64,0.30); }
   .mp-priv-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
                   color: rgba(236,227,208,0.55); margin-bottom: 10px; }
@@ -98,8 +104,7 @@
   .mp-metric-pts { font-size: 12px; color: rgba(236,227,208,0.85); width: 70px; text-align: right; }
   .mp-metric-pts.full { color: #9CCB76; }
   .mp-metric-pts.partial { color: #FFD970; }
-  .mp-pay-box, .mp-rules { background: #241610; border: 0.5px solid rgba(255,255,255,0.06);
-                           border-radius: 8px; padding: 14px 16px; }
+  .mp-score-box, .mp-pay-box, .mp-rules { padding: 14px 16px; }
   .mp-pay-row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0;
                 font-size: 13px; color: rgba(236,227,208,0.85); }
   .mp-pay-row strong { color: #FFD970; }
@@ -116,7 +121,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="mp-hero">
+<div class="mp-hero mp-info-band">
   <div class="mp-hero-row">
     <div class="mp-avatar">{{ (driver.name or '?')[0:2].upper() }}</div>
     <div style="flex:1;">
@@ -145,7 +150,7 @@
 
 {% set _tier_order = ['new', 'trusted', 'rockstar', 'top_rockstar'] %}
 {% set _tier_index = _tier_order.index(current_tier) if current_tier in _tier_order else 0 %}
-<div class="mp-ladder">
+<div class="mp-ladder mp-info-band">
   {% for slug, label, threshold in [
         ('new',          'New',          '0+'),
         ('trusted',      'Trusted',      '60+'),
@@ -194,13 +199,13 @@
 {% set _have = _privs_by_tier.get(current_tier or 'new', []) %}
 {% set _unlock = _privs_by_tier.get(_next_slug, []) if _next_slug else [] %}
 <div class="mp-privs">
-  <div class="mp-priv-col">
+  <div class="mp-priv-col mp-info-band">
     <div class="mp-priv-head">What you have ({{ (current_tier or 'new').replace('_', ' ').title() }})</div>
     {% for text, _ in _have %}
       <div class="mp-priv-item"><span class="ico">✓</span><span>{{ text }}</span></div>
     {% endfor %}
   </div>
-  <div class="mp-priv-col unlock">
+  <div class="mp-priv-col unlock mp-info-band">
     {% if _next_slug %}
       <div class="mp-priv-head">Unlock at {{ _next_label }}</div>
       {% for text, _ in _unlock %}
@@ -215,6 +220,7 @@
 
 <div class="mp-section">
   <div class="mp-section-label">Score breakdown · last 30 days</div>
+  <div class="mp-score-box mp-info-band">
   {% if score_row %}
     {% set rows = [
       ('Tracking compliance', score_row.tracking_pts, 25, 'start each delivery in ezCater so live tracking is available'),
@@ -244,11 +250,12 @@
       No score yet. Scores compute nightly at 4:00 AM after your first 30-day window.
     </div>
   {% endif %}
+  </div>
 </div>
 
 <div class="mp-section">
   <div class="mp-section-label">How your pay works</div>
-  <div class="mp-pay-box">
+  <div class="mp-pay-box mp-info-band">
     <div class="mp-pay-row"><span>Base · every delivery</span><strong>$25.00</strong></div>
     <div class="mp-pay-row"><span>+ Tracking bonus (when ezCater tracking is active)</span><strong>$10.00</strong></div>
     <div class="mp-pay-row"><span>+ Mileage over 20 mi (only if tracked)</span><strong>$2.00 / mi</strong></div>
@@ -261,7 +268,7 @@
 
 <div class="mp-section">
   <div class="mp-section-label">The rules</div>
-  <div class="mp-rules">
+  <div class="mp-rules mp-info-band">
     <div class="mp-rule">
       <div class="mp-rule-icon" style="color:#E2645C;">!</div>
       <div class="mp-rule-text"><strong>No-shows end your account.</strong>

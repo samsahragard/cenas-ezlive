@@ -37,108 +37,40 @@
                   text-shadow: 0 1px 1px rgba(80,40,0,0.6), 0 0 14px rgba(255,200,80,0.5); }
   .mp-score-sub { font-size: 11px; color: rgba(236,227,208,0.55); }
 
-  .mp-progress { margin-top: 16px; height: 8px; background: rgba(255,255,255,0.06);
-                 border-radius: 4px; position: relative; overflow: hidden; }
-  .mp-progress-bar { height: 100%; background: linear-gradient(to right, #6B4D8C 0%, #6B4D8C 60%, #9CCB76 60%, #9CCB76 80%, #E4B340 80%, #E4B340 95%, #FFD970 95%, #FFD970 100%); }
-  .mp-progress-marker { position: absolute; top: -3px; bottom: -3px; width: 2px;
-                        background: #FFFAEC; box-shadow: 0 0 6px rgba(255,217,112,0.7); }
-  .mp-zone-labels { display: grid; grid-template-columns: 60fr 20fr 15fr 5fr;
-                    font-size: 10px; color: rgba(236,227,208,0.55); margin-top: 4px;
-                    text-transform: uppercase; letter-spacing: 0.08em; }
+  .mp-info-link { display: inline-flex; align-items: center; gap: 6px;
+                  margin-top: 10px; color: #E4B340; text-decoration: none;
+                  font-size: 12px; font-weight: 600; }
 
-  .mp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
-  .mp-stat { background: #241610; border: 0.5px solid rgba(217,164,54,0.18);
-             border-radius: 12px; padding: 14px 16px; }
-  .mp-stat-label { font-size: 11px; color: rgba(236,227,208,0.6); text-transform: uppercase; letter-spacing: 0.1em; }
-  .mp-stat-value { font-size: 22px; font-weight: 500; color: #FFD970; margin-top: 4px; }
-
-  .mp-disclaimer { background: #241610; border-left: 2px solid rgba(228,179,64,0.35);
-                   padding: 8px 12px; font-size: 12px; color: rgba(236,227,208,0.75);
-                   border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-  .mp-disclaimer a { color: #E4B340; text-decoration: none; margin-left: 8px; }
-
-  .mp-section { margin-top: 18px; }
-  .mp-section-label { font-size: 11px; color: rgba(236,227,208,0.55); text-transform: uppercase;
-                      letter-spacing: 0.14em; margin-bottom: 10px; }
-
-  .mp-metric-row { display: flex; align-items: center; gap: 12px; padding: 8px 0;
-                   border-top: 0.5px solid rgba(255,255,255,0.06); }
-  .mp-metric-name { width: 200px; font-size: 13px; color: rgba(236,227,208,0.85); }
-  .mp-metric-bar { flex: 1; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px;
-                   overflow: hidden; }
-  .mp-metric-fill { height: 100%; background: #9CCB76; }
-  .mp-metric-fill.warn { background: #E4B340; }
-  .mp-metric-fill.bad { background: #E2645C; }
-  .mp-metric-pts { font-size: 12px; color: rgba(236,227,208,0.85); width: 70px; text-align: right; }
-  .mp-metric-pts.full { color: #9CCB76; }
-  .mp-metric-pts.partial { color: #FFD970; }
-
-  .mp-rules { background: #241610; border: 0.5px solid rgba(255,255,255,0.06);
-              border-radius: 12px; padding: 14px 16px; }
-  .mp-rule { display: flex; gap: 10px; padding: 8px 0; }
-  .mp-rule-icon { font-size: 16px; flex-shrink: 0; }
-  .mp-rule-text { font-size: 12px; color: rgba(236,227,208,0.75); line-height: 1.5; }
-  .mp-rule-text strong { color: #FAF6EC; font-weight: 500; }
-
-  .mp-pay-row { display: flex; justify-content: space-between; padding: 6px 0;
-                font-size: 13px; color: rgba(236,227,208,0.85); }
-  .mp-pay-row strong { color: #FFD970; }
-
-  /* Tier ladder stepper (Phase 0 Block 4, 2026-05-13) — visualizes the
-     4 tier stages with connecting lines, current tier highlighted. */
-  .mp-ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
-               position: relative; margin: 18px 0 4px;
-               background: #241610; border-radius: 10px; padding: 14px 0 12px; }
-  .mp-ladder::before {
-    content: ''; position: absolute; top: 32px; left: 12.5%; right: 12.5%;
-    height: 2px; background: rgba(255,255,255,0.10); z-index: 0;
+  .mp-hub-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+                 gap: 12px; margin-top: 14px; }
+  .mp-hub-card { display: flex; flex-direction: column; gap: 10px;
+                 min-height: 146px; padding: 14px 16px;
+                 background: #241610; border: 0.5px solid rgba(217,164,54,0.18);
+                 border-radius: 8px; color: inherit; text-decoration: none; }
+  .mp-hub-card:hover { border-color: rgba(228,179,64,0.48);
+                       background: rgba(36,22,16,0.88); }
+  .mp-hub-top { display: flex; justify-content: space-between; gap: 12px;
+                align-items: center; }
+  .mp-hub-title { display: flex; align-items: center; gap: 8px;
+                  color: #FAF6EC; font-size: 14px; font-weight: 650; }
+  .mp-hub-title i { color: #FFD970; font-size: 18px; }
+  .mp-hub-arrow { color: rgba(255,217,112,0.7); font-size: 18px; }
+  .mp-hub-primary { color: #FFD970; font-size: 25px; font-weight: 650;
+                    line-height: 1.05; }
+  .mp-hub-sub { color: rgba(236,227,208,0.68); font-size: 12px;
+                line-height: 1.45; }
+  .mp-hub-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+                 gap: 8px; margin-top: auto; }
+  .mp-hub-kpi { border-top: 0.5px solid rgba(255,255,255,0.08);
+                padding-top: 8px; }
+  .mp-hub-kpi strong { display: block; color: #FAF6EC; font-size: 14px; }
+  .mp-hub-kpi span { display: block; color: rgba(236,227,208,0.52);
+                     font-size: 10px; text-transform: uppercase;
+                     letter-spacing: 0.08em; margin-top: 2px; }
+  @media (max-width: 820px) {
+    .mp-hub-grid { grid-template-columns: 1fr; }
   }
-  .mp-step { display: flex; flex-direction: column; align-items: center;
-             gap: 6px; position: relative; z-index: 1; }
-  .mp-step-circle {
-    width: 36px; height: 36px; border-radius: 50%;
-    background: #241610; border: 1.5px solid rgba(255,255,255,0.12);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 600; color: rgba(236,227,208,0.55);
-    transition: all 0.2s ease;
-  }
-  .mp-step.done .mp-step-circle {
-    background: rgba(228,179,64,0.18); border-color: #E4B340; color: #FFD970;
-  }
-  .mp-step.current .mp-step-circle {
-    background: #E4B340; border-color: #FFD970; color: #28160e;
-    box-shadow: 0 0 0 3px rgba(228,179,64,0.18), 0 0 18px rgba(255,200,80,0.5);
-  }
-  .mp-step-label {
-    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
-    color: rgba(236,227,208,0.55); text-align: center;
-  }
-  .mp-step.current .mp-step-label { color: #FFD970; font-weight: 500; }
-  .mp-step.done .mp-step-label { color: rgba(255,217,112,0.75); }
-  .mp-step-threshold { font-size: 9.5px; color: rgba(236,227,208,0.45);
-                       text-align: center; margin-top: 1px; }
 
-  /* Privilege comparison columns: "What you have" / "Unlock at <next>" */
-  .mp-privs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-              margin-top: 12px; }
-  .mp-priv-col { background: #241610;
-                 border: 0.5px solid rgba(255,255,255,0.06);
-                 border-radius: 12px; padding: 14px 16px; }
-  .mp-priv-col.unlock { border-color: rgba(228,179,64,0.30);
-                        background: #241610; }
-  .mp-priv-head { font-size: 11px; text-transform: uppercase;
-                  letter-spacing: 0.12em; color: rgba(236,227,208,0.55);
-                  margin-bottom: 10px; }
-  .mp-priv-col.unlock .mp-priv-head { color: #FFD970; }
-  .mp-priv-item { display: flex; gap: 8px; padding: 6px 0;
-                  font-size: 12.5px; color: rgba(236,227,208,0.78);
-                  line-height: 1.45; }
-  .mp-priv-item .ico { flex-shrink: 0; color: #9CCB76; font-weight: 700; }
-  .mp-priv-col.unlock .mp-priv-item .ico { color: #FFD970; }
-  .mp-priv-col.unlock .mp-priv-item .ico.locked { color: rgba(236,227,208,0.30); }
-  @media (max-width: 640px) {
-    .mp-privs { grid-template-columns: 1fr; }
-  }
 </style>
 {% endblock %}
 
@@ -160,14 +92,6 @@
       <div class="mp-score-sub">/ 100</div>
     </div>
   </div>
-
-  <div class="mp-progress">
-    <div class="mp-progress-bar"></div>
-    <div class="mp-progress-marker" style="left: {{ score }}%;"></div>
-  </div>
-  <div class="mp-zone-labels">
-    <span>New (0-59)</span><span>Trusted (60-79)</span><span>Rockstar (80-94)</span><span>Top (95+)</span>
-  </div>
   {% set next_threshold = 60 if score < 60 else (80 if score < 80 else (95 if score < 95 else 100)) %}
   {% if score < 95 %}
     <div style="margin-top:10px;font-size:12px;color:rgba(236,227,208,0.75);">
@@ -175,173 +99,61 @@
       {{ 'Trusted' if next_threshold == 60 else ('Rockstar' if next_threshold == 80 else 'Top Rockstar') }}
     </div>
   {% endif %}
+  <a class="mp-info-link" href="{{ url_for('driver_system.driver_info') }}">
+    <i class="ti ti-info-circle" aria-hidden="true"></i>
+    <span>Score details</span>
+  </a>
 </div>
 
-{# Tier ladder stepper (Phase 0 Block 4, Sam's 5/12 mockup). 4 circles
-   New → Trusted → Rockstar → Top Rockstar, current step lit, prior
-   steps marked as done. Each step shows its score threshold underneath. #}
-{% set _tier_order = ['new', 'trusted', 'rockstar', 'top_rockstar'] %}
-{% set _tier_index = _tier_order.index(current_tier) if current_tier in _tier_order else 0 %}
-<div class="mp-ladder">
-  {% for slug, label, threshold in [
-        ('new',          'New',          '0+'),
-        ('trusted',      'Trusted',      '60+'),
-        ('rockstar',     'Rockstar',     '80+'),
-        ('top_rockstar', 'Top Rockstar', '95+'),
-      ] %}
-    {% set _idx = loop.index0 %}
-    {% set _class = 'done' if _idx < _tier_index else ('current' if _idx == _tier_index else 'todo') %}
-    <div class="mp-step {{ _class }}">
-      <div class="mp-step-circle">
-        {% if _idx < _tier_index %}✓{% else %}{{ _idx + 1 }}{% endif %}
+{% set _orders = profile_summary.orders %}
+{% set _market = profile_summary.market %}
+{% set _pay = profile_summary.pay %}
+<div class="mp-hub-grid">
+  <a class="mp-hub-card" href="{{ url_for('driver.driver_orders') }}">
+    <div class="mp-hub-top">
+      <div class="mp-hub-title"><i class="ti ti-clipboard-list" aria-hidden="true"></i><span>Orders</span></div>
+      <i class="ti ti-chevron-right mp-hub-arrow" aria-hidden="true"></i>
+    </div>
+    <div class="mp-hub-primary">{{ _orders.active_count }}</div>
+    <div class="mp-hub-sub">active order{{ 's' if _orders.active_count != 1 else '' }} right now</div>
+    <div class="mp-hub-kpis">
+      <div class="mp-hub-kpi"><strong>{{ _orders.delivered_today_count }}</strong><span>done today</span></div>
+      <div class="mp-hub-kpi"><strong>{{ stat_my_queue }}</strong><span>queue</span></div>
+    </div>
+  </a>
+
+  <a class="mp-hub-card" href="{{ url_for('driver_system.ez_market') }}">
+    <div class="mp-hub-top">
+      <div class="mp-hub-title"><i class="ti ti-flame" aria-hidden="true"></i><span>Ez Market</span></div>
+      <i class="ti ti-chevron-right mp-hub-arrow" aria-hidden="true"></i>
+    </div>
+    <div class="mp-hub-primary">{{ _market.available_count }}</div>
+    <div class="mp-hub-sub">available deliver{{ 'ies' if _market.available_count != 1 else 'y' }} at your store</div>
+    <div class="mp-hub-kpis">
+      <div class="mp-hub-kpi"><strong>{{ _market.pending_count }}</strong><span>requested</span></div>
+      <div class="mp-hub-kpi"><strong>{{ _market.unread_count }}</strong><span>alerts</span></div>
+    </div>
+  </a>
+
+  <a class="mp-hub-card" href="{{ url_for('driver_system.pay_history') }}">
+    <div class="mp-hub-top">
+      <div class="mp-hub-title"><i class="ti ti-receipt" aria-hidden="true"></i><span>Pay</span></div>
+      <i class="ti ti-chevron-right mp-hub-arrow" aria-hidden="true"></i>
+    </div>
+    <div class="mp-hub-primary">${{ "%.2f"|format(stat_potential_week) }}</div>
+    <div class="mp-hub-sub">estimated for this pay period</div>
+    <div class="mp-hub-kpis">
+      <div class="mp-hub-kpi"><strong>${{ "%.2f"|format(stat_potential_today) }}</strong><span>today</span></div>
+      <div class="mp-hub-kpi">
+        {% if _pay.latest_check %}
+          <strong>${{ "%.2f"|format(_pay.latest_check.gross_amount) }}</strong>
+          <span>last check</span>
+        {% else %}
+          <strong>--</strong>
+          <span>last check</span>
+        {% endif %}
       </div>
-      <div class="mp-step-label">{{ label }}</div>
-      <div class="mp-step-threshold">{{ threshold }}</div>
     </div>
-  {% endfor %}
-</div>
-
-{# Side-by-side privileges: "What you have" vs "Unlock at <next>". When
-   the driver is at Top Rockstar, the second column flips to a "Max tier
-   reached" celebration. #}
-{% set _next_slug = _tier_order[_tier_index + 1] if _tier_index + 1 < _tier_order|length else None %}
-{% set _next_label = {'trusted': 'Trusted', 'rockstar': 'Rockstar', 'top_rockstar': 'Top Rockstar'}.get(_next_slug) %}
-{% set _privs_by_tier = {
-  'new': [
-    ('Standard bid pool access (read-only on Ez Market)', True),
-    ('Same-day reminder shown before requesting another delivery', True),
-    ('Lifetime delivery counter on profile', True),
-  ],
-  'trusted': [
-    ('All "New" perks', True),
-    ('Request deliveries on Ez Market', True),
-    ('Multiple same-day deliveries with reminder warning', True),
-    ('Per-metric breakdown shown on profile', True),
-  ],
-  'rockstar': [
-    ('All "Trusted" perks', True),
-    ('Priority on manager-approval sort (above Trusted)', True),
-    ('Multiple deliveries can be approved with reminder warning', True),
-    ('Eligible for the Top Rockstar promotion at 95+', True),
-  ],
-  'top_rockstar': [
-    ('All "Rockstar" perks', True),
-    ('Top of every manager recommendation list', True),
-    ('First-look access to high-value deliveries (TBD)', True),
-    ('Additional privileges TBD by Sam', True),
-  ],
-} %}
-{% set _have = _privs_by_tier.get(current_tier or 'new', []) %}
-{% set _unlock = _privs_by_tier.get(_next_slug, []) if _next_slug else [] %}
-<div class="mp-privs">
-  <div class="mp-priv-col">
-    <div class="mp-priv-head">What you have ({{ (current_tier or 'new').replace('_', ' ').title() }})</div>
-    {% for text, _ in _have %}
-      <div class="mp-priv-item"><span class="ico">✓</span><span>{{ text }}</span></div>
-    {% endfor %}
-  </div>
-  <div class="mp-priv-col unlock">
-    {% if _next_slug %}
-      <div class="mp-priv-head">Unlock at {{ _next_label }}</div>
-      {% for text, _ in _unlock %}
-        <div class="mp-priv-item"><span class="ico locked">●</span><span>{{ text }}</span></div>
-      {% endfor %}
-    {% else %}
-      <div class="mp-priv-head">Top tier reached</div>
-      <div class="mp-priv-item"><span class="ico">★</span><span>You're at the top of the ladder. Keep your score above 95 to stay here — drops below 95 demote you back to Rockstar on the next nightly recompute.</span></div>
-    {% endif %}
-  </div>
-</div>
-
-<div class="mp-stats">
-  <div class="mp-stat">
-    <div class="mp-stat-label">Potential today</div>
-    <div class="mp-stat-value">${{ "%.2f"|format(stat_potential_today) }}</div>
-  </div>
-  <div class="mp-stat">
-    <div class="mp-stat-label">My queue</div>
-    <div class="mp-stat-value">{{ stat_my_queue }}</div>
-  </div>
-  <div class="mp-stat">
-    <div class="mp-stat-label">Potential week</div>
-    <div class="mp-stat-value">${{ "%.2f"|format(stat_potential_week) }}</div>
-  </div>
-</div>
-
-<div class="mp-disclaimer">
-  Estimates only — final amounts are set by payroll on Fridays.
-  <a href="{{ url_for('driver_system.pay_history') }}">View past pay checks →</a>
-</div>
-
-<div class="mp-section">
-  <div class="mp-section-label">Score breakdown · last 30 days</div>
-  {% if score_row %}
-    {% set rows = [
-      ('Tracking compliance', score_row.tracking_pts, 25, 'start each delivery in ezCater so live tracking is available'),
-      ('On-time delivery',    score_row.on_time_pts, 25, 'leave the kitchen at the suggested departure time'),
-      ('Cancellation rate',   score_row.cancellation_pts, 20, 'cancellations within 30 days deduct points'),
-      ('Photo proof on setup', score_row.photo_pts, 10, 'upload a setup photo within 5 min of delivering'),
-      ('Manager response time', score_row.response_pts, 10, 'reply within 5 minutes when manager messages during active delivery'),
-      ('Customer star rating', score_row.star_pts, 10, 'higher rating from customer feedback raises this'),
-    ] %}
-    {% for name, pts, max_pts, tip in rows %}
-      {% set pct = (pts / max_pts) * 100 %}
-      <div class="mp-metric-row">
-        <div class="mp-metric-name">{{ name }}
-          <div style="font-size:11px;color:rgba(236,227,208,0.5);font-weight:400;">{{ tip }}</div>
-        </div>
-        <div class="mp-metric-bar">
-          <div class="mp-metric-fill {% if pct < 50 %}bad{% elif pct < 80 %}warn{% endif %}" style="width: {{ pct }}%;"></div>
-        </div>
-        <div class="mp-metric-pts {% if pts == max_pts %}full{% else %}partial{% endif %}">{{ pts }} / {{ max_pts }}</div>
-      </div>
-    {% endfor %}
-    <div style="font-size:10px;color:rgba(236,227,208,0.4);margin-top:8px;text-align:right;">
-      Last updated {{ score_row.computed_at.strftime('%b %d, %I:%M %p') }}
-    </div>
-  {% else %}
-    <div style="padding:16px;color:rgba(236,227,208,0.55);font-size:13px;">
-      No score yet. Scores compute nightly at 4:00 AM after your first 30-day window.
-    </div>
-  {% endif %}
-</div>
-
-<div class="mp-section">
-  <div class="mp-section-label">How your pay works</div>
-  <div style="background: #241610; border-radius: 12px; padding: 14px 16px;">
-    <div class="mp-pay-row"><span>Base · every delivery</span><strong>$25.00</strong></div>
-    <div class="mp-pay-row"><span>+ Tracking bonus (when ezCater tracking is active)</span><strong>$10.00</strong></div>
-    <div class="mp-pay-row"><span>+ Mileage over 20 mi (only if tracked)</span><strong>$2.00 / mi</strong></div>
-    <div class="mp-pay-row"><span>+ 5-star bonus (when tracked + 5-star review)</span><strong>$5.00</strong></div>
-    <div style="font-size:11px;color:rgba(236,227,208,0.55);margin-top:8px;">
-      If ezCater tracking never starts, the delivery pays the $25 base only. On multi-stop routes, mileage only counts on the first leg.
-    </div>
-  </div>
-</div>
-
-<div class="mp-section">
-  <div class="mp-section-label">The rules</div>
-  <div class="mp-rules">
-    <div class="mp-rule">
-      <div class="mp-rule-icon" style="color:#E2645C;">🛑</div>
-      <div class="mp-rule-text"><strong>No-shows end your account.</strong>
-        A single no-show on an approved delivery (10+ minutes past pickup without check-in) terminates your driver account. No warning step.</div>
-    </div>
-    <div class="mp-rule">
-      <div class="mp-rule-icon" style="color:#E4B340;">⊗</div>
-      <div class="mp-rule-text"><strong>Cancellations are tracked over 90 days.</strong>
-        1 cancellation = score deduction. 2 in 30 days = manager check-in. 3 in 90 days = automatic account review.</div>
-    </div>
-    <div class="mp-rule">
-      <div class="mp-rule-icon" style="color:#9CCB76;">↻</div>
-      <div class="mp-rule-text"><strong>Scores refresh nightly.</strong>
-        Your score recomputes at 4:00 AM every morning over your last 30 days. Tier transitions take effect the next morning.</div>
-    </div>
-    <div class="mp-rule">
-      <div class="mp-rule-icon" style="color:#FAF6EC;">ⓘ</div>
-      <div class="mp-rule-text"><strong>Tracking is the highest-weighted metric for a reason.</strong>
-        ezCater live tracking verifies the delivery for the bonus components, route time, and route miles.</div>
-    </div>
-  </div>
+  </a>
 </div>
 {% endblock %}

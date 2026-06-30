@@ -1271,8 +1271,86 @@ def ez_manage_feasibility_check():
         db.close()
 
 
+def _driver_profile_summary(db, driver: Driver, today: date) -> dict:
+    today_iso = today.isoformat()
+    driver_store = _driver_store_slug(driver)
+
+    active_orders = (
+        db.query(Order)
+        .filter(Order.assigned_driver_id == driver.id)
+        .filter(Order.status.in_(["approved", "picked_up", "en_route"]))
+        .all()
+    )
+    active_orders = [o for o in active_orders if _order_matches_store(o, driver_store)]
+
+    delivered_today = (
+        db.query(Order)
+        .filter(Order.assigned_driver_id == driver.id)
+        .filter(Order.status == "delivered")
+        .filter(Order.delivery_date == today_iso)
+        .all()
+    )
+    delivered_today = [o for o in delivered_today if _order_matches_store(o, driver_store)]
+
+    pending_requests = (
+        db.query(DeliveryRequest)
+        .filter(DeliveryRequest.driver_id == driver.id)
+        .filter(DeliveryRequest.status == "pending")
+        .all()
+    )
+    pending_requests = [
+        r for r in pending_requests
+        if _order_matches_store(db.get(Order, r.delivery_id), driver_store)
+    ]
+    existing_pending_ids = {r.delivery_id for r in pending_requests}
+
+    available_q = (
+        db.query(Order)
+        .filter(Order.delivery_date >= today_iso)
+        .filter(Order.status != "cancelled")
+        .order_by(Order.delivery_date.asc(), Order.deliver_at.asc().nullslast())
+    )
+    if driver_store:
+        available_q = available_q.filter(_order_store_filter(driver_store))
+        available_orders = [
+            o for o in available_q.limit(200).all()
+            if _order_matches_store(o, driver_store) and o.id not in existing_pending_ids
+        ]
+    else:
+        available_orders = []
+
+    latest_check = (
+        db.query(PayCheck)
+        .filter(PayCheck.driver_id == driver.id)
+        .order_by(desc(PayCheck.pay_period_end), desc(PayCheck.closed_at))
+        .first()
+    )
+
+    unread_notifications = (
+        db.query(DriverNotification)
+        .filter(DriverNotification.driver_id == driver.id)
+        .filter(DriverNotification.read_at.is_(None))
+        .count()
+    )
+
+    return {
+        "orders": {
+            "active_count": len(active_orders),
+            "delivered_today_count": len(delivered_today),
+        },
+        "market": {
+            "available_count": len(available_orders),
+            "pending_count": len(pending_requests),
+            "unread_count": unread_notifications,
+        },
+        "pay": {
+            "latest_check": latest_check,
+        },
+    }
+
+
 # ============================================================
-# My Profile — driver standing page (§7)
+# My Profile / Info — driver standing pages (§7)
 # ============================================================
 
 @driver_system_bp.route("/my-profile", methods=["GET"])
@@ -1299,9 +1377,36 @@ def my_profile():
             "stat_potential_today": _potential_today(db, driver.id, today),
             "stat_my_queue": _my_queue_count(db, driver.id),
             "stat_potential_week": _potential_week(db, driver.id, today),
+            "profile_summary": _driver_profile_summary(db, driver, today),
             "score": driver.current_score or 0,
         }
         return render_template("my_profile.html", **ctx)
+    finally:
+        db.close()
+
+
+@driver_system_bp.route("/info", methods=["GET"])
+@require_driver
+def driver_info():
+    driver = _current_driver()
+    if not driver:
+        return redirect(url_for("driver.driver_login"))
+    db = SessionLocal()
+    try:
+        latest = (
+            db.query(DriverScore)
+            .filter(DriverScore.driver_id == driver.id)
+            .order_by(desc(DriverScore.computed_at))
+            .first()
+        )
+        return render_template(
+            "driver_info.html",
+            active="driver_info",
+            driver=driver,
+            score_row=latest,
+            current_tier=driver.current_tier or "new",
+            score=driver.current_score or 0,
+        )
     finally:
         db.close()
 

@@ -43,7 +43,7 @@
    popover block was removed.
 
    Per-role (tab set mirrors sidebar.html's section set):
-     - driver  -> "My Work" 4-tab bar (Profile / Orders / Ez Market / Pay)
+     - driver  -> "My Work" 5-tab bar (Profile / Orders / Ez Market / Pay / Info)
      - expo    → 4 tabs, Manager dropped
      - others  → 5 tabs (Today / Manager / Catering / Operations / Vendors)
 
@@ -322,6 +322,7 @@
       ('/driver/orders','driver_orders','ti-clipboard-list','Orders'),
       ('/ez-market',   'ez_market',   'ti-flame',     'Ez Market'),
       ('/pay-history', 'pay_history', 'ti-receipt',   'Pay'),
+      ('/info',        'driver_info', 'ti-info-circle','Info'),
     ] %}
     {% set _public_demo = public_demo|default(false) %}
     <a href="{{ '#' if _public_demo else href }}"

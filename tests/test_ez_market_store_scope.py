@@ -120,10 +120,36 @@ def test_public_market2_shows_both_stores_without_functional_actions(app_bound):
     assert 'action="/ez-market/cancel-request/' not in html
     assert "Request delivery" in html
     assert "Not open for bidding (status: approved)" in html
-    for label in ("Profile", "Orders", "Ez Market", "Pay"):
+    for label in ("Profile", "Orders", "Ez Market", "Pay", "Info"):
         assert label in html
     assert 'href="#"' in html
     assert 'aria-disabled="true"' in html
+
+
+def test_driver_profile_hub_and_info_routes_render(app_bound):
+    flask_app, db = app_bound
+    driver = _driver(db, location="tomball")
+
+    client = flask_app.test_client()
+    with client.session_transaction() as session:
+        session["driver_id"] = driver.id
+        session["driver_name"] = driver.name
+        session["driver_location"] = driver.location
+        session["driver_session_version"] = driver.session_version
+        session["auth_ok"] = True
+
+    profile_resp = client.get("/my-profile")
+    assert profile_resp.status_code == 200
+    profile_html = profile_resp.get_data(as_text=True)
+    assert "mp-hub-card" in profile_html
+    assert "Score details" in profile_html
+    assert "How your pay works" not in profile_html
+
+    info_resp = client.get("/info")
+    assert info_resp.status_code == 200
+    info_html = info_resp.get_data(as_text=True)
+    assert "How your pay works" in info_html
+    assert "Score breakdown" in info_html
 
 
 def test_cross_store_request_is_blocked_server_side(app_bound):

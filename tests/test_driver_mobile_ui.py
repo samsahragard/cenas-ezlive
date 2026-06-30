@@ -54,6 +54,7 @@ def test_driver_bottom_nav_order_and_status_removed():
         "('/driver/orders','driver_orders'",
         "('/ez-market',   'ez_market'",
         "('/pay-history', 'pay_history'",
+        "('/info',        'driver_info'",
     ]
     positions = [template.index(marker) for marker in expected_order]
 
@@ -70,6 +71,7 @@ def test_driver_sidebar_matches_driver_nav_order():
         'href="/driver/orders"',
         'href="/ez-market"',
         'href="/pay-history"',
+        'href="/info"',
     ]
     positions = [template.index(marker) for marker in expected_order]
 
@@ -82,3 +84,19 @@ def test_driver_profile_hides_role_badge():
 
     assert ".ck-topbar .topbar-right .dash-role-banner" in template
     assert "display: none !important;" in template
+
+
+def test_driver_profile_is_hub_and_info_holds_reference_sections():
+    profile = _read("my_profile.html")
+    info = _read("driver_info.html")
+
+    assert "mp-hub-card" in profile
+    assert "Score details" in profile
+    assert "Score breakdown" not in profile
+    assert "How your pay works" not in profile
+    assert "The rules" not in profile
+
+    assert "Score breakdown" in info
+    assert "How your pay works" in info
+    assert "The rules" in info
+    assert "Unlock at" in info

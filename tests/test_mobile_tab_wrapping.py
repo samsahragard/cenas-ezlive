@@ -73,12 +73,16 @@ def test_fresh_food_place_order_uses_compact_order_day_row():
     assert "orderer_first" in source
     assert "<i class=\"ti ti-send\"></i>Submit" in source
     assert ".ff-cat-table {\n      display: grid;" in source
-    assert "grid-template-columns: repeat(5, minmax(0, 1fr));" in source
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in source
+    assert ".ff-mobile-card.has-inv,\n    .ff-mobile-card.has-order" in source
     assert "data-ff-mobile-toggle" in source
     assert "ff-mobile-panel" in source
     assert "data-ff-mobile-kind=\"inv\"" in source
     assert "data-ff-mobile-kind=\"or\"" in source
     assert "body.ff-mobile-sheet-open" in source
+    assert "cenas:fresh-food-place-order:v1:" in source
+    assert "window.localStorage.setItem(draftKey" in source
+    assert "window.localStorage.removeItem(draftKey)" in source
     assert "Placed by" not in source
     assert "Submit order" not in source
     assert "delivery.strftime('%A, %B %d')" not in source

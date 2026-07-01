@@ -4151,16 +4151,22 @@ def _prep_status_label(status):
     }.get(status or "not-completed", "Not completed")
 
 
-def _prep_time_label(dt):
+def _prep_time_label(dt, *, utc=False):
     if not dt:
         return None
-    return dt.strftime("%I:%M %p").lstrip("0")
+    display_dt = _central_dt(dt) if utc else dt
+    if not display_dt:
+        return None
+    return display_dt.strftime("%I:%M %p").lstrip("0")
 
 
 def _prep_datetime_label(dt):
     if not dt:
         return None
-    return f"{dt:%b} {dt.day}, {dt.year} {_prep_time_label(dt)}"
+    local = _central_dt(dt)
+    if not local:
+        return None
+    return f"{local:%b} {local.day}, {local.year} {_prep_time_label(local)}"
 
 
 def _parse_qty(s):
@@ -4449,7 +4455,7 @@ def _render_prep_list_v3(db, label, active_key):
             "notes": (e.notes if e else None),
             "completed_by": (e.completed_by_name if e else None),
             "completed_at": (e.completed_at if e else None),
-            "completed_at_label": _prep_time_label(e.completed_at) if e else None,
+            "completed_at_label": _prep_time_label(e.completed_at, utc=True) if e else None,
             "recipe_id": rid,
             "recipe_name": (pi.name if rid else None),
             "yield_label": y, "prep_minutes": mins, "shelf_days": shelf,
@@ -4643,7 +4649,7 @@ def _render_prep_list_v3(db, label, active_key):
                 "prep_qty": e.prep_qty,
                 "completed_by": e.completed_by_name or (
                     e.assignee_name if st == "completed" else None),
-                "completed_at_label": _prep_time_label(e.completed_at),
+                "completed_at_label": _prep_time_label(e.completed_at, utc=True),
                 "notes": e.notes,
             })
             if len(recent_entries) >= 60:

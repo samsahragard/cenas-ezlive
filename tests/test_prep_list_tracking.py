@@ -6,6 +6,15 @@ from types import SimpleNamespace
 from flask import Flask, g
 
 
+def test_prep_timestamp_labels_render_houston_time():
+    from app.web.store_routes import _prep_datetime_label, _prep_time_label
+
+    utc_dt = datetime(2026, 7, 1, 17, 7)
+
+    assert _prep_datetime_label(utc_dt) == "Jul 1, 2026 12:07 PM"
+    assert _prep_time_label(utc_dt, utc=True) == "12:07 PM"
+
+
 def test_prep_tracker_save_is_day_scoped_and_audited(db_session):
     from app.models import PrepAuditLog, PrepEntry, PrepItem
     from app.web.store_routes import _prep_list_v3_post, _prep_load_helpers

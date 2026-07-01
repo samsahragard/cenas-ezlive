@@ -203,6 +203,7 @@
   }
   .wf-badge.reviewed { color: #8ff0b1; border-color: rgba(143,240,177,.35); }
   .wf-badge.archived { color: var(--wf-faint); border-color: rgba(250,246,236,.18); }
+  .wf-badge.deleted { color: var(--wf-red-bright); border-color: rgba(232,88,82,.48); }
   .wf-lines {
     display: grid;
     gap: 6px;
@@ -324,14 +325,14 @@
     }
     .wf-status-tabs {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       width: 100%;
-      gap: 6px;
+      gap: 4px;
     }
     .wf-status-tab {
       min-width: 0;
-      padding: 9px 4px;
-      font-size: 12px;
+      padding: 9px 2px;
+      font-size: 10px;
     }
     .wf-header-meta {
       width: 100%;
@@ -507,6 +508,9 @@
               {% endif %}
               {% if row.status != "archived" %}
               <button type="submit" name="status" value="archived">Archive</button>
+              {% endif %}
+              {% if row.status != "deleted" %}
+              <button type="submit" name="status" value="deleted">Delete</button>
               {% endif %}
               {% if row.status != "new" %}
               <button type="submit" name="status" value="new">Back to new</button>

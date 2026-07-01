@@ -322,6 +322,50 @@ def test_location_tabs_filter_all_form_tab_counts(monkeypatch, tmp_path):
     assert re.search(r'<span class="wf-tab-short">Catering</span>\s*<small>1</small>', body)
 
 
+def test_full_access_user_can_soft_delete_submission(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    sam_id = _make_user(
+        SessionLocal,
+        full_name="Sam Sahragard",
+        email="sam@cenaskitchen.com",
+        role="partner",
+        scope=None,
+    )
+    submission_id = _make_submission(
+        SessionLocal,
+        form_type="career",
+        location="Copperfield",
+        position="Server",
+        applicant_name="Delete Candidate",
+    )
+
+    client = app.test_client()
+    _login(client, sam_id)
+    initial_response = client.get("/partner/website-forms?type=career")
+    initial_body = initial_response.get_data(as_text=True)
+    assert initial_response.status_code == 200
+    assert "Deleted" in initial_body
+    assert 'name="status" value="deleted">Delete</button>' in initial_body
+
+    response = client.post(
+        f"/partner/website-forms/{submission_id}/status",
+        data={"status": "deleted"},
+    )
+    assert response.status_code == 303
+    db = SessionLocal()
+    try:
+        row = db.get(WebsiteFormSubmission, submission_id)
+        assert row.status == "deleted"
+    finally:
+        db.close()
+
+    deleted_response = client.get("/partner/website-forms?type=career&status=deleted")
+    deleted_body = deleted_response.get_data(as_text=True)
+    assert deleted_response.status_code == 200
+    assert "Delete Candidate" in deleted_body
+    assert '<span class="wf-badge deleted">deleted</span>' in deleted_body
+
+
 def test_manager_only_sees_submissions_shared_to_their_store(monkeypatch, tmp_path):
     app, SessionLocal = _test_app(monkeypatch, tmp_path)
     sam_id = _make_user(
@@ -434,7 +478,7 @@ def test_sub_form_mobile_tabs_fit_one_row_without_horizontal_scroll():
     source = template.read_text(encoding="utf-8")
 
     assert ".wf-status-tabs {\n      display: grid;" in source
-    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in source
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in source
     assert ".wf-location-tabs {\n      display: grid;" in source
     assert ".wf-location-tab" in source
     assert ".wf-tabs {\n      display: grid;" in source

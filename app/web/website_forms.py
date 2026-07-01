@@ -52,7 +52,10 @@ STATUS_FILTERS = OrderedDict([
     ("", "All"),
     ("new", "New"),
     ("archived", "Archived"),
+    ("deleted", "Deleted"),
 ])
+
+STATUS_ACTIONS = {"new", "reviewed", "archived", "deleted"}
 
 LOCATION_FILTERS = OrderedDict([
     ("", "Both"),
@@ -513,7 +516,7 @@ def partner_form_status(submission_id: int):
     if not full_access:
         abort(403)
     status = (request.form.get("status") or "").strip().lower()
-    if status not in {"new", "reviewed", "archived"}:
+    if status not in STATUS_ACTIONS:
         abort(400)
     db = SessionLocal()
     try:

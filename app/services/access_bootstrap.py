@@ -421,6 +421,13 @@ def _move_employee_to_manager_profile(
 
     position_stores = tuple(position_store_scopes or (store_scope,))
     store_position_changed = False
+    employee_profile_changed = False
+    if getattr(employee, "active", True) is not True:
+        employee.active = True
+        employee_profile_changed = True
+    if employee_profile_changed:
+        employee.session_version = (employee.session_version or 0) + 1
+
     if exclusive_role_positions:
         desired_position = _position_for_role(db, role)
         desired_store_keys = {
@@ -555,7 +562,7 @@ def _move_employee_to_manager_profile(
                 ip=None,
             ))
 
-    if store_position_changed or user_changed or employee_link_changed:
+    if store_position_changed or user_changed or employee_link_changed or employee_profile_changed:
         log.info(
             "access bootstrap: moved %s to %s user %s with %s",
             employee.full_name,

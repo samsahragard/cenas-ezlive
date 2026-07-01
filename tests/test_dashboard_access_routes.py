@@ -9,6 +9,7 @@ import pytest
 os.environ.setdefault("ALLOW_DEV_SECRET", "1")
 
 from app.models import (
+    Driver,
     DriverLocation,
     DriverShift,
     Employee,
@@ -272,6 +273,11 @@ def test_corporate_driver_is_limited_to_shift_corp_order_and_fresh_fulfill(dashb
     assert db.query(DriverShift).count() == 1
     assert db.query(DriverLocation).count() == 1
     assert db.query(DriverLocation).one().order_id is None
+    assert db.query(Driver).one().location == "corporate"
+
+    legacy_live = client.get("/dos/drivers-live/positions.json")
+    assert legacy_live.status_code == 200
+    assert legacy_live.get_json()["drivers"] == []
 
     end = client.post("/dos/corporate-driver/shift/end", json={})
     assert end.status_code == 200

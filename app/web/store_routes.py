@@ -661,7 +661,11 @@ def driver_tracking():
         # Match each roster row to a Driver in our DB by phone (for showing
         # email / address / account status).
         drivers_by_phone = {}
-        for d in db.query(Driver).filter(Driver.phone.isnot(None)).all():
+        for d in (
+            db.query(Driver)
+            .filter(Driver.phone.isnot(None), Driver.location != "corporate")
+            .all()
+        ):
             drivers_by_phone[normalize_phone(d.phone)] = d
 
         # Per-period summary: show the JUST-CLOSED period (the one being paid
@@ -713,7 +717,7 @@ def driver_paycheck_by_driver(driver_id: int):
     db = next(get_db())
     try:
         d = db.get(Driver, driver_id)
-        if not d:
+        if not d or (d.location or "").strip().lower() == "corporate":
             from flask import abort as _abort
             _abort(404)
         # store-scope guard: a tomball manager shouldn't be able to peek
@@ -905,14 +909,14 @@ def drivers_admin():
                 .all()
             )
         else:
-            q = db.query(Driver).filter(Driver.active == show_active)
+            q = db.query(Driver).filter(Driver.active == show_active, Driver.location != "corporate")
             if g.current_location != "both":
                 q = q.filter(Driver.location == g.current_location)
             rows = q.order_by(Driver.location, Driver.name).all()
 
         # Count both tabs for pill labels
-        active_q = db.query(Driver).filter(Driver.active == True)
-        inactive_q = db.query(Driver).filter(Driver.active == False)
+        active_q = db.query(Driver).filter(Driver.active == True, Driver.location != "corporate")
+        inactive_q = db.query(Driver).filter(Driver.active == False, Driver.location != "corporate")
         if g.current_location != "both":
             active_q = active_q.filter(Driver.location == g.current_location)
             inactive_q = inactive_q.filter(Driver.location == g.current_location)
@@ -1005,7 +1009,11 @@ def drivers_update(driver_id: int):
     db = next(get_db())
     try:
         row = db.get(Driver, driver_id)
-        if not row or (g.current_location != "both" and row.location != g.current_location):
+        if (
+            not row
+            or (row.location or "").strip().lower() == "corporate"
+            or (g.current_location != "both" and row.location != g.current_location)
+        ):
             return redirect(url_for("store.drivers_admin",
                                     error="Driver not found at this store."))
         loc = (request.form.get("location") or "").strip().lower()
@@ -1032,7 +1040,11 @@ def drivers_reset(driver_id: int):
     db = next(get_db())
     try:
         row = db.get(Driver, driver_id)
-        if not row or (g.current_location != "both" and row.location != g.current_location):
+        if (
+            not row
+            or (row.location or "").strip().lower() == "corporate"
+            or (g.current_location != "both" and row.location != g.current_location)
+        ):
             return redirect(url_for("store.drivers_admin", error="Driver not found at this store."))
         temp = issue_temp_password(db, row)
         return redirect(url_for("store.drivers_admin", temp_pw=temp, temp_for=row.name))
@@ -1075,7 +1087,7 @@ def drivers_live_positions():
         # Open shifts joined to driver, optionally filtered by location
         q = (db.query(DriverShift, Driver)
              .join(Driver, DriverShift.driver_id == Driver.id)
-             .filter(DriverShift.ended_at.is_(None)))
+             .filter(DriverShift.ended_at.is_(None), Driver.location != "corporate"))
         if g.current_location != "both":
             q = q.filter(Driver.location == g.current_location)
         results = []
@@ -1154,6 +1166,8 @@ def _scoped_driver(db, driver_id):
     """Look up a driver, enforcing the store's location scope."""
     drv = db.get(Driver, driver_id)
     if not drv:
+        return None
+    if (drv.location or "").strip().lower() == "corporate":
         return None
     if g.current_location != "both" and drv.location != g.current_location:
         return None
@@ -6731,7 +6745,11 @@ def drivers_toggle_active(driver_id: int):
     db = next(get_db())
     try:
         row = db.get(Driver, driver_id)
-        if not row or (g.current_location != "both" and row.location != g.current_location):
+        if (
+            not row
+            or (row.location or "").strip().lower() == "corporate"
+            or (g.current_location != "both" and row.location != g.current_location)
+        ):
             return redirect(url_for("store.drivers_admin", error="Driver not found at this store."))
         row.active = not row.active
         db.commit()

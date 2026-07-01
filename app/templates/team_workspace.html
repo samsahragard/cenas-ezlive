@@ -847,7 +847,7 @@
     return addable.some(function (p) { return p.section === section; });
   }
 
-  // Render ONE labeled subsection (Management, Tipped/Hourly, or Driver) inside
+  // Render ONE labeled subsection (Management, Tipped/Hourly, or C-Driver) inside
   // a store block.
   function renderSection(storeKey, title, section, rows, allowAdd) {
     var add = allowAdd === false
@@ -882,7 +882,7 @@
     openEmpId = null;  // a fresh render rebuilds every row -> no panel is open
     // S7/S8 store-split: for EACH store render a labeled block, split into a
     // MANAGEMENT subsection (s.management[]), TIPPED/HOURLY subsection
-    // (s.hourly[]), and DRIVER subsection (s.driver[]). The backend
+    // (s.hourly[]), and C-DRIVER subsection (s.driver[]). The backend
     // pre-partitions these; if an older payload omits them, derive from
     // employees[].section (rows with section null stay out of section groups).
     // Any section with an addable position carries the section-scoped +Add.
@@ -910,7 +910,7 @@
       panelsHtml += renderSection(s.store_key, "Management", "management", mgmt, hasAddableSection("management"));
       panelsHtml += renderSection(s.store_key, "Tipped / Hourly", "hourly", hrly, hasAddableSection("hourly"));
       if (drvr.length || hasAddableSection("driver")) {
-        panelsHtml += renderSection(s.store_key, "Driver", "driver", drvr, hasAddableSection("driver"));
+        panelsHtml += renderSection(s.store_key, "C-Driver", "driver", drvr, hasAddableSection("driver"));
       }
       panelsHtml += '</div>';
     });
@@ -1548,7 +1548,7 @@
       out += '<div class="tws-store-grp"><div class="lbl">' + esc(slabel) + '</div>';
       if (mgmtPos.length) out += '<div class="tws-assign-sec">Management</div><div class="tws-multi">' + grp(mgmtPos, held, skey) + '</div>';
       if (hrlyPos.length) out += '<div class="tws-assign-sec">Tipped / Hourly</div><div class="tws-multi">' + grp(hrlyPos, held, skey) + '</div>';
-      if (drvrPos.length) out += '<div class="tws-assign-sec">Driver</div><div class="tws-multi">' + grp(drvrPos, held, skey) + '</div>';
+      if (drvrPos.length) out += '<div class="tws-assign-sec">C-Driver</div><div class="tws-multi">' + grp(drvrPos, held, skey) + '</div>';
       out += '</div>';
     });
     return out;
@@ -1879,7 +1879,7 @@
 
   /* ---------------- +Add team member (Sam #2310-2317; S8 store+section-scoped) ----------------
      There is one +Add button per addable store section (Management,
-     Tipped/Hourly, Driver),
+     Tipped/Hourly, C-Driver),
      rendered by renderBoard with data-add-store + data-add-section. Clicking one
      opens the SAME modal but with the target store + section FIXED: addCtx holds
      them, the position list is FILTERED to that section's addable positions, and
@@ -1890,7 +1890,7 @@
 
   function sectionLabel(section) {
     if (section === "management") return "Management";
-    if (section === "driver") return "Driver";
+    if (section === "driver") return "C-Driver";
     return "Tipped / Hourly";
   }
 

@@ -191,7 +191,7 @@ def test_access_bootstrap_moves_james_to_c_driver_profile(db_session):
         phone="555-555-5151",
         email="james@test.local",
         passcode_hash="james-employee-pin-hash",
-        active=True,
+        active=False,
         session_version=7,
     )
     server = Position(id=52, name="Server", store_key=None)
@@ -209,7 +209,8 @@ def test_access_bootstrap_moves_james_to_c_driver_profile(db_session):
     user = db_session.query(User).filter(User.full_name == "James Paddie").one()
     assert user.id == existing_user.id
     assert employee.user_id == user.id
-    assert employee.session_version == 8
+    assert employee.active is True
+    assert employee.session_version == 9
     assert user.permission_level == "corporate_driver"
     assert user.store_scope == "tomball,copperfield"
     assert user.passcode_hash == employee.passcode_hash

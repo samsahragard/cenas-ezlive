@@ -247,7 +247,8 @@ def test_team_workspace_exposes_driver_position_group_for_assign_and_add():
     assert "function hasAddableSection(section)" in template
     assert 'hasAddableSection("driver")' in template
     assert 'var drvrPos = addable.filter(function (p) { return p.section === "driver"; });' in template
-    assert '<div class="tws-assign-sec">Driver</div><div class="tws-multi">' in template
+    assert '<div class="tws-assign-sec">C-Driver</div><div class="tws-multi">' in template
+    assert 'return "C-Driver";' in template
 
 
 def test_market_iframe_skips_auto_height_feedback_loop():

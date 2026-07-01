@@ -359,6 +359,11 @@ def test_full_access_user_can_soft_delete_submission(monkeypatch, tmp_path):
     finally:
         db.close()
 
+    all_response = client.get("/partner/website-forms?type=career")
+    all_body = all_response.get_data(as_text=True)
+    assert all_response.status_code == 200
+    assert "Delete Candidate" not in all_body
+
     deleted_response = client.get("/partner/website-forms?type=career&status=deleted")
     deleted_body = deleted_response.get_data(as_text=True)
     assert deleted_response.status_code == 200

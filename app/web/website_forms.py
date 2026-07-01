@@ -406,6 +406,8 @@ def partner_forms():
             q = q.filter(WebsiteFormSubmission.location == location_filter)
         if status_filter:
             q = q.filter(WebsiteFormSubmission.status == status_filter)
+        else:
+            q = q.filter(WebsiteFormSubmission.status != "deleted")
         raw_rows = q.order_by(WebsiteFormSubmission.created_at.desc()).limit(250).all()
         if full_access:
             rows = raw_rows
@@ -429,6 +431,8 @@ def partner_forms():
                 count_q = count_q.filter(WebsiteFormSubmission.location == location_filter)
             if status_filter:
                 count_q = count_q.filter(WebsiteFormSubmission.status == status_filter)
+            else:
+                count_q = count_q.filter(WebsiteFormSubmission.status != "deleted")
             count_rows = count_q.all()
             counts[key] = (
                 len(count_rows)

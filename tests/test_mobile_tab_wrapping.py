@@ -75,6 +75,7 @@ def test_fresh_food_place_order_uses_compact_order_day_row():
     assert ".ff-cat-table {\n      display: grid;" in source
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in source
     assert ".ff-mobile-card.has-inv,\n    .ff-mobile-card.has-order" in source
+    assert ".ff-mobile-card.open.has-inv,\n    .ff-mobile-card.open.has-order" in source
     assert "data-ff-mobile-toggle" in source
     assert "ff-mobile-panel" in source
     assert "data-ff-mobile-kind=\"inv\"" in source

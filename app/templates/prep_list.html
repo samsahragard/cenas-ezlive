@@ -230,21 +230,23 @@
   }
   .prep-team-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 8px;
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
   .prep-team-card {
-    display: flex;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 10px;
     align-items: center;
-    padding: 10px 12px;
+    min-height: 42px;
+    padding: 7px 10px;
     background: var(--prep-bg-input);
     border: 0.5px solid var(--prep-border-subtle);
     border-radius: 8px;
   }
   .prep-team-avatar {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     display: grid;
     place-items: center;
@@ -255,7 +257,15 @@
     font-family: 'Instrument Serif', serif;
     font-weight: 800;
   }
-  .prep-team-name { font-size: 12px; font-weight: 800; }
+  .prep-team-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--prep-cream);
+    font-size: 12px;
+    font-weight: 900;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .prep-team-stats, .prep-empty {
     color: var(--prep-cream-faint);
     font-family: 'JetBrains Mono', monospace;
@@ -263,9 +273,13 @@
   }
   .prep-team-status {
     display: inline-block;
-    margin-top: 3px;
     color: var(--prep-gold-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
     font-weight: 900;
+    justify-self: end;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
   .prep-team-status.assigned { color: var(--prep-chop); }
   .prep-list-panel { overflow: hidden; }
@@ -518,7 +532,7 @@
     .prep-report-action { justify-self: start; }
   }
   @media (max-width: 560px) {
-    .prep-page { padding: 14px; }
+    .prep-page { min-height: auto; padding: 14px; }
     .prep-kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
     .prep-kpi-box { min-height: 42px; padding: 6px 8px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; }
     .prep-kpi-label { font-size: 7px; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -563,6 +577,13 @@
     .prep-ctrl-text-full { display: none; }
     .prep-ctrl-text-short { display: inline; }
     .prep-inline-panel { padding: 12px 10px 16px; }
+    .prep-panel { padding: 12px; margin-bottom: 10px; }
+    .prep-panel-title { font-size: 21px; margin-bottom: 8px; }
+    .prep-team-list { gap: 6px; }
+    .prep-team-card { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; min-height: 38px; padding: 5px 8px; }
+    .prep-team-avatar { width: 24px; height: 24px; font-size: 11px; }
+    .prep-team-name { font-size: 11px; }
+    .prep-team-status { font-size: 8.5px; letter-spacing: 0.03em; }
     .prep-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .prep-status-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
     .prep-form-label { font-size: 9px; letter-spacing: 0.1em; }
@@ -768,23 +789,16 @@
       <div class="prep-panel-title">Prep team today</div>
       <div class="prep-team-list">
         {% for member in team %}
+        {% set member_first_name = member.name.split()[0] if member.name else 'Team' %}
+        {% set member_initial = member_first_name[:1]|upper %}
         <div class="prep-team-card">
-          <div class="prep-team-avatar">{{ member.initials }}</div>
-          <div>
-            <div class="prep-team-name">{{ member.name }}</div>
-            <div class="prep-team-stats">
-              {{ member.shift_label }}
-              <br>
-              {% if member.has_assignment %}
-                <span class="prep-team-status assigned">Assigned to {{ member.assignment_count }} prep{% if member.assignment_count != 1 %}s{% endif %}</span>
-                {% if member.done or member.in_progress %}
-                  <br>{{ member.done }} done - {{ member.in_progress }} partly
-                {% endif %}
-              {% else %}
-                <span class="prep-team-status">Not assigned to prep</span>
-              {% endif %}
-            </div>
-          </div>
+          <div class="prep-team-avatar">{{ member_initial }}</div>
+          <div class="prep-team-name">{{ member_first_name }}</div>
+          {% if member.has_assignment %}
+            <span class="prep-team-status assigned">Assigned</span>
+          {% else %}
+            <span class="prep-team-status">Not assigned</span>
+          {% endif %}
         </div>
         {% else %}
         <div class="prep-empty">No teammates on the prep roster yet.</div>

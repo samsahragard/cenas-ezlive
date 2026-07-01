@@ -53,10 +53,9 @@
   /* --- shared meta bar --------------------------------------------- */
   .ffpo-meta {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
-    padding: 12px 16px;
+    gap: 10px;
+    padding: 10px 14px;
     background: rgba(255,255,255,0.03);
     border: 0.5px solid rgba(217,164,54,0.10);
     border-radius: 10px;
@@ -71,14 +70,41 @@
   }
   .ffpo-meta .val { font-size: 13px; color: #FAF6EC; font-weight: 500; }
   .ffpo-meta .val.gold { color: #E4B340; }
-  .ffpo-meta input[type="date"] {
+  .ffpo-date-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    position: relative;
+    white-space: nowrap;
+  }
+  .ffpo-date-display {
+    min-height: 34px;
+    padding: 0 12px;
     background: rgba(0,0,0,0.30);
     border: 0.5px solid rgba(217,164,54,0.25);
     color: #FAF6EC;
-    padding: 6px 10px;
     border-radius: 6px;
     font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
     font-family: inherit;
+    cursor: pointer;
+  }
+  .ffpo-date-display:hover { border-color: #E4B340; }
+  .ffpo-date-weekday {
+    color: #FAF6EC;
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .ffpo-date-native {
+    position: absolute;
+    inset: auto auto 0 70px;
+    width: 1px;
+    height: 1px;
+    opacity: 0.01;
   }
 
   /* --- TODAY (single-day) view ------------------------------------ */
@@ -219,31 +245,44 @@
 
   @media (max-width: 560px) {
     .ff-tabs {
-      flex-wrap: wrap;
-      gap: 6px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 4px;
       border-bottom: 0;
     }
     .ff-tab {
-      flex: 1 1 calc(33.333% - 6px);
-      min-width: 92px;
-      padding: 9px 8px;
+      min-width: 0;
+      padding: 9px 3px;
       border: 1px solid rgba(217,164,54,0.18);
       border-radius: 6px;
       margin-bottom: 0;
       background: rgba(0,0,0,0.18);
+      font-size: 11px;
       text-align: center;
-      white-space: normal;
+      white-space: nowrap;
     }
     .ff-tab.is-active {
       background: rgba(228,179,64,0.12);
       border-color: #E4B340;
     }
+    .ffpo-meta { padding: 9px 10px; margin-bottom: 10px; }
+    .ffpo-date-row { gap: 6px; width: 100%; }
+    .ffpo-date-row .label { font-size: 8.5px; margin-right: 0; }
+    .ffpo-date-display { min-height: 32px; padding: 0 9px; font-size: 12px; }
+    .ffpo-date-weekday { font-size: 14px; }
     .ff-cat-thead, .ff-item-row {
-      grid-template-columns: minmax(112px, 1fr) 58px 62px 72px 44px;
-      gap: 10px;
-      padding: 7px 10px;
+      grid-template-columns: minmax(86px, 1fr) 52px 52px 46px 32px;
+      gap: 6px;
+      padding: 7px 8px;
     }
-    input.ff-num { padding: 6px 5px; }
+    .ff-cat-thead { font-size: 8px; letter-spacing: 0.04em; }
+    .ff-head-date { font-size: 9px; }
+    .ff-head-day { font-size: 8px; }
+    .ff-head-label, .ff-head-avg { font-size: 8px; }
+    .ff-item-name { font-size: 12px; line-height: 1.15; }
+    .ff-item-size { font-size: 10px; letter-spacing: 0; }
+    .ff-avg { font-size: 10px; }
+    input.ff-num { padding: 6px 4px; font-size: 12px; }
   }
 
   /* --- submit row + banners --------------------------------------- */
@@ -303,27 +342,31 @@
     <a class="ff-tab" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_complete_order') }}">Complete</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
-    <a class="ff-tab" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
+    <a class="ff-tab" href="{{ url_for('store.fresh_food_developer') }}">Dev</a>
   </div>
   {% set today = today_date %}
   {% set delivery = delivery_date %}
   {% set today_short = '%02d/%d'|format(today.month, today.day) %}
   {% set delivery_short = '%02d/%02d'|format(delivery.month, delivery.day) %}
+  {% set delivery_short_year = '%02d/%02d/%02d'|format(delivery.month, delivery.day, delivery.year % 100) %}
   {% set delivery_day = delivery.strftime('%A') %}
   {% set orderer = (g.current_user.full_name if g.current_user else 'unknown') %}
   {% set location = (g.current_location or 'both')|title %}
 
   <div class="ffpo-meta">
-    <div>
-      <span class="label">Order date</span>
-      <input type="date" id="ffpo-order-date" value="{{ delivery.isoformat() }}">
+    <div class="ffpo-date-row">
+      <span class="label">Order day</span>
+      <button class="ffpo-date-display" id="ffpo-date-picker-btn" type="button">
+        <span id="ffpo-date-short">{{ delivery_short_year }}</span>
+      </button>
+      <span class="ffpo-date-weekday" id="ffpo-date-weekday">{{ delivery_day|upper }}</span>
+      <input class="ffpo-date-native" type="date" id="ffpo-order-date" value="{{ delivery.isoformat() }}" aria-label="Order date">
     </div>
   </div>
 
   <div id="ffpo-today-view">
     <div class="ff-today-head">
       <div>
-        <h2 class="ff-today-date" id="ff-today-date-label">{{ delivery.strftime('%A, %B %d') }}</h2>
         <div class="ff-today-by">Placed by <strong>{{ orderer }}</strong> at <strong>{{ location }}</strong></div>
       </div>
     </div>
@@ -389,7 +432,9 @@
 (function(){
   var todayView = document.getElementById('ffpo-today-view');
   var dateInput = document.getElementById('ffpo-order-date');
-  var dateLabel = document.getElementById('ff-today-date-label');
+  var datePickerBtn = document.getElementById('ffpo-date-picker-btn');
+  var dateShort = document.getElementById('ffpo-date-short');
+  var dateWeekday = document.getElementById('ffpo-date-weekday');
   var btn       = document.getElementById('ffpo-submit');
   var cancelBtn = document.getElementById('ffpo-cancel');
   var bannerOk  = document.getElementById('ffpo-banner-ok');
@@ -472,13 +517,38 @@
     } catch(e){}
   }
 
-  function fmtLong(iso){
+  function dateParts(iso){
+    var d = new Date(iso + 'T12:00:00');
+    if(isNaN(d.getTime())) return null;
+    return d;
+  }
+  function fmtShort(iso){
     try {
-      return new Date(iso + 'T12:00:00').toLocaleDateString('en-US',
-        { weekday:'long', month:'long', day:'numeric' });
+      var d = dateParts(iso);
+      if(!d) return iso;
+      var mm = String(d.getMonth() + 1).padStart(2, '0');
+      var dd = String(d.getDate()).padStart(2, '0');
+      var yy = String(d.getFullYear()).slice(-2);
+      return mm + '/' + dd + '/' + yy;
     } catch(e){ return iso; }
   }
-  function syncDate(){ if(dateLabel) dateLabel.textContent = fmtLong(dateInput.value); }
+  function fmtWeekday(iso){
+    try {
+      var d = dateParts(iso);
+      if(!d) return '';
+      return d.toLocaleDateString('en-US', { weekday:'long' }).toUpperCase();
+    } catch(e){ return ''; }
+  }
+  function syncDate(){
+    if(dateShort) dateShort.textContent = fmtShort(dateInput.value);
+    if(dateWeekday) dateWeekday.textContent = fmtWeekday(dateInput.value);
+  }
+  if(datePickerBtn){
+    datePickerBtn.addEventListener('click', function(){
+      if(dateInput.showPicker){ dateInput.showPicker(); }
+      else { dateInput.focus(); dateInput.click(); }
+    });
+  }
   dateInput.addEventListener('change', function(){
     if(!dateInput.value){ return; }
     saveDraft();

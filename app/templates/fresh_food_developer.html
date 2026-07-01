@@ -212,20 +212,21 @@
   @media (max-width: 560px) {
     .ffdev-cards { grid-template-columns: 1fr 1fr; }
     .ff-tabs {
-      flex-wrap: wrap;
-      gap: 6px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 4px;
       border-bottom: 0;
     }
     .ff-tab {
-      flex: 1 1 calc(33.333% - 6px);
-      min-width: 92px;
-      padding: 9px 8px;
+      min-width: 0;
+      padding: 9px 3px;
       border: 1px solid rgba(217,164,54,0.18);
       border-radius: 6px;
       margin-bottom: 0;
       background: rgba(0,0,0,0.18);
+      font-size: 11px;
       text-align: center;
-      white-space: normal;
+      white-space: nowrap;
     }
     .ff-tab.is-active {
       background: rgba(228,179,64,0.12);
@@ -244,7 +245,7 @@
     <a class="ff-tab" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_complete_order') }}">Complete</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
-    <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_developer') }}">Developer</a>
+    <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_developer') }}">Dev</a>
   </div>
 
   <div class="ffdev-bar">

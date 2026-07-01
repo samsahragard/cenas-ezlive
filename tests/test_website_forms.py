@@ -475,6 +475,85 @@ def test_manager_only_sees_shared_non_career_for_their_store(monkeypatch, tmp_pa
     assert 'name="status" value="archived">Archive</button>' not in body
 
 
+def test_angelica_sees_unshared_all_form_tabs(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    angelica_id = _make_user(
+        SessionLocal,
+        full_name="Angelica Barton",
+        email="angelica@cenaskitchen.com",
+        role="gm",
+        scope="tomball,copperfield",
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="career",
+        location="Tomball",
+        position="Server",
+        applicant_name="Angelica Career Lead",
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="catering",
+        location="Tomball",
+        subject="Catering request",
+        applicant_name="Angelica Catering Lead",
+        shared_locations=[],
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="spirit",
+        location="Copperfield",
+        subject="Spirit Day request",
+        applicant_name="Angelica Spirit Lead",
+        shared_locations=[],
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="donation",
+        location="Tomball",
+        subject="Donation request",
+        applicant_name="Angelica Donation Lead",
+        shared_locations=[],
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="contact",
+        location="Copperfield",
+        subject="Contact request",
+        applicant_name="Angelica Contact Lead",
+        shared_locations=[],
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="email-list",
+        location=None,
+        subject="Email list signup",
+        email="angelica-list@example.com",
+        shared_locations=[],
+    )
+    client = app.test_client()
+    _login(client, angelica_id)
+
+    response = client.get("/partner/website-forms?type=catering")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Angelica Catering Lead" in body
+    assert "Share with" not in body
+    assert 'name="status" value="archived">Archive</button>' not in body
+    assert re.search(r'<span class="wf-tab-short">Career</span>\s*<small>1</small>', body)
+    assert re.search(r'<span class="wf-tab-short">Catering</span>\s*<small>1</small>', body)
+    assert re.search(r'<span class="wf-tab-short">Spirit</span>\s*<small>1</small>', body)
+    assert re.search(r'<span class="wf-tab-short">Donate</span>\s*<small>1</small>', body)
+    assert re.search(r'<span class="wf-tab-short">Contact</span>\s*<small>1</small>', body)
+    assert re.search(r'<span class="wf-tab-short">Email</span>\s*<small>1</small>', body)
+
+    email_response = client.get("/partner/website-forms?type=email-list")
+    email_body = email_response.get_data(as_text=True)
+    assert email_response.status_code == 200
+    assert "angelica-list@example.com" in email_body
+
+
 def test_expo_cannot_access_website_forms(monkeypatch, tmp_path):
     app, SessionLocal = _test_app(monkeypatch, tmp_path)
     expo_id = _make_user(

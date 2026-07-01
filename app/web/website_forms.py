@@ -101,6 +101,15 @@ FULL_ACCESS_NAMES = {
     "masood sahragard",
 }
 
+ANGELICA_FORM_VISIBILITY_EMAILS = {
+    "angelica@cenaskitchen.com",
+}
+
+ANGELICA_FORM_VISIBILITY_NAMES = {
+    "angelica",
+    "angelica barton",
+}
+
 FULL_ACCESS_ROLES = {"partner", "corporate"}
 STORE_FORM_ROLES = {
     "corporate_chef",
@@ -208,10 +217,23 @@ def _has_full_form_access(user: User | None) -> bool:
     return False
 
 
+def _has_angelica_form_visibility(user: User | None) -> bool:
+    if user is None:
+        return False
+    email = _identity_key(getattr(user, "email", None))
+    name = _identity_key(getattr(user, "full_name", None))
+    return (
+        email in ANGELICA_FORM_VISIBILITY_EMAILS
+        or name in ANGELICA_FORM_VISIBILITY_NAMES
+    )
+
+
 def _has_store_form_access(user: User | None) -> bool:
     if user is None:
         return False
     if _has_full_form_access(user):
+        return True
+    if _has_angelica_form_visibility(user):
         return True
     role = (getattr(user, "permission_level", None) or "").strip().lower()
     return role in STORE_FORM_ROLES
@@ -234,10 +256,17 @@ def _user_share_locations(user: User | None) -> list[str]:
     return out
 
 
-def _can_user_see_row(row: WebsiteFormSubmission, user_locations: list[str]) -> bool:
+def _can_user_see_row(
+    row: WebsiteFormSubmission,
+    user_locations: list[str],
+    *,
+    require_share: bool = True,
+) -> bool:
     row_location = _share_slug(row.location)
     if row.form_type == "career":
         return bool(row_location and row_location in user_locations)
+    if not require_share:
+        return row_location is None or row_location in user_locations
     shared = set(row.shared_locations or [])
     if not shared.intersection(user_locations):
         return False
@@ -450,6 +479,7 @@ def partner_forms():
     if isinstance(access, Response):
         return access
     user, full_access, user_locations = access
+    angelica_form_visibility = _has_angelica_form_visibility(user)
     _set_partner_context()
 
     form_type = _canonical_form_type(request.args.get("type")) or "career"
@@ -488,7 +518,11 @@ def partner_forms():
         else:
             rows = [
                 row for row in raw_rows
-                if _can_user_see_row(row, user_locations)
+                if _can_user_see_row(
+                    row,
+                    user_locations,
+                    require_share=not angelica_form_visibility,
+                )
                 and (
                     not location_filter_slug
                     or location_filter_slug in (row.shared_locations or [])
@@ -521,7 +555,11 @@ def partner_forms():
                 if full_access
                 else sum(
                     1 for row in count_rows
-                    if _can_user_see_row(row, user_locations)
+                    if _can_user_see_row(
+                        row,
+                        user_locations,
+                        require_share=not angelica_form_visibility,
+                    )
                     and (
                         not location_filter_slug
                         or location_filter_slug in (row.shared_locations or [])
@@ -580,13 +618,18 @@ def partner_form_attachment(submission_id: int, attachment_index: int):
     if isinstance(access, Response):
         return access
     _user, full_access, user_locations = access
+    angelica_form_visibility = _has_angelica_form_visibility(_user)
 
     db = SessionLocal()
     try:
         row = db.get(WebsiteFormSubmission, submission_id)
         if row is None:
             abort(404)
-        if not full_access and not _can_user_see_row(row, user_locations):
+        if not full_access and not _can_user_see_row(
+            row,
+            user_locations,
+            require_share=not angelica_form_visibility,
+        ):
             abort(403)
         attachments = row.attachments or []
         if attachment_index < 0 or attachment_index >= len(attachments):

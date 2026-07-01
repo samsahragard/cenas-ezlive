@@ -99,9 +99,16 @@ FULL_ACCESS_NAMES = {
     "sam sahragard",
     "masood",
     "masood sahragard",
-    "angelica",
-    "angelica barton",
-    "angelica truss",
+}
+
+FULL_ACCESS_ROLES = {"partner", "corporate"}
+STORE_FORM_ROLES = {
+    "corporate_chef",
+    "gm",
+    "manager",
+    "km",
+    "assistant_km",
+    "foh_manager",
 }
 
 SHARE_LABELS = OrderedDict([
@@ -191,11 +198,23 @@ def _current_user() -> User | None:
 def _has_full_form_access(user: User | None) -> bool:
     if user is None:
         return False
+    role = (getattr(user, "permission_level", None) or "").strip().lower()
+    if role in FULL_ACCESS_ROLES:
+        return True
     email = _identity_key(getattr(user, "email", None))
     name = _identity_key(getattr(user, "full_name", None))
     if email in FULL_ACCESS_EMAILS or name in FULL_ACCESS_NAMES:
         return True
     return False
+
+
+def _has_store_form_access(user: User | None) -> bool:
+    if user is None:
+        return False
+    if _has_full_form_access(user):
+        return True
+    role = (getattr(user, "permission_level", None) or "").strip().lower()
+    return role in STORE_FORM_ROLES
 
 
 def _user_share_locations(user: User | None) -> list[str]:
@@ -207,6 +226,8 @@ def _user_share_locations(user: User | None) -> list[str]:
         (scope or "").strip().lower()
         for scope in (getattr(user, "store_scope", None) or "").split(",")
     }
+    if "both" in scopes:
+        return list(SHARE_LABELS.keys())
     out = [slug for slug in SHARE_LABELS if slug in scopes]
     if not out and getattr(user, "permission_level", None) == "corporate":
         out = list(SHARE_LABELS.keys())
@@ -214,8 +235,47 @@ def _user_share_locations(user: User | None) -> list[str]:
 
 
 def _can_user_see_row(row: WebsiteFormSubmission, user_locations: list[str]) -> bool:
+    row_location = _share_slug(row.location)
+    if row.form_type == "career":
+        return bool(row_location and row_location in user_locations)
     shared = set(row.shared_locations or [])
-    return bool(shared.intersection(user_locations))
+    if not shared.intersection(user_locations):
+        return False
+    return row_location is None or row_location in user_locations
+
+
+def _location_filters_for_user(
+    full_access: bool,
+    user_locations: list[str],
+) -> OrderedDict[str, str]:
+    if full_access:
+        return LOCATION_FILTERS
+    filters: OrderedDict[str, str] = OrderedDict()
+    if len(user_locations) > 1:
+        filters[""] = "Both"
+    for slug in SHARE_LABELS:
+        if slug in user_locations:
+            filters[SHARE_LABELS[slug]] = SHARE_LABELS[slug]
+    return filters
+
+
+def _status_capabilities(
+    row: WebsiteFormSubmission,
+    *,
+    full_access: bool,
+    user_locations: list[str],
+) -> dict[str, bool]:
+    manager_career_access = (
+        row.form_type == "career"
+        and _can_user_see_row(row, user_locations)
+    )
+    can_archive_delete = full_access or manager_career_access
+    return {
+        "reviewed": full_access,
+        "archived": can_archive_delete,
+        "deleted": can_archive_delete,
+        "new": full_access,
+    }
 
 
 def _require_forms_user() -> tuple[User, bool, list[str]] | Response:
@@ -225,6 +285,8 @@ def _require_forms_user() -> tuple[User, bool, list[str]] | Response:
         return redirect("/keypad-login?next=" + quote(target, safe="/?=&"))
     full_access = _has_full_form_access(user)
     locations = _user_share_locations(user)
+    if not full_access and not _has_store_form_access(user):
+        abort(403)
     if not full_access and not locations:
         abort(403)
     return user, full_access, locations
@@ -392,8 +454,20 @@ def partner_forms():
 
     form_type = _canonical_form_type(request.args.get("type")) or "career"
     requested_location = _normalize_location(request.args.get("location"))
-    location_filter = requested_location if requested_location in LOCATION_FILTERS else None
-    location_filter_slug = _share_slug(location_filter)
+    requested_location_slug = _share_slug(requested_location)
+    visible_location_filters = _location_filters_for_user(full_access, user_locations)
+    if full_access:
+        location_filter = requested_location if requested_location in LOCATION_FILTERS else None
+        location_filter_slug = _share_slug(location_filter)
+    elif requested_location_slug in user_locations:
+        location_filter_slug = requested_location_slug
+        location_filter = SHARE_LABELS[requested_location_slug]
+    elif len(user_locations) == 1:
+        location_filter_slug = user_locations[0]
+        location_filter = SHARE_LABELS[location_filter_slug]
+    else:
+        location_filter_slug = None
+        location_filter = None
     requested_status = (request.args.get("status") or "").strip().lower()
     status_filter = requested_status if requested_status in STATUS_FILTERS else ""
 
@@ -421,6 +495,14 @@ def partner_forms():
                     or _share_slug(row.location) == location_filter_slug
                 )
             ]
+        status_capabilities = {
+            row.id: _status_capabilities(
+                row,
+                full_access=full_access,
+                user_locations=user_locations,
+            )
+            for row in rows
+        }
 
         counts = {}
         for key in FORM_LABELS:
@@ -447,6 +529,17 @@ def partner_forms():
                     )
                 )
             )
+        actor_ids = {
+            row.status_changed_by_user_id
+            for row in rows
+            if row.status_changed_by_user_id
+        }
+        status_actor_names = {}
+        if actor_ids:
+            status_actor_names = {
+                actor.id: actor.full_name
+                for actor in db.query(User).filter(User.id.in_(actor_ids)).all()
+            }
     finally:
         db.close()
 
@@ -460,7 +553,7 @@ def partner_forms():
         form_labels=FORM_LABELS,
         form_short_labels=FORM_SHORT_LABELS,
         status_filters=STATUS_FILTERS,
-        location_filters=LOCATION_FILTERS,
+        location_filters=visible_location_filters,
         active_type=form_type,
         active_label=FORM_LABELS[form_type],
         counts=counts,
@@ -468,6 +561,8 @@ def partner_forms():
         rows=rows,
         selected_location=location_filter or "",
         selected_status=status_filter,
+        status_actor_names=status_actor_names,
+        status_capabilities=status_capabilities,
         store_label=g.store_label,
         full_access=full_access,
         user_locations=user_locations,
@@ -517,8 +612,7 @@ def partner_form_status(submission_id: int):
     if isinstance(access, Response):
         return access
     user, full_access, _user_locations = access
-    if not full_access:
-        abort(403)
+    user_locations = _user_locations
     status = (request.form.get("status") or "").strip().lower()
     if status not in STATUS_ACTIONS:
         abort(400)
@@ -527,8 +621,18 @@ def partner_form_status(submission_id: int):
         row = db.get(WebsiteFormSubmission, submission_id)
         if row is None:
             abort(404)
+        capabilities = _status_capabilities(
+            row,
+            full_access=full_access,
+            user_locations=user_locations,
+        )
+        if not capabilities.get(status):
+            abort(403)
+        now = datetime.utcnow()
         row.status = status
-        row.reviewed_at = datetime.utcnow() if status == "reviewed" else row.reviewed_at
+        row.status_changed_at = now
+        row.status_changed_by_user_id = getattr(user, "id", None)
+        row.reviewed_at = now if status == "reviewed" else row.reviewed_at
         row.reviewed_by_user_id = getattr(user, "id", None) if status == "reviewed" else row.reviewed_by_user_id
         db.commit()
         form_type = row.form_type

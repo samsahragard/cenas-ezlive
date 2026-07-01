@@ -3249,6 +3249,10 @@ class WebsiteFormSubmission(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status_changed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 # ============================================================

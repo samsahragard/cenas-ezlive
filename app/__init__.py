@@ -425,8 +425,9 @@ def create_app():
         logging.getLogger(__name__).exception(
             "manager_attendance_event report column backfill failed (non-fatal)")
 
-    # Website form sharing (2026-06-29): submissions are live-owner/private
-    # until Sam/Masood/Angelica shares them to one or both store scopes.
+    # Website form sharing (2026-06-29): non-career submissions are
+    # live-owner/private until a full-access reviewer shares them to one or
+    # both store scopes.
     # website_form_submissions already exists in production, so create_all
     # cannot add these columns.
     try:
@@ -442,6 +443,8 @@ def create_app():
                     ("shared_locations", "JSON NOT NULL DEFAULT '[]'"),
                     ("shared_by_user_id", "INTEGER"),
                     ("shared_at", "TIMESTAMP"),
+                    ("status_changed_by_user_id", "INTEGER"),
+                    ("status_changed_at", "TIMESTAMP"),
                 ]
                 _wfs_added = []
                 with _eng_wfs.begin() as conn:

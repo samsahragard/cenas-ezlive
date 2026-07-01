@@ -191,6 +191,12 @@
     font-size: 13px;
     line-height: 1.45;
   }
+  .wf-status-note {
+    color: var(--wf-faint);
+    font-size: 12px;
+    line-height: 1.4;
+    margin-top: 4px;
+  }
   .wf-badge {
     border: 1px solid rgba(255, 217, 112, .35);
     color: var(--wf-gold);
@@ -443,6 +449,15 @@
                 <div class="wf-meta">
                   #{{ row.id }} - {{ row.created_at.strftime("%b %d, %Y %I:%M %p") }}
                 </div>
+                {% if row.status in ["archived", "deleted"] and row.status_changed_at %}
+                <div class="wf-status-note">
+                  {{ row.status|title }}
+                  {% if status_actor_names.get(row.status_changed_by_user_id) %}
+                    by {{ status_actor_names.get(row.status_changed_by_user_id) }}
+                  {% endif %}
+                  - {{ row.status_changed_at.strftime("%b %d, %Y %I:%M %p") }}
+                </div>
+                {% endif %}
               </div>
               <span class="wf-badge {{ row.status }}">{{ row.status }}</span>
             </div>
@@ -501,18 +516,19 @@
             </form>
             {% endif %}
 
-            {% if full_access %}
+            {% set caps = status_capabilities.get(row.id, {}) %}
+            {% if caps.get("reviewed") or caps.get("archived") or caps.get("deleted") or caps.get("new") %}
             <form class="wf-actions" method="post" action="{{ url_for('website_forms.partner_form_status', submission_id=row.id) }}">
-              {% if row.status != "reviewed" %}
+              {% if caps.get("reviewed") and row.status != "reviewed" %}
               <button type="submit" name="status" value="reviewed">Mark reviewed</button>
               {% endif %}
-              {% if row.status != "archived" %}
+              {% if caps.get("archived") and row.status != "archived" %}
               <button type="submit" name="status" value="archived">Archive</button>
               {% endif %}
-              {% if row.status != "deleted" %}
+              {% if caps.get("deleted") and row.status != "deleted" %}
               <button type="submit" name="status" value="deleted">Delete</button>
               {% endif %}
-              {% if row.status != "new" %}
+              {% if caps.get("new") and row.status != "new" %}
               <button type="submit" name="status" value="new">Back to new</button>
               {% endif %}
             </form>

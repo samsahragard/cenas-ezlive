@@ -356,6 +356,8 @@ def test_full_access_user_can_soft_delete_submission(monkeypatch, tmp_path):
     try:
         row = db.get(WebsiteFormSubmission, submission_id)
         assert row.status == "deleted"
+        assert row.status_changed_by_user_id == sam_id
+        assert row.status_changed_at is not None
     finally:
         db.close()
 
@@ -369,35 +371,30 @@ def test_full_access_user_can_soft_delete_submission(monkeypatch, tmp_path):
     assert deleted_response.status_code == 200
     assert "Delete Candidate" in deleted_body
     assert '<span class="wf-badge deleted">deleted</span>' in deleted_body
+    assert re.search(r"Deleted\s+by\s+Sam Sahragard", deleted_body)
 
 
-def test_manager_only_sees_submissions_shared_to_their_store(monkeypatch, tmp_path):
+def test_manager_sees_own_store_careers_without_share_and_can_archive(monkeypatch, tmp_path):
     app, SessionLocal = _test_app(monkeypatch, tmp_path)
-    sam_id = _make_user(
-        SessionLocal,
-        full_name="Sam Sahragard",
-        email="sam@cenaskitchen.com",
-        role="partner",
-        scope=None,
-    )
     tomball_manager_id = _make_user(
         SessionLocal,
-        full_name="Tomball Manager",
-        role="gm",
+        full_name="Adriana Herrera",
+        role="foh_manager",
         scope="tomball",
     )
-    copperfield_manager_id = _make_user(
+    tomball_submission_id = _make_submission(
         SessionLocal,
-        full_name="Copperfield Manager",
-        role="gm",
-        scope="copperfield",
+        form_type="career",
+        location="Tomball",
+        position="Server",
+        applicant_name="Tomball Career Applicant",
     )
-    submission_id = _make_submission(
+    _make_submission(
         SessionLocal,
         form_type="career",
         location="Copperfield",
         position="Server",
-        applicant_name="Cross Store Applicant",
+        applicant_name="Copperfield Career Applicant",
     )
     client = app.test_client()
 
@@ -405,41 +402,96 @@ def test_manager_only_sees_submissions_shared_to_their_store(monkeypatch, tmp_pa
     response = client.get("/partner/website-forms?type=career")
     body = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "Cross Store Applicant" not in body
+    assert "Tomball Career Applicant" in body
+    assert "Copperfield Career Applicant" not in body
     assert "Share with" not in body
+    assert 'name="status" value="archived">Archive</button>' in body
+    assert 'name="status" value="deleted">Delete</button>' in body
+    assert "Mark reviewed" not in body
 
-    _login(client, sam_id)
     response = client.post(
-        f"/partner/website-forms/{submission_id}/share",
-        data={"share_target": "tomball"},
+        f"/partner/website-forms/{tomball_submission_id}/status",
+        data={"status": "archived"},
     )
     assert response.status_code == 303
     db = SessionLocal()
     try:
-        row = db.get(WebsiteFormSubmission, submission_id)
-        assert row.shared_locations == ["tomball"]
-        assert row.shared_by_user_id == sam_id
-        assert row.shared_at is not None
+        row = db.get(WebsiteFormSubmission, tomball_submission_id)
+        assert row.status == "archived"
+        assert row.status_changed_by_user_id == tomball_manager_id
+        assert row.status_changed_at is not None
     finally:
         db.close()
 
+    response = client.get("/partner/website-forms?type=career&status=archived")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Tomball Career Applicant" in body
+    assert re.search(r"Archived\s+by\s+Adriana Herrera", body)
+
+
+def test_manager_only_sees_shared_non_career_for_their_store(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    tomball_manager_id = _make_user(
+        SessionLocal,
+        full_name="Tomball Manager",
+        role="gm",
+        scope="tomball",
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="catering",
+        location="Tomball",
+        subject="Catering request",
+        applicant_name="Tomball Catering Lead",
+        shared_locations=["tomball"],
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="catering",
+        location="Copperfield",
+        subject="Catering request",
+        applicant_name="Copperfield Catering Lead",
+        shared_locations=["tomball", "copperfield"],
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="catering",
+        location="Tomball",
+        subject="Catering request",
+        applicant_name="Unshared Tomball Catering Lead",
+        shared_locations=[],
+    )
+    client = app.test_client()
     _login(client, tomball_manager_id)
-    response = client.get("/partner/website-forms?type=career&location=Tomball")
+
+    response = client.get("/partner/website-forms?type=catering")
     body = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "Cross Store Applicant" in body
-    assert "Shared submissions for your location access only" not in body
+    assert "Tomball Catering Lead" in body
+    assert "Copperfield Catering Lead" not in body
+    assert "Unshared Tomball Catering Lead" not in body
     assert "Share with" not in body
-    assert "Mark reviewed" not in body
+    assert 'name="status" value="archived">Archive</button>' not in body
 
-    _login(client, copperfield_manager_id)
+
+def test_expo_cannot_access_website_forms(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    expo_id = _make_user(
+        SessionLocal,
+        full_name="Expo User",
+        role="expo",
+        scope="tomball",
+    )
+    client = app.test_client()
+    _login(client, expo_id)
+
     response = client.get("/partner/website-forms?type=career")
-    body = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert "Cross Store Applicant" not in body
+
+    assert response.status_code == 403
 
 
-def test_manager_cannot_share_or_change_submission_status(monkeypatch, tmp_path):
+def test_manager_cannot_share_non_career_or_change_other_store_status(monkeypatch, tmp_path):
     app, SessionLocal = _test_app(monkeypatch, tmp_path)
     manager_id = _make_user(
         SessionLocal,
@@ -447,25 +499,38 @@ def test_manager_cannot_share_or_change_submission_status(monkeypatch, tmp_path)
         role="gm",
         scope="copperfield",
     )
-    submission_id = _make_submission(
+    catering_id = _make_submission(
         SessionLocal,
+        form_type="catering",
         location="Copperfield",
+        subject="Catering request",
         shared_locations=["copperfield"],
+    )
+    other_store_career_id = _make_submission(
+        SessionLocal,
+        form_type="career",
+        location="Tomball",
+        applicant_name="Other Store Career",
     )
     client = app.test_client()
     _login(client, manager_id)
 
     share_response = client.post(
-        f"/partner/website-forms/{submission_id}/share",
+        f"/partner/website-forms/{catering_id}/share",
         data={"share_target": "both"},
     )
-    status_response = client.post(
-        f"/partner/website-forms/{submission_id}/status",
-        data={"status": "reviewed"},
+    non_career_status_response = client.post(
+        f"/partner/website-forms/{catering_id}/status",
+        data={"status": "archived"},
+    )
+    other_store_status_response = client.post(
+        f"/partner/website-forms/{other_store_career_id}/status",
+        data={"status": "archived"},
     )
 
     assert share_response.status_code == 403
-    assert status_response.status_code == 403
+    assert non_career_status_response.status_code == 403
+    assert other_store_status_response.status_code == 403
 
 
 def test_sub_form_select_options_use_readable_dark_colors():

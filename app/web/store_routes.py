@@ -4844,7 +4844,7 @@ def _render_prep_list_v3(db, label, active_key):
 
     prep_tabs = [
         {"key": "board", "label": "Today"},
-        {"key": "performance", "label": "Performance"},
+        {"key": "performance", "label": "Perform"},
         {"key": "developer", "label": "Dev"},
     ]
 

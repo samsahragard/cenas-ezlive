@@ -250,6 +250,7 @@
     display: grid;
     grid-template-columns: 20px minmax(0, 1fr) 20px;
     padding: 0 2px;
+    font-size: 10px;
   }
   .prep-mobile-date a {
     display: grid;
@@ -386,7 +387,7 @@
     min-height: 74px;
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     gap: 6px;
     padding: 9px 10px 9px 13px;
@@ -395,7 +396,7 @@
     border: 0.5px solid var(--prep-border-subtle);
     border-radius: 10px;
     cursor: pointer;
-    text-align: left;
+    text-align: center;
     position: relative;
     overflow: hidden;
   }
@@ -417,13 +418,17 @@
     border-color: var(--prep-gold);
   }
   .prep-item-name {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     min-width: 0;
     color: var(--prep-cream);
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1.15;
+    font-size: 13px;
+    font-weight: 900;
+    line-height: 1.05;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-align: center;
     width: 100%;
   }
   .prep-item-toggle.open .prep-item-name,
@@ -459,7 +464,7 @@
     max-height: min(82vh, 720px);
     overflow-y: auto;
     padding: 0 16px 18px;
-    background: #160d09;
+    background: #42190f;
     border: 0.5px solid var(--prep-border-active);
     border-bottom: 0;
     border-radius: 18px 18px 0 0;
@@ -484,7 +489,7 @@
     align-items: center;
     gap: 10px;
     padding: 14px 0 12px;
-    background: #160d09;
+    background: #42190f;
     border-bottom: 0.5px solid var(--prep-border-subtle);
     margin-bottom: 14px;
   }
@@ -517,20 +522,28 @@
   .prep-form-field { display: flex; flex-direction: column; gap: 6px; }
   .prep-form-field.full { grid-column: 1 / -1; }
   .prep-form-label {
-    color: var(--prep-gold);
+    color: #fffaf0;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.12em;
+    font-size: 11.5px;
+    font-weight: 900;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
   }
   .prep-input, .prep-select, .prep-textarea {
     width: 100%;
-    color: var(--prep-cream);
-    background: var(--prep-bg-input);
-    border: 0.5px solid var(--prep-border-subtle);
+    color: #fffaf0;
+    background: rgba(18,7,4,0.68);
+    border: 0.5px solid rgba(255,217,112,0.35);
     border-radius: 8px;
     font-size: 13px;
+  }
+  .prep-select option {
+    color: #fffaf0;
+    background: #42190f;
+  }
+  .prep-select option:checked {
+    color: #fffaf0;
+    background: #8b3324;
   }
   .prep-input, .prep-select { height: 40px; padding: 0 10px; }
   .prep-textarea { min-height: 76px; resize: vertical; padding: 10px 11px; }
@@ -685,17 +698,21 @@
     .prep-control-bar, .prep-page-tabs { display: none; }
     .prep-mobile-strip {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 4px;
+      grid-template-columns: minmax(96px, 1.75fr) repeat(4, minmax(42px, 0.72fr));
+      gap: 3px;
       margin-bottom: 10px;
     }
     .prep-mobile-date, .prep-mobile-action {
       min-height: 34px;
       border-radius: 8px;
-      font-size: 7.5px;
+      font-size: 6.7px;
       letter-spacing: 0;
     }
-    .prep-mobile-date { grid-template-columns: 16px minmax(0, 1fr) 16px; }
+    .prep-mobile-date {
+      grid-template-columns: 16px minmax(0, 1fr) 16px;
+      font-size: 8.5px;
+      font-weight: 950;
+    }
     .prep-mobile-date svg { width: 10px; height: 10px; }
     .prep-control-bar .prep-spacer { display: none; }
     .prep-date-nav { width: 100%; min-width: 0; border-radius: 9px; }
@@ -742,14 +759,14 @@
     .prep-team-status { font-size: 8.5px; letter-spacing: 0.03em; }
     .prep-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .prep-status-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-    .prep-form-label { font-size: 9px; letter-spacing: 0.1em; }
+    .prep-form-label { font-size: 10.5px; letter-spacing: 0.08em; }
     .prep-input, .prep-select { height: 36px; padding: 0 8px; font-size: 12px; }
     .prep-status-chip { min-height: 36px; padding: 5px 3px; font-size: 8.5px; letter-spacing: 0.02em; }
     .prep-save-btn { min-height: 36px; padding: 0 15px; }
     .prep-ingredients summary { padding: 9px 10px; font-size: 11px; }
     .prep-section-body { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; padding: 8px; }
     .prep-item-toggle { min-height: 58px; padding: 7px 5px 7px 8px; border-radius: 8px; }
-    .prep-item-name { font-size: 9.5px; line-height: 1.08; }
+    .prep-item-name { font-size: 10.5px; line-height: 1.05; }
     .prep-badge, .prep-item-pill { max-width: 100%; padding: 2px 4px; font-size: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .prep-page-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; }
     .prep-tab-link { min-height: 34px; padding: 0 3px; font-size: 8.5px; letter-spacing: 0.01em; }
@@ -793,7 +810,9 @@
             data-prep-toggle="{{ it.id }}"
             aria-expanded="{{ 'true' if is_open else 'false' }}"
             aria-controls="prep-panel-{{ it.id }}">
-      <span class="prep-item-name">{{ it.name }}</span>
+      <span class="prep-item-name">
+        {% for word in it.name.split() %}<span>{{ word }}</span>{% endfor %}
+      </span>
       {% if has_work %}{{ status_badge(it.status) }}{% endif %}
       {% if it.assignee %}<span class="prep-item-pill">{{ it.assignee }}</span>{% endif %}
       <span class="prep-item-chevron">{{ prep_icon('chev') }}</span>
@@ -1004,7 +1023,7 @@
 
   {% elif active_prep_tab == 'performance' %}
     <section class="prep-panel">
-      <div class="prep-panel-title">Performance</div>
+      <div class="prep-panel-title">Perform</div>
       <div class="prep-report-grid">
         {% for row in performance_rows %}
         <div class="prep-report-row">

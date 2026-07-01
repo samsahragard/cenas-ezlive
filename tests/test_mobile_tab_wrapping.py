@@ -50,15 +50,17 @@ def test_prep_list_mobile_controls_and_item_cards_are_compact():
     source = _template("prep_list.html")
 
     assert ".prep-mobile-strip" in source
-    assert "grid-template-columns: repeat(5, minmax(0, 1fr));" in source
+    assert "grid-template-columns: minmax(96px, 1.75fr) repeat(4, minmax(42px, 0.72fr));" in source
     assert "date_display_mobile" in source
     assert "prep-export-btn" in source
     assert ".prep-section-body" in source
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in source
+    assert "{% for word in it.name.split() %}<span>{{ word }}</span>{% endfor %}" in source
     assert "prep-sheet-scrim" in source
     assert "prep-sheet-head" in source
     assert "data-prep-close" in source
     assert "body.prep-sheet-open" in source
+    assert "<div class=\"prep-panel-title\">Perform</div>" in source
 
 
 def test_fresh_food_place_order_uses_compact_order_day_row():

@@ -4798,10 +4798,10 @@ def _render_prep_list_v3(db, label, active_key):
         developer_entries = []
 
     prep_tabs = [
-        {"key": "board", "label": "Prep Board"},
-        {"key": "recent", "label": "Recent Date"},
+        {"key": "board", "label": "Today"},
+        {"key": "recent", "label": "Yesterday"},
         {"key": "performance", "label": "Performance"},
-        {"key": "developer", "label": "Developer"},
+        {"key": "developer", "label": "Dev"},
     ]
 
     return render_template(
@@ -4824,6 +4824,7 @@ def _render_prep_list_v3(db, label, active_key):
         prev_date=(sel - timedelta(days=1)).isoformat(),
         next_date=(sel + timedelta(days=1)).isoformat(),
         date_display=f"{sel:%A, %B} {sel.day}, {sel.year}",
+        date_display_compact=f"{sel:%a} {sel:%b} {sel.day}",
         is_today=(sel == today),
     )
 

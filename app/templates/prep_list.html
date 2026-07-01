@@ -193,12 +193,12 @@
   .prep-ctrl-btn:disabled, .prep-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .prep-ctrl-form { display: inline-flex; }
   .prep-page-tabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
-    flex-wrap: wrap;
     margin: 0 0 16px;
     padding: 4px;
-    width: fit-content;
+    width: 100%;
     max-width: 100%;
     background: var(--prep-bg-input);
     border: 0.5px solid var(--prep-border-subtle);
@@ -211,6 +211,8 @@
     color: var(--prep-cream-dim);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+    min-width: 0;
+    white-space: nowrap;
   }
   .prep-tab-link.active {
     color: var(--prep-gold-bright);
@@ -506,6 +508,7 @@
     font-style: italic;
   }
   .prep-page svg { width: 14px; height: 14px; fill: currentColor; }
+  .prep-date-text-compact, .prep-ctrl-text-short { display: none; }
 
   @media (max-width: 900px) {
     .prep-kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -516,10 +519,49 @@
   }
   @media (max-width: 560px) {
     .prep-page { padding: 14px; }
-    .prep-kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-    .prep-kpi-box { min-height: 84px; padding: 10px 9px; }
-    .prep-kpi-label { font-size: 8px; letter-spacing: 0.08em; }
-    .prep-kpi-value { font-size: 26px; }
+    .prep-kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+    .prep-kpi-box { min-height: 42px; padding: 6px 8px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; }
+    .prep-kpi-label { font-size: 7px; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .prep-kpi-value { font-size: 21px; margin-top: 0; }
+    .prep-control-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1.32fr) minmax(0, 0.84fr) minmax(0, 0.84fr);
+      gap: 6px;
+      align-items: stretch;
+      margin-bottom: 8px;
+    }
+    .prep-control-bar .prep-spacer { display: none; }
+    .prep-date-nav { width: 100%; min-width: 0; border-radius: 9px; }
+    .prep-date-nav-btn { width: 22px; height: 38px; flex: 0 0 22px; }
+    .prep-date-display {
+      min-width: 0;
+      flex: 1 1 auto;
+      height: 38px;
+      justify-content: center;
+      gap: 3px;
+      padding: 0 3px;
+      font-size: 9px;
+      line-height: 1;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .prep-date-text-full { display: none; }
+    .prep-date-text-compact { display: inline; overflow: hidden; text-overflow: ellipsis; }
+    .prep-today-tag { font-size: 6px; letter-spacing: 0.04em; padding: 1px 3px; }
+    .prep-ctrl-btn {
+      width: 100%;
+      min-width: 0;
+      min-height: 38px;
+      padding: 0 4px;
+      border-radius: 9px;
+      gap: 3px;
+      font-size: 9px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .prep-ctrl-btn svg { width: 11px; height: 11px; flex: 0 0 11px; }
+    .prep-ctrl-text-full { display: none; }
+    .prep-ctrl-text-short { display: inline; }
     .prep-inline-panel { padding: 12px 10px 16px; }
     .prep-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .prep-status-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
@@ -528,9 +570,8 @@
     .prep-status-chip { min-height: 36px; padding: 5px 3px; font-size: 8.5px; letter-spacing: 0.02em; }
     .prep-save-btn { min-height: 36px; padding: 0 15px; }
     .prep-ingredients summary { padding: 9px 10px; font-size: 11px; }
-    .prep-date-display { padding: 0 10px; font-size: 12px; }
-    .prep-page-tabs { width: 100%; }
-    .prep-tab-link { flex: 1 1 120px; }
+    .prep-page-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; }
+    .prep-tab-link { min-height: 34px; padding: 0 3px; font-size: 8.5px; letter-spacing: 0.01em; }
   }
 </style>
 
@@ -705,14 +746,15 @@
     <div class="prep-date-nav">
       <a class="prep-date-nav-btn" href="?date={{ prev_date }}&tab={{ active_prep_tab }}" aria-label="Previous day">{{ prep_icon('chev-l') }}</a>
       <div class="prep-date-display">
-        {{ date_display }}
+        <span class="prep-date-text-full">{{ date_display }}</span>
+        <span class="prep-date-text-compact">{{ date_display_compact }}</span>
         {% if is_today %}<span class="prep-today-tag">TODAY</span>{% endif %}
       </div>
       <a class="prep-date-nav-btn" href="?date={{ next_date }}&tab={{ active_prep_tab }}" aria-label="Next day">{{ prep_icon('chev') }}</a>
     </div>
-    <a class="prep-ctrl-btn" href="?date={{ prev_date }}&tab=recent">{{ prep_icon('cal') }} View past days</a>
+    <a class="prep-ctrl-btn" href="?date={{ prev_date }}&tab=recent">{{ prep_icon('cal') }} <span class="prep-ctrl-text-full">View past days</span><span class="prep-ctrl-text-short">Past days</span></a>
     <span class="prep-spacer"></span>
-    <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} Export today</button>
+    <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} <span class="prep-ctrl-text-full">Export today</span><span class="prep-ctrl-text-short">Export</span></button>
   </div>
 
   <nav class="prep-page-tabs" aria-label="Prep list views">
@@ -770,7 +812,7 @@
 
   {% elif active_prep_tab == 'recent' %}
     <section class="prep-panel">
-      <div class="prep-panel-title">Recent Date</div>
+      <div class="prep-panel-title">Yesterday</div>
       <div class="prep-report-grid">
         {% for row in recent_entries %}
         <div class="prep-report-row">

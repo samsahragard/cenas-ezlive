@@ -1,8 +1,13 @@
 import base64
+from io import BytesIO
 from email.message import EmailMessage
+from pathlib import Path
 from types import SimpleNamespace
 
+from flask import Flask
+
 from app.services import management_email as mail
+from app.web import management_email_routes as routes
 
 
 def _b64url(text: str) -> str:
@@ -170,3 +175,41 @@ def test_reply_attachments_are_added_to_mime_message():
     assert len(attachments) == 1
     assert attachments[0].get_filename() == "invoice.pdf"
     assert attachments[0].get_content_type() == "application/pdf"
+
+
+def test_attachment_route_can_view_inline_or_download(monkeypatch):
+    app = Flask(__name__)
+    app.register_blueprint(routes.management_email_bp)
+    monkeypatch.setattr(routes, "has_permission", lambda _tag: True)
+    monkeypatch.setattr(
+        routes,
+        "attachment_stream",
+        lambda *args, **kwargs: BytesIO(b"image bytes"),
+    )
+    client = app.test_client()
+
+    inline = client.get(
+        "/dashboard/email/attachment?account=sam&message_id=m1"
+        "&attachment_id=0&filename=image001.png&mime_type=image/png&inline=1"
+    )
+    download = client.get(
+        "/dashboard/email/attachment?account=sam&message_id=m1"
+        "&attachment_id=0&filename=image001.png&mime_type=image/png"
+    )
+
+    assert inline.status_code == 200
+    assert inline.headers["Content-Disposition"].startswith("inline;")
+    assert download.status_code == 200
+    assert download.headers["Content-Disposition"].startswith("attachment;")
+
+
+def test_home_email_panel_exposes_attachment_view_and_compact_reply_toolbar():
+    source = (Path(__file__).resolve().parents[1] / "app" / "templates" / "home.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'params.set("inline", "1")' in source
+    assert 'target="_blank" rel="noopener">View</a>' in source
+    assert ">Download</a>" in source
+    assert "mailbox-reply-toolbar" in source
+    assert "mailbox-reply-upload" not in source

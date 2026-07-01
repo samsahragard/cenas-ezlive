@@ -51,7 +51,7 @@
   }
   .home-dash-panel.hidden { display: none; }
   .mailbox-shell {
-    min-height: 680px;
+    min-height: min(780px, calc(100dvh - 76px));
     border: 1px solid rgba(228, 179, 64, 0.18);
     border-radius: 8px;
     overflow: hidden;
@@ -130,7 +130,7 @@
   .mailbox-grid {
     display: grid;
     grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
-    min-height: 620px;
+    min-height: min(720px, calc(100dvh - 136px));
   }
   .mailbox-list {
     border-right: 1px solid rgba(228, 179, 64, 0.14);
@@ -227,23 +227,43 @@
     padding: 0 2px;
   }
   .mailbox-attachment {
+    align-items: center;
     border: 1px solid rgba(91, 202, 197, 0.38);
     border-radius: 6px;
     color: #dffcfb;
+    display: inline-flex;
+    gap: 7px;
     font-size: 12px;
     padding: 7px 9px;
+    text-decoration: none;
+  }
+  .mailbox-attachment-name {
+    max-width: 190px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mailbox-attachment-action {
+    border-left: 1px solid rgba(91, 202, 197, 0.28);
+    color: #fff;
+    font-weight: 800;
+    padding-left: 7px;
     text-decoration: none;
   }
   .mailbox-reply {
     background: #4a100b;
     border: 1px solid rgba(255, 101, 67, 0.48);
     border-radius: 6px;
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
     margin-top: auto;
     padding: 16px;
   }
   .mailbox-reply textarea {
     width: 100%;
-    min-height: 120px;
+    flex: 1 1 auto;
+    min-height: 140px;
     resize: vertical;
     border: 1px solid rgba(255, 169, 89, 0.38);
     border-radius: 6px;
@@ -251,7 +271,7 @@
     color: #fff;
     padding: 10px;
   }
-  .mailbox-reply-upload {
+  .mailbox-reply-toolbar {
     align-items: flex-start;
     display: flex;
     flex-wrap: wrap;
@@ -276,10 +296,11 @@
   }
   .mailbox-selected-files {
     color: rgba(250, 246, 236, 0.68);
-    flex: 1 1 220px;
+    flex: 1 1 100%;
     font-size: 12px;
     line-height: 1.35;
     min-width: 0;
+    order: 3;
   }
   .mailbox-selected-file {
     overflow: hidden;
@@ -290,16 +311,32 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 10px;
+    margin-left: 0;
   }
   .mailbox-status {
     color: rgba(250, 246, 236, 0.62);
     font-size: 12px;
   }
   @media (max-width: 840px) {
-    .mailbox-grid { grid-template-columns: 1fr; }
+    .mailbox-shell {
+      min-height: calc(100dvh - 34px);
+    }
+    .mailbox-grid {
+      grid-template-columns: 1fr;
+      min-height: calc(100dvh - 108px);
+    }
     .mailbox-list { border-right: 0; max-height: 320px; }
     .mailbox-search { margin-left: 0; }
+    .mailbox-detail {
+      min-height: calc(100dvh - 360px);
+      padding-bottom: 4px;
+    }
+    .mailbox-reply {
+      min-height: 260px;
+    }
+    .mailbox-reply textarea {
+      min-height: 128px;
+    }
   }
 </style>
 <div class="home-dash-switch" id="homeDashSwitch" role="tablist" aria-label="Dashboard sections">
@@ -1117,7 +1154,7 @@
     });
   }
 
-  function attachmentLink(messageId, att) {
+  function attachmentUrl(messageId, att, inline) {
     var params = new URLSearchParams({
       account: activeAccount,
       message_id: messageId,
@@ -1125,8 +1162,27 @@
       filename: att.filename || "attachment",
       mime_type: att.mime_type || "application/octet-stream"
     });
-    return '<a class="mailbox-attachment" href="/dashboard/email/attachment?' + params.toString() + '">' +
-      esc(att.filename || "attachment") + ' <span>(' + esc(fmtSize(att.size)) + ')</span></a>';
+    if (inline) params.set("inline", "1");
+    return "/dashboard/email/attachment?" + params.toString();
+  }
+
+  function attachmentLink(messageId, att) {
+    var hasAttachmentId = att.id !== undefined && att.id !== null && String(att.id) !== "";
+    var name = att.filename || "attachment";
+    if (!hasAttachmentId) {
+      return '<span class="mailbox-attachment">' +
+        '<span class="mailbox-attachment-name">' + esc(name) + ' (' + esc(fmtSize(att.size)) + ')</span>' +
+        '</span>';
+    }
+    var viewUrl = attachmentUrl(messageId, att, true);
+    var downloadUrl = attachmentUrl(messageId, att, false);
+    return '<span class="mailbox-attachment">' +
+      '<span class="mailbox-attachment-name" title="' + esc(name) + '">' +
+        esc(name) + ' (' + esc(fmtSize(att.size)) + ')' +
+      '</span>' +
+      '<a class="mailbox-attachment-action" href="' + viewUrl + '" target="_blank" rel="noopener">View</a>' +
+      '<a class="mailbox-attachment-action" href="' + downloadUrl + '">Download</a>' +
+      '</span>';
   }
 
   function openMessage(messageId, row) {
@@ -1165,15 +1221,15 @@
       '<div class="mailbox-reply">' +
         '<textarea id="mailboxReplyBody" ' + (account.can_send ? "" : "disabled") + ' placeholder="' +
           (account.can_send ? "Write a reply..." : "Sending is not connected for this mailbox yet.") + '"></textarea>' +
-        '<div class="mailbox-reply-upload">' +
+        '<div class="mailbox-reply-toolbar">' +
           '<label class="mailbox-file-btn" for="mailboxReplyFiles">Attach files</label>' +
           '<input class="mailbox-file-input" id="mailboxReplyFiles" type="file" multiple ' +
             (account.can_send ? "" : "disabled") + '>' +
+          '<div class="mailbox-reply-actions">' +
+            '<button type="button" class="mailbox-icon-btn" id="mailboxSendReply" ' + (account.can_send ? "" : "disabled") + '>Send Reply</button>' +
+            '<span class="mailbox-status" id="mailboxReplyStatus"></span>' +
+          '</div>' +
           '<div class="mailbox-selected-files" id="mailboxSelectedFiles"></div>' +
-        '</div>' +
-        '<div class="mailbox-reply-actions">' +
-          '<button type="button" class="mailbox-icon-btn" id="mailboxSendReply" ' + (account.can_send ? "" : "disabled") + '>Send Reply</button>' +
-          '<span class="mailbox-status" id="mailboxReplyStatus"></span>' +
         '</div>' +
       '</div>';
     var sendBtn = document.getElementById("mailboxSendReply");

@@ -169,13 +169,14 @@ def email_attachment():
     attachment_id = (request.args.get("attachment_id") or "").strip()
     filename = (request.args.get("filename") or "attachment").strip() or "attachment"
     mime_type = (request.args.get("mime_type") or "application/octet-stream").strip()
+    inline = (request.args.get("inline") or "").strip().lower() in {"1", "true", "yes", "on"}
     if not message_id or not attachment_id:
         return jsonify({"ok": False, "error": "missing_attachment_id"}), 400
     try:
         return send_file(
             attachment_stream(account, message_id, attachment_id, user=_current_user()),
             mimetype=mime_type,
-            as_attachment=True,
+            as_attachment=not inline,
             download_name=filename,
         )
     except (MailConfigError, MailProviderError, ValueError) as exc:

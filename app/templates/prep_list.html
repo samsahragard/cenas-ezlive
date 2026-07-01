@@ -194,7 +194,7 @@
   .prep-ctrl-form { display: inline-flex; }
   .prep-page-tabs {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     margin: 0 0 16px;
     padding: 4px;
@@ -525,7 +525,7 @@
     .prep-kpi-value { font-size: 21px; margin-top: 0; }
     .prep-control-bar {
       display: grid;
-      grid-template-columns: minmax(0, 1.55fr) minmax(0, 0.72fr) minmax(0, 0.73fr);
+      grid-template-columns: minmax(0, 1.8fr) minmax(0, 0.9fr);
       gap: 6px;
       align-items: stretch;
       margin-bottom: 8px;
@@ -570,7 +570,7 @@
     .prep-status-chip { min-height: 36px; padding: 5px 3px; font-size: 8.5px; letter-spacing: 0.02em; }
     .prep-save-btn { min-height: 36px; padding: 0 15px; }
     .prep-ingredients summary { padding: 9px 10px; font-size: 11px; }
-    .prep-page-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; }
+    .prep-page-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; }
     .prep-tab-link { min-height: 34px; padding: 0 3px; font-size: 8.5px; letter-spacing: 0.01em; }
   }
 </style>
@@ -752,7 +752,6 @@
       </div>
       <a class="prep-date-nav-btn" href="?date={{ next_date }}&tab={{ active_prep_tab }}" aria-label="Next day">{{ prep_icon('chev') }}</a>
     </div>
-    <a class="prep-ctrl-btn" href="?date={{ prev_date }}&tab=recent">{{ prep_icon('cal') }} <span class="prep-ctrl-text-full">View past days</span><span class="prep-ctrl-text-short">Past days</span></a>
     <span class="prep-spacer"></span>
     <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} <span class="prep-ctrl-text-full">Export today</span><span class="prep-ctrl-text-short">Export</span></button>
   </div>
@@ -808,44 +807,6 @@
         </div>
       </div>
       {% endif %}
-    </section>
-
-  {% elif active_prep_tab == 'recent' %}
-    <section class="prep-panel">
-      <div class="prep-panel-title">Yesterday</div>
-      <div class="prep-report-grid">
-        {% for row in recent_entries %}
-        <div class="prep-report-row">
-          <div>
-            <div class="prep-report-main">{{ row.item }}</div>
-            <div class="prep-report-meta">{{ row.date_label }} - on hand {{ row.on_hand if row.on_hand is not none else '-' }} - prep {{ row.prep_qty if row.prep_qty is not none else '-' }}</div>
-          </div>
-          <div>
-            {{ status_badge(row.status) }}
-            <div class="prep-report-meta">
-              {% if row.completed_by %}Completed by {{ row.completed_by }}{% if row.completed_at_label %} at {{ row.completed_at_label }}{% endif %}
-              {% elif row.assignee %}Assigned to {{ row.assignee }}
-              {% else %}Unassigned{% endif %}
-              {% if row.helpers %}<br>Helped by {{ row.helpers|join(', ') }}{% endif %}
-            </div>
-          </div>
-          <div class="prep-report-action">
-            {% if row.status != 'completed' %}
-            <form method="POST" action="{{ url_for('store.kitchen_prep_list_post', store_slug=store_slug) }}">
-              {{ hidden_common(row.item_id, 'recent', row.date) }}
-              <input type="hidden" name="form_action" value="set_status">
-              <input type="hidden" name="status" value="completed">
-              <button class="prep-ctrl-btn primary" type="submit">Complete</button>
-            </form>
-            {% else %}
-            <span class="prep-small-mono">Done</span>
-            {% endif %}
-          </div>
-        </div>
-        {% else %}
-        <div class="prep-empty">No recent prep activity yet.</div>
-        {% endfor %}
-      </div>
     </section>
 
   {% elif active_prep_tab == 'performance' %}

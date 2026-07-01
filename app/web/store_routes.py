@@ -4396,7 +4396,7 @@ def _render_prep_list_v3(db, label, active_key):
     today = _local_today()
     loc = g.current_location
     active_prep_tab = (request.args.get("tab") or "board").strip().lower()
-    if active_prep_tab not in ("board", "recent", "performance", "developer"):
+    if active_prep_tab not in ("board", "performance", "developer"):
         active_prep_tab = "board"
     try:
         open_item_id = int(request.args.get("open") or 0)
@@ -4799,7 +4799,6 @@ def _render_prep_list_v3(db, label, active_key):
 
     prep_tabs = [
         {"key": "board", "label": "Today"},
-        {"key": "recent", "label": "Yesterday"},
         {"key": "performance", "label": "Performance"},
         {"key": "developer", "label": "Dev"},
     ]

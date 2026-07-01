@@ -4824,7 +4824,7 @@ def _render_prep_list_v3(db, label, active_key):
         prev_date=(sel - timedelta(days=1)).isoformat(),
         next_date=(sel + timedelta(days=1)).isoformat(),
         date_display=f"{sel:%A, %B} {sel.day}, {sel.year}",
-        date_display_compact=f"{sel:%a} {sel:%b} {sel.day}",
+        date_display_compact=f"{sel:%A} {sel:%B} {sel.day}",
         is_today=(sel == today),
     )
 

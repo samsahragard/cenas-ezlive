@@ -260,7 +260,10 @@ def test_email_list_tab_renders_for_full_access_user(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert "Email List" in body
     assert "guest@example.com" in body
-    assert "Email List <small>1</small>" in body
+    assert '<span class="wf-tab-label">Email List</span>' in body
+    assert "<small>1</small>" in body
+    assert 'aria-label="Submission status"' in body
+    assert "All statuses" not in body
 
 
 def test_manager_only_sees_submissions_shared_to_their_store(monkeypatch, tmp_path):
@@ -370,10 +373,15 @@ def test_sub_form_select_options_use_readable_dark_colors():
     assert ".wf-share select option:checked" in source
 
 
-def test_sub_form_mobile_tabs_wrap_without_horizontal_scroll():
+def test_sub_form_mobile_tabs_fit_one_row_without_horizontal_scroll():
     template = Path(__file__).resolve().parents[1] / "app" / "templates" / "website_forms.html"
     source = template.read_text(encoding="utf-8")
 
-    assert ".wf-tabs {\n      flex-wrap: wrap;\n      overflow-x: visible;" in source
+    assert ".wf-status-tabs {\n      display: grid;" in source
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in source
+    assert ".wf-tabs {\n      display: grid;" in source
+    assert "grid-template-columns: repeat(6, minmax(0, 1fr));" in source
+    assert "overflow: visible;" in source
     assert ".wf-tab {\n      display: inline-flex;" in source
-    assert "flex: 1 1 calc(33.333% - 6px);" in source
+    assert ".wf-tab-label { display: none; }" in source
+    assert ".wf-tab-short { display: inline; }" in source

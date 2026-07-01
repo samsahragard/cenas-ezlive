@@ -47,11 +47,29 @@
     gap: 14px;
     flex-wrap: wrap;
   }
-  .wf-title {
-    margin: 0;
-    font-size: clamp(30px, 5vw, 48px);
-    line-height: 1;
-    letter-spacing: -.03em;
+  .wf-status-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .wf-status-tab {
+    min-width: 84px;
+    color: var(--wf-muted);
+    border: 1px solid rgba(255, 217, 112, .24);
+    border-radius: 8px;
+    background: rgba(0,0,0,.28);
+    padding: 10px 14px;
+    text-align: center;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .wf-status-tab:hover { color: #fff; }
+  .wf-status-tab.is-active {
+    background: var(--wf-gold);
+    border-color: var(--wf-gold);
+    color: #3a1409;
   }
   .wf-count {
     font-family: "JetBrains Mono", monospace;
@@ -319,6 +337,22 @@
   }
   @media (max-width: 680px) {
     .wf-head, .wf-body { padding-left: 14px; padding-right: 14px; }
+    .wf-title-row { align-items: stretch; }
+    .wf-status-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: 100%;
+      gap: 6px;
+    }
+    .wf-status-tab {
+      min-width: 0;
+      padding: 9px 4px;
+      font-size: 12px;
+    }
+    .wf-count {
+      width: 100%;
+      text-align: right;
+    }
     .wf-tabs {
       display: grid;
       grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -353,7 +387,14 @@
     <header class="wf-head">
       <div class="wf-kicker">Cenas / Website / Submissions</div>
       <div class="wf-title-row">
-        <h1 class="wf-title">{{ active_label }}</h1>
+        <nav class="wf-status-tabs" aria-label="Submission status">
+          {% for value, label in status_filters.items() %}
+          <a class="wf-status-tab{% if value == selected_status %} is-active{% endif %}"
+             href="{{ url_for('website_forms.partner_forms', type=active_type, status=value, location=selected_location) }}">
+            {{ label }}
+          </a>
+          {% endfor %}
+        </nav>
         <div class="wf-count">{{ rows|length }} visible - {{ counts.get(active_type, 0) }} total</div>
       </div>
     </header>
@@ -361,7 +402,7 @@
     <nav class="wf-tabs" aria-label="Website form types">
       {% for key, label in form_labels.items() %}
       <a class="wf-tab{% if key == active_type %} is-active{% endif %}"
-         href="{{ url_for('website_forms.partner_forms', type=key) }}">
+         href="{{ url_for('website_forms.partner_forms', type=key, status=selected_status, location=selected_location) }}">
         <span class="wf-tab-label">{{ label }}</span>
         <span class="wf-tab-short">{{ form_short_labels.get(key, label) }}</span>
         <small>{{ counts.get(key, 0) }}</small>
@@ -371,20 +412,15 @@
 
     <form class="wf-filters" method="get">
       <input type="hidden" name="type" value="{{ active_type }}">
+      <input type="hidden" name="status" value="{{ selected_status }}">
       <select name="location" aria-label="Location">
         <option value="">All locations</option>
         {% for loc in ["Copperfield", "Tomball", "Either location"] %}
         <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc }}</option>
         {% endfor %}
       </select>
-      <select name="status" aria-label="Status">
-        <option value="">All statuses</option>
-        {% for st in ["new", "reviewed", "archived"] %}
-        <option value="{{ st }}" {% if selected_status == st %}selected{% endif %}>{{ st|title }}</option>
-        {% endfor %}
-      </select>
       <button type="submit">Filter</button>
-      <a href="{{ url_for('website_forms.partner_forms', type=active_type) }}">Clear</a>
+      <a href="{{ url_for('website_forms.partner_forms', type=active_type, status=selected_status) }}">Clear</a>
     </form>
 
     <div class="wf-access-note">

@@ -48,6 +48,12 @@ FORM_SHORT_LABELS = {
     "email-list": "Email",
 }
 
+STATUS_FILTERS = OrderedDict([
+    ("", "All"),
+    ("new", "New"),
+    ("archived", "Archived"),
+])
+
 FORM_ALIASES = {
     "careers": "career",
     "career": "career",
@@ -378,7 +384,8 @@ def partner_forms():
     form_type = _canonical_form_type(request.args.get("type")) or "career"
     location_filter = _normalize_location(request.args.get("location"))
     location_filter_slug = _share_slug(location_filter)
-    status_filter = (request.args.get("status") or "").strip().lower()
+    requested_status = (request.args.get("status") or "").strip().lower()
+    status_filter = requested_status if requested_status in STATUS_FILTERS else ""
 
     db = SessionLocal()
     try:
@@ -405,15 +412,26 @@ def partner_forms():
 
         counts = {}
         for key in FORM_LABELS:
-            count_rows = (
-                db.query(WebsiteFormSubmission)
-                .filter(WebsiteFormSubmission.form_type == key)
-                .all()
+            count_q = db.query(WebsiteFormSubmission).filter(
+                WebsiteFormSubmission.form_type == key
             )
+            if location_filter and full_access:
+                count_q = count_q.filter(WebsiteFormSubmission.location == location_filter)
+            if status_filter:
+                count_q = count_q.filter(WebsiteFormSubmission.status == status_filter)
+            count_rows = count_q.all()
             counts[key] = (
                 len(count_rows)
                 if full_access
-                else sum(1 for row in count_rows if _can_user_see_row(row, user_locations))
+                else sum(
+                    1 for row in count_rows
+                    if _can_user_see_row(row, user_locations)
+                    and (
+                        not location_filter_slug
+                        or location_filter_slug in (row.shared_locations or [])
+                        or _share_slug(row.location) == location_filter_slug
+                    )
+                )
             )
     finally:
         db.close()
@@ -427,6 +445,7 @@ def partner_forms():
         active="website_forms",
         form_labels=FORM_LABELS,
         form_short_labels=FORM_SHORT_LABELS,
+        status_filters=STATUS_FILTERS,
         active_type=form_type,
         active_label=FORM_LABELS[form_type],
         counts=counts,

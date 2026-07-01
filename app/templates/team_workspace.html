@@ -349,20 +349,26 @@
     .tws-stickybar .tws-tab {
       flex: 1 1 0;
       min-width: 0;
+      flex-direction: column;
       justify-content: center;
-      gap: 2px;
-      padding: 8px 1px;
+      align-items: center;
+      gap: 3px;
+      min-height: 44px;
+      padding: 6px 1px;
       font-size: 0;
       text-align: center;
       white-space: nowrap;
     }
     .tws-stickybar .tws-tab::after {
       content: attr(data-mobile-label);
-      font-size: 9.5px;
-      line-height: 1;
+      display: block;
+      font-size: 9px;
+      line-height: 1.05;
     }
     .tws-stickybar .tws-tab .ti {
-      font-size: 11px;
+      display: block;
+      font-size: 14px;
+      line-height: 1;
     }
     .tws-store-tab {
       flex: 1 1 calc(50% - 6px);

@@ -119,6 +119,7 @@
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
     margin-bottom: 0;
   }
+  .sv2-filter-row, .sv2-state-row { display: contents; }
   .sv2-weeknav { display: flex; align-items: center; gap: 8px; }
   .sv2-arrow {
     width: 36px; height: 36px; border-radius: var(--sk-radius-sm);
@@ -207,6 +208,7 @@
   }
   .sv2-select-visible input { margin: 0; accent-color: var(--sk-gold-bright); cursor: pointer; }
   .sv2-select-visible:has(input:disabled) { opacity: .48; cursor: not-allowed; }
+  .sv2-publish-slot { display: contents; }
   /* position-filter people hint + holder list (Sam #2589) */
   .sv2-pos-hint { font-size: 12.5px; color: var(--sk-gold-bright); margin: -4px 2px 10px;
     line-height: 1.4; }
@@ -529,8 +531,32 @@
 
   @media (max-width: 600px) {
     .sv2-weeklabel { font-size: 18px; min-width: 150px; }
-    .sv2-controls { gap: 8px 10px; }
-    .sv2-filter { min-width: 120px; }
+    .sv2-controls { gap: 8px; }
+    .sv2-weeknav { width: 100%; justify-content: space-between; }
+    .sv2-filter-row, .sv2-state-row {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }
+    .sv2-posfilter, .sv2-tagfilter, .sv2-viewfilter,
+    .sv2-filter, .sv2-select-visible, .sv2-state-row .sv2-pill,
+    .sv2-publish-slot, .sv2-publish-slot .sv2-btn {
+      width: 100%;
+      min-width: 0;
+    }
+    .sv2-filter, .sv2-select-visible, .sv2-state-row .sv2-pill, .sv2-publish-slot .sv2-btn {
+      min-height: 36px;
+      padding: 7px 8px;
+      text-align: center;
+      justify-content: center;
+      font-size: 11.5px;
+    }
+    .sv2-state-row .sv2-pill { display: inline-flex; align-items: center; justify-content: center; }
+    .sv2-select-visible { gap: 5px; white-space: nowrap; }
+    .sv2-select-visible input { flex: 0 0 auto; }
+    .sv2-spacer { display: none; }
   }
 </style>
 
@@ -547,32 +573,37 @@
         <button class="sv2-arrow" id="sv2-next" title="Next week" aria-label="Next week">&rsaquo;</button>
       </div>
       <button class="sv2-btn warn sv2-hidden" id="sv2-declined" title="Show only declined shifts that need reassigning" aria-pressed="false"></button>
-      <div class="sv2-posfilter" id="sv2-posfilter-wrap">
-        <button type="button" class="sv2-filter" id="sv2-posfilter-btn" aria-haspopup="true" aria-expanded="false">All positions</button>
-        <div class="sv2-posfilter-pop sv2-hidden" id="sv2-posfilter-pop" role="group" aria-label="Filter by position"></div>
-      </div>
-      <div class="sv2-tagfilter" id="sv2-tagfilter-wrap">
-        <button type="button" class="sv2-filter" id="sv2-tagfilter-btn" aria-haspopup="true" aria-expanded="false">All tags</button>
-        <div class="sv2-posfilter-pop sv2-hidden" id="sv2-tagfilter-pop" role="group" aria-label="Filter by tag"></div>
-      </div>
-      <div class="sv2-viewfilter" id="sv2-viewfilter-wrap">
-        <button type="button" class="sv2-filter" id="sv2-viewfilter-btn" aria-haspopup="true" aria-expanded="false">View options</button>
-        <div class="sv2-posfilter-pop sv2-hidden" id="sv2-viewfilter-pop" role="group" aria-label="Schedule view options">
-          <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="emptyRows" checked> Empty rows</label>
-          <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="unpublished" checked> Unpublished shifts</label>
-          <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="hours" checked> Count of hours</label>
-          <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="conflicts" checked> Conflicts</label>
+      <div class="sv2-filter-row">
+        <div class="sv2-posfilter" id="sv2-posfilter-wrap">
+          <button type="button" class="sv2-filter" id="sv2-posfilter-btn" aria-haspopup="true" aria-expanded="false">Positions</button>
+          <div class="sv2-posfilter-pop sv2-hidden" id="sv2-posfilter-pop" role="group" aria-label="Filter by position"></div>
+        </div>
+        <div class="sv2-tagfilter" id="sv2-tagfilter-wrap">
+          <button type="button" class="sv2-filter" id="sv2-tagfilter-btn" aria-haspopup="true" aria-expanded="false">Tags</button>
+          <div class="sv2-posfilter-pop sv2-hidden" id="sv2-tagfilter-pop" role="group" aria-label="Filter by tag"></div>
+        </div>
+        <div class="sv2-viewfilter" id="sv2-viewfilter-wrap">
+          <button type="button" class="sv2-filter" id="sv2-viewfilter-btn" aria-haspopup="true" aria-expanded="false">Options</button>
+          <div class="sv2-posfilter-pop sv2-hidden" id="sv2-viewfilter-pop" role="group" aria-label="Schedule view options">
+            <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="emptyRows" checked> Empty rows</label>
+            <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="unpublished" checked> Unpublished shifts</label>
+            <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="hours" checked> Count of hours</label>
+            <label class="sv2-posfilter-opt"><input type="checkbox" data-view-option="conflicts" checked> Conflicts</label>
+          </div>
         </div>
       </div>
-      <button class="sv2-btn" id="sv2-today">This week</button>
-      <label class="sv2-select-visible" title="Select every shift currently visible after filters">
-        <input type="checkbox" id="sv2-select-visible">
-        <span>Select visible shifts</span>
-      </label>
       <div class="sv2-spacer"></div>
-      <span class="sv2-pill none" id="sv2-status">No schedule</span>
-      <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
-      <button class="sv2-btn primary sv2-hidden" id="sv2-publish">Publish</button>
+      <div class="sv2-state-row">
+        <label class="sv2-select-visible" title="Select every shift currently visible after filters">
+          <input type="checkbox" id="sv2-select-visible">
+          <span>Visible shifts</span>
+        </label>
+        <span class="sv2-pill none" id="sv2-status">No schedule</span>
+        <div class="sv2-publish-slot">
+          <button class="sv2-btn primary sv2-hidden" id="sv2-createdraft">+ Create draft</button>
+          <button class="sv2-btn primary sv2-hidden" id="sv2-publish">Publish</button>
+        </div>
+      </div>
     </div>
 
     <div id="sv2-seltoolbar" class="sv2-seltoolbar sv2-hidden">
@@ -1080,7 +1111,7 @@
   }
 
   function updatePosFilterLabel() {
-    var n = state.posFilter.length, label = "All positions";
+    var n = state.posFilter.length, label = "Positions";
     var areaLabel = selectedAreaLabel();
     if (areaLabel) label = areaLabel;
     if (n === 1) { var p = posById(state.posFilter[0]); label = p ? p.name : "1 position"; }
@@ -1089,7 +1120,7 @@
   }
 
   function updateTagFilterLabel() {
-    var n = state.tagFilter.length, label = "All tags";
+    var n = state.tagFilter.length, label = "Tags";
     if (n === 1) { var t = tagById(state.tagFilter[0]); label = t ? t.name : "1 tag"; }
     else if (n > 1) { label = n + " tags"; }
     elTagBtn.textContent = label;
@@ -1099,7 +1130,7 @@
     if (!elViewBtn) return;
     var opts = state.viewOptions || defaultViewOptions(), n = 0;
     Object.keys(defaultViewOptions()).forEach(function (k) { if (opts[k]) n++; });
-    elViewBtn.textContent = n === 4 ? "View options" : "View (" + n + ")";
+    elViewBtn.textContent = n === 4 ? "Options" : "Options (" + n + ")";
   }
 
   // ---- grid render ----
@@ -1870,7 +1901,8 @@
   // ---- events ----
   $("sv2-prev").onclick = function () { state.weekStart = addDays(state.weekStart, -7); loadBoard(); };
   $("sv2-next").onclick = function () { state.weekStart = addDays(state.weekStart, 7); loadBoard(); };
-  $("sv2-today").onclick = function () { state.weekStart = weekStartOf(new Date()); loadBoard(); };
+  var todayBtn = $("sv2-today");
+  if (todayBtn) todayBtn.onclick = function () { state.weekStart = weekStartOf(new Date()); loadBoard(); };
   elPosBtn.onclick = function (e) {
     e.stopPropagation();
     var willOpen = elPosPop.classList.contains("sv2-hidden");

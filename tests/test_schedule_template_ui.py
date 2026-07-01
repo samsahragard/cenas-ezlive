@@ -24,8 +24,15 @@ def test_schedule_grid_uses_lighter_blue_cells_and_swapped_toolbar_controls():
     assert controls.index('id="sv2-posfilter-wrap"') < spacer
     assert controls.index('id="sv2-tagfilter-wrap"') < spacer
     assert controls.index('id="sv2-viewfilter-wrap"') < spacer
-    assert controls.index('id="sv2-today"') < spacer
+    assert 'id="sv2-today"' not in controls
+    assert "This week" not in controls
     assert controls.index('id="sv2-status"') > spacer
+    assert '<div class="sv2-filter-row">' in controls
+    assert '<div class="sv2-state-row">' in controls
+    assert '>Positions</button>' in controls
+    assert '>Tags</button>' in controls
+    assert '>Options</button>' in controls
+    assert "<span>Visible shifts</span>" in controls
 
 
 def test_schedule_grid_sorts_visible_people_rows_by_first_name():
@@ -115,6 +122,7 @@ def test_schedule_controls_and_bulk_actions_are_inside_stickybar():
     assert 'id="sv2-viewfilter-btn"' in sticky
     assert 'id="sv2-select-visible"' in sticky
     assert 'id="sv2-status"' in sticky
+    assert 'id="sv2-today"' not in sticky
     assert 'id="sv2-seltoolbar"' in sticky
     assert 'id="sv2-sel-edit"' in sticky
     assert 'id="sv2-sel-copy"' in sticky
@@ -122,6 +130,18 @@ def test_schedule_controls_and_bulk_actions_are_inside_stickybar():
     assert 'id="sv2-seltoolbar"' not in grid_prefix
     assert "top: var(--sv2-sticky-offset, 0px)" in template
     assert "function updateStickyOffset()" in template
+
+
+def test_schedule_mobile_toolbar_uses_three_column_rows():
+    template = _read("schedules_v2_week.html")
+
+    assert ".sv2-filter-row, .sv2-state-row {" in template
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in template
+    assert ".sv2-filter, .sv2-select-visible, .sv2-state-row .sv2-pill, .sv2-publish-slot .sv2-btn" in template
+    assert "var todayBtn = $(\"sv2-today\");" in template
+    assert 'var n = state.posFilter.length, label = "Positions";' in template
+    assert 'var n = state.tagFilter.length, label = "Tags";' in template
+    assert 'elViewBtn.textContent = n === 4 ? "Options" : "Options (" + n + ")";' in template
 
 
 def test_team_roster_controls_are_inside_stickybar():
@@ -236,6 +256,10 @@ def test_market_iframe_skips_auto_height_feedback_loop():
     assert ".tws-stickybar .tws-tabs" in template
     assert "flex-wrap: nowrap;" in template
     assert ".tws-stickybar .tws-tab {\n      flex: 1 1 0;" in template
+    assert "flex-direction: column;" in template
+    assert "min-height: 44px;" in template
+    assert ".tws-stickybar .tws-tab::after {\n      content: attr(data-mobile-label);" in template
+    assert ".tws-stickybar .tws-tab .ti {\n      display: block;" in template
     assert "#tws-panel-market, #tws-panel-market .tws-store-shell, #tws-panel-market .tws-embed-wrap { max-width: 100%; overflow-x: hidden; }" in template
 
 

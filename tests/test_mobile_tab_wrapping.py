@@ -52,6 +52,11 @@ def test_fresh_food_place_order_uses_compact_order_day_row():
     assert "Order day" in source
     assert "ffpo-date-short" in source
     assert "ffpo-date-weekday" in source
+    assert "ffpo-order-by" in source
+    assert "orderer_first" in source
+    assert "<i class=\"ti ti-send\"></i>Submit" in source
     assert "grid-template-columns: minmax(86px, 1fr) 52px 52px 46px 32px;" in source
+    assert "Placed by" not in source
+    assert "Submit order" not in source
     assert "delivery.strftime('%A, %B %d')" not in source
     assert "ff-today-date-label" not in source

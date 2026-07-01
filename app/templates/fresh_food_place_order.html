@@ -99,6 +99,15 @@
     letter-spacing: 0.02em;
     text-transform: uppercase;
   }
+  .ffpo-order-by {
+    color: rgba(255,255,255,0.62);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .ffpo-order-by strong {
+    color: #E4B340;
+    font-weight: 800;
+  }
   .ffpo-date-native {
     position: absolute;
     inset: auto auto 0 70px;
@@ -108,26 +117,6 @@
   }
 
   /* --- TODAY (single-day) view ------------------------------------ */
-  .ff-today-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 4px;
-  }
-  .ff-today-date { margin: 0; font-size: 25px; font-weight: 700; color: #FAF6EC; letter-spacing: -0.01em; }
-  .ff-today-by { margin-top: 6px; font-size: 12.5px; color: rgba(255,255,255,0.55); }
-  .ff-today-by strong { color: #E4B340; font-weight: 600; }
-  .ff-today-legend {
-    font-size: 11px;
-    color: rgba(255,255,255,0.45);
-    padding: 10px 0;
-    border-bottom: 0.5px solid rgba(217,164,54,0.12);
-    margin-bottom: 2px;
-    letter-spacing: 0.02em;
-  }
-
   .ff-cat-block { margin-top: 18px; }
   .ff-cat-bar {
     display: flex;
@@ -270,6 +259,7 @@
     .ffpo-date-row .label { font-size: 8.5px; margin-right: 0; }
     .ffpo-date-display { min-height: 32px; padding: 0 9px; font-size: 12px; }
     .ffpo-date-weekday { font-size: 14px; }
+    .ffpo-order-by { font-size: 10.5px; }
     .ff-cat-thead, .ff-item-row {
       grid-template-columns: minmax(86px, 1fr) 52px 52px 46px 32px;
       gap: 6px;
@@ -351,6 +341,7 @@
   {% set delivery_short_year = '%02d/%02d/%02d'|format(delivery.month, delivery.day, delivery.year % 100) %}
   {% set delivery_day = delivery.strftime('%A') %}
   {% set orderer = (g.current_user.full_name if g.current_user else 'unknown') %}
+  {% set orderer_first = orderer.split()[0] if orderer else 'unknown' %}
   {% set location = (g.current_location or 'both')|title %}
 
   <div class="ffpo-meta">
@@ -360,17 +351,12 @@
         <span id="ffpo-date-short">{{ delivery_short_year }}</span>
       </button>
       <span class="ffpo-date-weekday" id="ffpo-date-weekday">{{ delivery_day|upper }}</span>
+      <span class="ffpo-order-by">by <strong>{{ orderer_first }}</strong> at <strong>{{ location }}</strong></span>
       <input class="ffpo-date-native" type="date" id="ffpo-order-date" value="{{ delivery.isoformat() }}" aria-label="Order date">
     </div>
   </div>
 
   <div id="ffpo-today-view">
-    <div class="ff-today-head">
-      <div>
-        <div class="ff-today-by">Placed by <strong>{{ orderer }}</strong> at <strong>{{ location }}</strong></div>
-      </div>
-    </div>
-
     {% for cat in categories %}
       <div class="ff-cat-block">
         <div class="ff-cat-bar">
@@ -419,7 +405,7 @@
     <div class="ffpo-submit-actions">
       <button id="ffpo-cancel" class="ffpo-btn ghost" type="button" style="display:none;">Cancel</button>
       <button id="ffpo-submit" class="ffpo-btn" type="button">
-        <i class="ti ti-send"></i>Submit order
+        <i class="ti ti-send"></i>Submit
       </button>
     </div>
   </div>
@@ -450,7 +436,7 @@
   function resetConfirm(){
     confirming = false;
     btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-send"></i>Submit order';
+    btn.innerHTML = '<i class="ti ti-send"></i>Submit';
     cancelBtn.style.display = 'none';
   }
 

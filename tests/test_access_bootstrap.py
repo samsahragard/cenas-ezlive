@@ -176,6 +176,15 @@ def test_access_bootstrap_moves_alex_to_sebastian_copperfield_manager_profile(db
 
 
 def test_access_bootstrap_moves_james_to_c_driver_profile(db_session):
+    existing_user = _user(
+        db_session,
+        50,
+        "James Paddie",
+        role="corporate",
+        scope=None,
+        email="james@test.local",
+        phone="555-555-5151",
+    )
     employee = Employee(
         id=51,
         full_name="James Paddie",
@@ -186,9 +195,11 @@ def test_access_bootstrap_moves_james_to_c_driver_profile(db_session):
         session_version=7,
     )
     server = Position(id=52, name="Server", store_key=None)
-    db_session.add_all([employee, server])
+    corporate = Position(id=53, name="Corporate", store_key=None)
+    db_session.add_all([existing_user, employee, server, corporate])
     db_session.flush()
     db_session.add(EmployeePosition(employee_id=employee.id, position_id=server.id, store_key="tomball"))
+    db_session.add(EmployeePosition(employee_id=employee.id, position_id=corporate.id, store_key="copperfield"))
     db_session.commit()
 
     changed = apply_requested_access_scopes(db_session)
@@ -196,6 +207,7 @@ def test_access_bootstrap_moves_james_to_c_driver_profile(db_session):
 
     assert changed == 1
     user = db_session.query(User).filter(User.full_name == "James Paddie").one()
+    assert user.id == existing_user.id
     assert employee.user_id == user.id
     assert employee.session_version == 8
     assert user.permission_level == "corporate_driver"
@@ -222,12 +234,56 @@ def test_access_bootstrap_moves_james_to_c_driver_profile(db_session):
         .all()
     )
     position_pairs = {(name, store_key) for name, store_key in position_rows}
-    assert ("Server", "tomball") in position_pairs
-    assert ("C-Driver", "tomball") in position_pairs
-    assert ("C-Driver", "copperfield") in position_pairs
-    assert db_session.query(UserAuditLog).filter_by(target_user_id=user.id, action="create").count() == 1
+    assert position_pairs == {
+        ("C-Driver", "tomball"),
+        ("C-Driver", "copperfield"),
+    }
+    assert db_session.query(UserAuditLog).filter_by(target_user_id=user.id, action="role_change").count() == 1
 
     changed_again = apply_requested_access_scopes(db_session)
     db_session.commit()
 
     assert changed_again == 0
+
+
+def test_access_bootstrap_repairs_matching_stale_james_login_user(db_session):
+    primary = _user(
+        db_session,
+        60,
+        "James Paddie",
+        role="employee",
+        scope="tomball",
+        email="james2@test.local",
+        phone="555-555-6060",
+    )
+    employee = Employee(
+        id=61,
+        full_name="James Paddie",
+        phone="555-555-6161",
+        email="james2@test.local",
+        passcode_hash="james-employee-pin-hash",
+        active=True,
+        session_version=1,
+    )
+    stale_phone_user = _user(
+        db_session,
+        62,
+        "James",
+        role="corporate",
+        scope=None,
+        email="other-james-login@test.local",
+        phone="555-555-6161",
+    )
+    cdriver = Position(id=63, name="C-Driver", store_key=None)
+    db_session.add_all([employee, stale_phone_user, cdriver])
+    db_session.commit()
+
+    changed = apply_requested_access_scopes(db_session)
+    db_session.commit()
+
+    assert changed == 2
+    assert employee.user_id == primary.id
+    assert primary.permission_level == "corporate_driver"
+    assert stale_phone_user.permission_level == "corporate_driver"
+    assert stale_phone_user.store_scope == "tomball,copperfield"
+    assert stale_phone_user.session_version == 2

@@ -247,6 +247,45 @@ def _find_user_for_employee(db, employee: Employee) -> User | None:
     return None
 
 
+def _users_matching_employee(db, employee: Employee) -> list[User]:
+    """All active User rows that look like this employee identity.
+
+    Login resolves users by phone before employee fallback, so a stale same-phone
+    User row must be repaired too. Keep this narrowly tied to the employee's
+    exact phone/email/full name so broad aliases like "James" do not touch a
+    different person.
+    """
+    hits: list[User] = []
+
+    def _add(user: User | None) -> None:
+        if user is not None and user not in hits:
+            hits.append(user)
+
+    linked_id = getattr(employee, "user_id", None)
+    if linked_id:
+        _add(db.get(User, linked_id))
+
+    phone = _normalize_phone(getattr(employee, "phone", None))
+    if phone:
+        for user in db.query(User).filter(User.phone.isnot(None)).all():
+            if _normalize_phone(user.phone) == phone:
+                _add(user)
+
+    email = _normalize_text(getattr(employee, "email", None))
+    if email:
+        for user in db.query(User).filter(User.email.isnot(None)).all():
+            if _normalize_text(user.email) == email:
+                _add(user)
+
+    name = _normalize_text(getattr(employee, "full_name", None))
+    if name:
+        for user in db.query(User).all():
+            if _normalize_text(user.full_name) == name:
+                _add(user)
+
+    return hits
+
+
 def _audit_role_change(db, user: User, before: str, details: str) -> None:
     db.add(UserAuditLog(
         target_user_id=user.id,
@@ -371,6 +410,8 @@ def _move_employee_to_manager_profile(
     role_override: str | None = None,
     position_store_scopes: tuple[str, ...] | None = None,
     profile_label: str = "manager",
+    exclusive_role_positions: bool = False,
+    preferred_user: User | None = None,
 ) -> bool:
     if employee is None:
         return False
@@ -378,14 +419,33 @@ def _move_employee_to_manager_profile(
     if not role:
         return False
 
+    position_stores = tuple(position_store_scopes or (store_scope,))
     store_position_changed = False
-    for position_store in position_store_scopes or (store_scope,):
+    if exclusive_role_positions:
+        desired_position = _position_for_role(db, role)
+        desired_store_keys = {
+            (position_store or "").strip()
+            for position_store in position_stores
+            if (position_store or "").strip()
+        }
+        if desired_position is not None:
+            for row in (
+                db.query(EmployeePosition)
+                .filter(EmployeePosition.employee_id == employee.id)
+                .all()
+            ):
+                if row.position_id == desired_position.id and row.store_key in desired_store_keys:
+                    continue
+                db.delete(row)
+                store_position_changed = True
+
+    for position_store in position_stores:
         store_key = (position_store or "").strip()
         if not store_key:
             continue
         if _ensure_employee_manager_store_access(db, employee, role, store_key):
             store_position_changed = True
-    user = _find_user_for_employee(db, employee)
+    user = preferred_user or _find_user_for_employee(db, employee)
     created = False
     before = _role_state(user) if user is not None else None
     profile_before = None
@@ -507,6 +567,64 @@ def _move_employee_to_manager_profile(
     return False
 
 
+def _repair_matching_users_for_employee(
+    db,
+    *,
+    employee: Employee,
+    primary_user: User | None,
+    role: str,
+    store_scope: str,
+    profile_label: str,
+) -> bool:
+    """Repair same-phone/email/name User rows so login cannot choose a stale role."""
+    changed = False
+    for user in _users_matching_employee(db, employee):
+        if primary_user is not None and user.id == primary_user.id:
+            continue
+        before = _role_state(user)
+        profile_before = (
+            user.active,
+            user.first_login_done,
+            user.failed_attempts,
+            user.lockout_until,
+        )
+        user.permission_level = role
+        user.store_scope = store_scope
+        user.active = True
+        user.first_login_done = True
+        user.failed_attempts = 0
+        user.lockout_until = None
+        profile_after = (
+            user.active,
+            user.first_login_done,
+            user.failed_attempts,
+            user.lockout_until,
+        )
+        if before != _role_state(user) or profile_before != profile_after:
+            user.session_version = (user.session_version or 0) + 1
+            if before != _role_state(user):
+                _audit_role_change(
+                    db,
+                    user,
+                    before,
+                    f"Moved matching login profile to {profile_label}; store_scope={store_scope}.",
+                )
+            else:
+                db.add(UserAuditLog(
+                    target_user_id=user.id,
+                    target_label=user.full_name,
+                    actor_user_id=None,
+                    actor_label=_ACTOR_LABEL,
+                    action="edit",
+                    before_value=before,
+                    after_value=_role_state(user),
+                    details=f"Repaired matching {profile_label} login profile.",
+                    ip=None,
+                ))
+            changed = True
+    return changed
+
+
 def apply_requested_access_scopes(db) -> int:
     """Apply Sam's requested 2026-06-26 dashboard badge/access assignments.
 
@@ -557,6 +675,18 @@ def apply_requested_access_scopes(db) -> int:
 
     for profile in CORPORATE_DRIVER_PROFILES:
         employee = _find_employee(db, aliases=profile.employee_aliases)
+        preferred_user = None
+        if employee is not None:
+            preferred_user = _find_user(
+                db,
+                aliases=((getattr(employee, "full_name", None) or "").strip(),),
+                emails=tuple(
+                    v for v in ((getattr(employee, "email", None) or "").strip(),) if v
+                ),
+                phones=tuple(
+                    v for v in ((getattr(employee, "phone", None) or "").strip(),) if v
+                ),
+            )
         if _move_employee_to_manager_profile(
             db,
             employee=employee,
@@ -564,6 +694,17 @@ def apply_requested_access_scopes(db) -> int:
             store_scope=profile.store_scope,
             role_override="corporate_driver",
             position_store_scopes=profile.position_store_scopes,
+            profile_label="C-Driver",
+            exclusive_role_positions=True,
+            preferred_user=preferred_user,
+        ):
+            changed += 1
+        if employee is not None and _repair_matching_users_for_employee(
+            db,
+            employee=employee,
+            primary_user=db.get(User, employee.user_id) if getattr(employee, "user_id", None) else preferred_user,
+            role="corporate_driver",
+            store_scope=profile.store_scope,
             profile_label="C-Driver",
         ):
             changed += 1

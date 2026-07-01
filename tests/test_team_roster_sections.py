@@ -161,6 +161,7 @@ def test_addable_positions_annotated_with_section(db_session):
     for nm in ("Server", "Cook", "Well", "Prep", "Dishwasher"):
         assert nm in by_name, nm
         assert by_name[nm]["section"] == SECTION_HOURLY, nm
+    assert by_name["C-Driver"]["section"] == SECTION_DRIVER
     # Every entry carries id, name, section (additive key).
     for p in out:
         assert set(p) >= {"id", "name", "section"}

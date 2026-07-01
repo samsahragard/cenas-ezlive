@@ -17,6 +17,7 @@ operational tail.
 from __future__ import annotations
 
 import hmac
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,67 @@ from app.models import (
 logger = logging.getLogger(__name__)
 
 cena_bp = Blueprint("cena", __name__)
+
+
+_CODEX_WEBSITE_FORM_TYPES = {
+    "career",
+    "catering",
+    "spirit",
+    "donation",
+    "contact",
+    "email-list",
+}
+_CODEX_WEBSITE_FORM_MARKERS = (
+    "codex",
+    "cenaskitchen.test",
+    "subform20260629",
+)
+
+
+def _website_form_submission_text(row: Any) -> str:
+    values: list[str] = []
+    for attr in (
+        "applicant_name",
+        "organization",
+        "contact_name",
+        "subject",
+        "email",
+        "phone",
+        "source_page",
+        "notes",
+    ):
+        value = getattr(row, attr, None)
+        if value:
+            values.append(str(value))
+    for attr in ("fields", "attachments"):
+        value = getattr(row, attr, None)
+        if value:
+            try:
+                values.append(json.dumps(value, sort_keys=True, default=str))
+            except TypeError:
+                values.append(str(value))
+    return "\n".join(values).lower()
+
+
+def _is_codex_website_form_submission(row: Any) -> bool:
+    if getattr(row, "form_type", None) not in _CODEX_WEBSITE_FORM_TYPES:
+        return False
+    text = _website_form_submission_text(row)
+    return any(marker in text for marker in _CODEX_WEBSITE_FORM_MARKERS)
+
+
+def _website_form_submission_summary(row: Any) -> dict[str, Any]:
+    return {
+        "id": getattr(row, "id", None),
+        "form_type": getattr(row, "form_type", None),
+        "status": getattr(row, "status", None),
+        "location": getattr(row, "location", None),
+        "applicant_name": getattr(row, "applicant_name", None),
+        "organization": getattr(row, "organization", None),
+        "contact_name": getattr(row, "contact_name", None),
+        "subject": getattr(row, "subject", None),
+        "email": getattr(row, "email", None),
+    }
 
 
 # ============================================================
@@ -3684,6 +3746,58 @@ def cena_run_archive_and_wipe_dev_chat():
     except Exception as e:  # noqa: BLE001
         db.rollback()
         logger.exception("cena: run-archive-and-wipe-dev-chat crashed")
+        return jsonify({"ok": False,
+                        "error": f"{type(e).__name__}: {e}"}), 500
+    finally:
+        db.close()
+
+
+@cena_bp.route("/sam/cena/run-cleanup-codex-website-forms", methods=["POST"])
+def cena_run_cleanup_codex_website_forms():
+    """Hard-delete Codex-generated public website form test submissions.
+
+    Dry-run is the default so callers can inspect the exact records before
+    removing anything from the live website form inbox.
+    """
+    gate = _require_gateway_token()
+    if gate is not None:
+        return gate
+
+    body = request.get_json(silent=True) or {}
+    raw_dry_run = body.get("dry_run", True)
+    if isinstance(raw_dry_run, str):
+        dry_run = raw_dry_run.strip().lower() not in {"0", "false", "no"}
+    else:
+        dry_run = bool(raw_dry_run)
+
+    from app.models import WebsiteFormSubmission as _WFS
+    db = SessionLocal()
+    try:
+        candidates = db.query(_WFS).filter(
+            _WFS.form_type.in_(sorted(_CODEX_WEBSITE_FORM_TYPES))
+        ).all()
+        matches = [
+            row for row in candidates
+            if _is_codex_website_form_submission(row)
+        ]
+        records = [_website_form_submission_summary(row) for row in matches]
+        deleted = 0
+        if not dry_run:
+            for row in matches:
+                db.delete(row)
+            deleted = len(matches)
+            db.commit()
+
+        return jsonify({
+            "ok": True,
+            "dry_run": dry_run,
+            "matched": len(records),
+            "deleted": deleted,
+            "records": records,
+        })
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cena: run-cleanup-codex-website-forms crashed")
         return jsonify({"ok": False,
                         "error": f"{type(e).__name__}: {e}"}), 500
     finally:

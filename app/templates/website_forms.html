@@ -75,6 +75,7 @@
     font-size: 13px;
   }
   .wf-tab:hover { color: #fff; }
+  .wf-tab-short { display: none; }
   .wf-tab.is-active {
     color: #fff;
     border-bottom-color: var(--wf-gold);
@@ -319,20 +320,28 @@
   @media (max-width: 680px) {
     .wf-head, .wf-body { padding-left: 14px; padding-right: 14px; }
     .wf-tabs {
-      flex-wrap: wrap;
-      overflow-x: visible;
-      gap: 6px;
-      padding: 8px;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0;
+      overflow: visible;
+      padding: 6px 4px 0;
     }
     .wf-tab {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      flex: 1 1 calc(33.333% - 6px);
-      min-width: 96px;
-      padding: 9px 8px;
+      gap: 2px;
+      min-width: 0;
+      padding: 8px 1px 9px;
       text-align: center;
-      white-space: normal;
+      white-space: nowrap;
+      font-size: 9px;
+    }
+    .wf-tab-label { display: none; }
+    .wf-tab-short { display: inline; }
+    .wf-tab small {
+      font-size: 9px;
+      margin-left: 1px;
     }
     .wf-grid { grid-template-columns: 1fr; }
     .wf-line { grid-template-columns: 1fr; gap: 2px; }
@@ -353,7 +362,9 @@
       {% for key, label in form_labels.items() %}
       <a class="wf-tab{% if key == active_type %} is-active{% endif %}"
          href="{{ url_for('website_forms.partner_forms', type=key) }}">
-        {{ label }} <small>{{ counts.get(key, 0) }}</small>
+        <span class="wf-tab-label">{{ label }}</span>
+        <span class="wf-tab-short">{{ form_short_labels.get(key, label) }}</span>
+        <small>{{ counts.get(key, 0) }}</small>
       </a>
       {% endfor %}
     </nav>

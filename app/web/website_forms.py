@@ -39,6 +39,15 @@ FORM_LABELS = OrderedDict([
     ("email-list", "Email List"),
 ])
 
+FORM_SHORT_LABELS = {
+    "career": "Career",
+    "catering": "Catering",
+    "spirit": "Spirit",
+    "donation": "Donate",
+    "contact": "Contact",
+    "email-list": "Email",
+}
+
 FORM_ALIASES = {
     "careers": "career",
     "career": "career",
@@ -417,6 +426,7 @@ def partner_forms():
         "website_forms.html",
         active="website_forms",
         form_labels=FORM_LABELS,
+        form_short_labels=FORM_SHORT_LABELS,
         active_type=form_type,
         active_label=FORM_LABELS[form_type],
         counts=counts,

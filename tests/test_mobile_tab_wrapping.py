@@ -72,7 +72,13 @@ def test_fresh_food_place_order_uses_compact_order_day_row():
     assert "ffpo-order-by" in source
     assert "orderer_first" in source
     assert "<i class=\"ti ti-send\"></i>Submit" in source
-    assert "grid-template-columns: minmax(86px, 1fr) 52px 52px 46px 32px;" in source
+    assert ".ff-cat-table {\n      display: grid;" in source
+    assert "grid-template-columns: repeat(5, minmax(0, 1fr));" in source
+    assert "data-ff-mobile-toggle" in source
+    assert "ff-mobile-panel" in source
+    assert "data-ff-mobile-kind=\"inv\"" in source
+    assert "data-ff-mobile-kind=\"or\"" in source
+    assert "body.ff-mobile-sheet-open" in source
     assert "Placed by" not in source
     assert "Submit order" not in source
     assert "delivery.strftime('%A, %B %d')" not in source

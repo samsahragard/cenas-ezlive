@@ -231,6 +231,11 @@
     font-variant-numeric: tabular-nums;
   }
   .ff-avg .unit { color: rgba(255,255,255,0.30); margin-left: 2px; }
+  .ff-mobile-card,
+  .ff-mobile-panel,
+  .ff-mobile-scrim { display: none; }
+  .ff-mobile-card-name span { display: block; }
+  body.ff-mobile-sheet-open { overflow: hidden; }
 
   @media (max-width: 560px) {
     .ff-tabs {
@@ -260,19 +265,196 @@
     .ffpo-date-display { min-height: 32px; padding: 0 9px; font-size: 12px; }
     .ffpo-date-weekday { font-size: 14px; }
     .ffpo-order-by { font-size: 10.5px; }
-    .ff-cat-thead, .ff-item-row {
-      grid-template-columns: minmax(86px, 1fr) 52px 52px 46px 32px;
-      gap: 6px;
-      padding: 7px 8px;
+    .ff-cat-block { margin-top: 12px; }
+    .ff-cat-table {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 5px;
+      padding: 8px;
+      background: rgba(66,25,15,0.62);
     }
-    .ff-cat-thead { font-size: 8px; letter-spacing: 0.04em; }
-    .ff-head-date { font-size: 9px; }
-    .ff-head-day { font-size: 8px; }
-    .ff-head-label, .ff-head-avg { font-size: 8px; }
-    .ff-item-name { font-size: 12px; line-height: 1.15; }
-    .ff-item-size { font-size: 10px; letter-spacing: 0; }
-    .ff-avg { font-size: 10px; }
-    input.ff-num { padding: 6px 4px; font-size: 12px; }
+    .ff-cat-thead { display: none; }
+    .ff-item-row { display: contents; }
+    .ff-item-row > .ff-item-name,
+    .ff-item-row > input.ff-num,
+    .ff-item-row > .ff-avg,
+    .ff-item-row > .ff-item-size {
+      display: none;
+    }
+    .ff-mobile-card {
+      min-width: 0;
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px 5px 7px 8px;
+      color: #FAF6EC;
+      background: rgba(40,22,14,0.72);
+      border: 0.5px solid rgba(217,164,54,0.18);
+      border-radius: 8px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+    }
+    .ff-mobile-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: #E85852;
+    }
+    .ff-mobile-card.has-inv::before { background: #5fa8d3; }
+    .ff-mobile-card.has-order::before { background: #E56B6B; }
+    .ff-mobile-card.open {
+      border-color: #E4B340;
+      background: rgba(228,179,64,0.13);
+    }
+    .ff-mobile-card-name {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-width: 0;
+      font-size: 10.5px;
+      font-weight: 900;
+      line-height: 1.05;
+      text-align: center;
+    }
+    .ff-mobile-scrim {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      background: rgba(0,0,0,0.58);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+    .ff-mobile-scrim.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .ff-mobile-panel {
+      display: block;
+      position: fixed;
+      left: 50%;
+      bottom: 0;
+      z-index: 1001;
+      width: calc(100vw - 16px);
+      max-height: 84vh;
+      overflow-y: auto;
+      padding: 0 10px 14px;
+      color: #FAF6EC;
+      background: #42190f;
+      border: 0.5px solid rgba(228,179,64,0.52);
+      border-bottom: 0;
+      border-radius: 18px 18px 0 0;
+      box-shadow: 0 -24px 70px rgba(0,0,0,0.72);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 100%);
+      transition: transform 0.22s ease, opacity 0.18s ease;
+      visibility: hidden;
+    }
+    .ff-mobile-panel.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate(-50%, 0);
+      visibility: visible;
+    }
+    .ff-mobile-sheet-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 0 10px;
+      margin-bottom: 10px;
+      background: #42190f;
+      border-bottom: 0.5px solid rgba(217,164,54,0.18);
+    }
+    .ff-mobile-sheet-title {
+      flex: 1;
+      min-width: 0;
+      color: #FFD970;
+      font-size: 13px;
+      font-weight: 900;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ff-mobile-sheet-close {
+      width: 30px;
+      height: 30px;
+      border: 0.5px solid rgba(217,164,54,0.18);
+      border-radius: 50%;
+      color: #FAF6EC;
+      background: rgba(18,7,4,0.68);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .ff-mobile-sheet-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .ff-mobile-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .ff-mobile-label {
+      color: #fffaf0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .ff-mobile-num,
+    .ff-mobile-readout {
+      min-height: 36px;
+      width: 100%;
+      color: #fffaf0;
+      background: rgba(18,7,4,0.68);
+      border: 0.5px solid rgba(255,217,112,0.35);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    .ff-mobile-num {
+      padding: 0 8px;
+      text-align: right;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+    }
+    .ff-mobile-num:focus {
+      outline: none;
+      border-color: #FFD970;
+    }
+    .ff-mobile-num-inv.has-value {
+      background: #9DD8F6;
+      color: #071724;
+      border-color: #5fa8d3;
+    }
+    .ff-mobile-num-order.has-positive {
+      background: #E56B6B;
+      color: #1a0808;
+      border-color: #8f3030;
+    }
+    .ff-mobile-readout {
+      display: flex;
+      align-items: center;
+      padding: 0 9px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
   }
 
   /* --- submit row + banners --------------------------------------- */
@@ -381,6 +563,14 @@
           {% for item in cat['items'] %}
             {% set avg = rolling_avg_by_slug.get(item.slug, 0) %}
             <div class="ff-item-row">
+              <button class="ff-mobile-card" type="button"
+                      data-ff-mobile-toggle="{{ item.slug }}"
+                      aria-expanded="false"
+                      aria-controls="ff-mobile-panel-{{ item.slug }}">
+                <span class="ff-mobile-card-name">
+                  {% for word in item.label.split() %}<span>{{ word }}</span>{% endfor %}
+                </span>
+              </button>
               <div class="ff-item-name">{{ item.label }}</div>
               <input type="number" step="0.1" min="0" inputmode="decimal"
                      class="ff-num ff-num-inv"
@@ -394,6 +584,46 @@
                 {% if avg and avg > 0 %}{{ '%.1f'|format(avg) }}<span class="unit">/d</span>{% else %}—{% endif %}
               </div>
               <div class="ff-item-size">{{ item.size }}</div>
+              <div class="ff-mobile-panel" id="ff-mobile-panel-{{ item.slug }}"
+                   data-ff-mobile-panel="{{ item.slug }}"
+                   role="dialog"
+                   aria-modal="true"
+                   aria-labelledby="ff-mobile-title-{{ item.slug }}">
+                <div class="ff-mobile-sheet-head">
+                  <div class="ff-mobile-sheet-title" id="ff-mobile-title-{{ item.slug }}">{{ item.label }}</div>
+                  <button class="ff-mobile-sheet-close" type="button"
+                          data-ff-mobile-close="{{ item.slug }}"
+                          aria-label="Close {{ item.label }}">&times;</button>
+                </div>
+                <div class="ff-mobile-sheet-grid">
+                  <label class="ff-mobile-field">
+                    <span class="ff-mobile-label">On hand</span>
+                    <input type="number" step="0.1" min="0" inputmode="decimal"
+                           class="ff-mobile-num ff-mobile-num-inv"
+                           data-ff-mobile-kind="inv"
+                           data-ff-mobile-slug="{{ item.slug }}"
+                           placeholder="Qty on hand">
+                  </label>
+                  <label class="ff-mobile-field">
+                    <span class="ff-mobile-label">Order</span>
+                    <input type="number" step="0.1" min="0" inputmode="decimal"
+                           class="ff-mobile-num ff-mobile-num-order"
+                           data-ff-mobile-kind="or"
+                           data-ff-mobile-slug="{{ item.slug }}"
+                           placeholder="Qty to order">
+                  </label>
+                  <div class="ff-mobile-field">
+                    <span class="ff-mobile-label">{{ delivery_day }} avg</span>
+                    <div class="ff-mobile-readout">
+                      {% if avg and avg > 0 %}{{ '%.1f'|format(avg) }}/d{% else %}&mdash;{% endif %}
+                    </div>
+                  </div>
+                  <div class="ff-mobile-field">
+                    <span class="ff-mobile-label">Size</span>
+                    <div class="ff-mobile-readout">{% if item.size %}{{ item.size }}{% else %}&mdash;{% endif %}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           {% endfor %}
         </div>
@@ -413,6 +643,7 @@
   <div id="ffpo-banner-ok"  class="ffpo-banner ok"></div>
   <div id="ffpo-banner-err" class="ffpo-banner err"></div>
 </div>
+<div class="ff-mobile-scrim" data-ff-mobile-scrim></div>
 
 <script>
 (function(){
@@ -426,6 +657,7 @@
   var bannerOk  = document.getElementById('ffpo-banner-ok');
   var bannerErr = document.getElementById('ffpo-banner-err');
   var todayInputs = todayView.querySelectorAll('input.ff-num');
+  var mobileScrim = document.querySelector('[data-ff-mobile-scrim]');
   var confirming = false;
   var draftKey = 'cenas:fresh-food-place-order:v1:' + (dateInput.value || 'default');
 
@@ -554,10 +786,108 @@
       el.classList.toggle('has-value', isNumber && !isOrder);
       el.classList.toggle('has-positive', isOrder && isNumber && val > 0);
     }
+    syncAllMobileFromReal();
+    updateAllMobileCards();
+  }
+
+  function realInput(slug, kind){
+    return todayView.querySelector('input.ff-num[data-slug="' + slug + '"][data-kind="' + kind + '"]');
+  }
+
+  function mobileInput(slug, kind){
+    return document.querySelector('.ff-mobile-num[data-ff-mobile-slug="' + slug + '"][data-ff-mobile-kind="' + kind + '"]');
+  }
+
+  function syncMobileInputFromReal(slug, kind){
+    var source = realInput(slug, kind);
+    var target = mobileInput(slug, kind);
+    if(!source || !target) return;
+    target.value = source.value || '';
+    target.classList.toggle('has-value', source.classList.contains('has-value'));
+    target.classList.toggle('has-positive', source.classList.contains('has-positive'));
+  }
+
+  function syncMobileFromReal(slug){
+    syncMobileInputFromReal(slug, 'inv');
+    syncMobileInputFromReal(slug, 'or');
+  }
+
+  function syncAllMobileFromReal(){
+    var seen = {};
+    for(var i=0; i<todayInputs.length; i++){
+      var slug = todayInputs[i].getAttribute('data-slug');
+      if(slug && !seen[slug]){
+        syncMobileFromReal(slug);
+        seen[slug] = true;
+      }
+    }
+  }
+
+  function updateMobileCard(slug){
+    var card = document.querySelector('[data-ff-mobile-toggle="' + slug + '"]');
+    if(!card) return;
+    var inv = realInput(slug, 'inv');
+    var ord = realInput(slug, 'or');
+    card.classList.toggle('has-inv', !!(inv && inv.classList.contains('has-value')));
+    card.classList.toggle('has-order', !!(ord && ord.classList.contains('has-positive')));
+  }
+
+  function updateAllMobileCards(){
+    document.querySelectorAll('[data-ff-mobile-toggle]').forEach(function(card){
+      updateMobileCard(card.getAttribute('data-ff-mobile-toggle'));
+    });
+  }
+
+  function setMobileSheetOpen(open){
+    if(mobileScrim) mobileScrim.classList.toggle('open', open);
+    document.body.classList.toggle('ff-mobile-sheet-open', open);
+  }
+
+  function closeMobilePanels(){
+    document.querySelectorAll('[data-ff-mobile-panel].open').forEach(function(panel){
+      panel.classList.remove('open');
+    });
+    document.querySelectorAll('[data-ff-mobile-toggle].open').forEach(function(card){
+      card.classList.remove('open');
+      card.setAttribute('aria-expanded', 'false');
+    });
+    setMobileSheetOpen(false);
   }
   for(var j=0; j<todayInputs.length; j++){
     todayInputs[j].addEventListener('input', function(){ refreshCount(); saveDraft(); resetConfirm(); });
   }
+  document.querySelectorAll('[data-ff-mobile-toggle]').forEach(function(card){
+    card.addEventListener('click', function(){
+      var slug = card.getAttribute('data-ff-mobile-toggle');
+      var panel = document.querySelector('[data-ff-mobile-panel="' + slug + '"]');
+      if(!panel) return;
+      var shouldOpen = !panel.classList.contains('open');
+      closeMobilePanels();
+      if(!shouldOpen) return;
+      syncMobileFromReal(slug);
+      panel.classList.add('open');
+      card.classList.add('open');
+      card.setAttribute('aria-expanded', 'true');
+      setMobileSheetOpen(true);
+    });
+  });
+  document.querySelectorAll('[data-ff-mobile-close]').forEach(function(button){
+    button.addEventListener('click', closeMobilePanels);
+  });
+  if(mobileScrim) mobileScrim.addEventListener('click', closeMobilePanels);
+  document.addEventListener('keydown', function(event){
+    if(event.key === 'Escape') closeMobilePanels();
+  });
+  document.querySelectorAll('.ff-mobile-num').forEach(function(input){
+    input.addEventListener('input', function(){
+      var slug = input.getAttribute('data-ff-mobile-slug');
+      var kind = input.getAttribute('data-ff-mobile-kind');
+      var source = realInput(slug, kind);
+      if(!source) return;
+      source.value = input.value;
+      source.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
   restoreDraft();
   refreshCount();
 
@@ -611,6 +941,7 @@
         var clearTargets = todayInputs;
         for(var k=0; k<clearTargets.length; k++){ clearTargets[k].value = ''; }
         refreshCount();
+        closeMobilePanels();
       } else {
         showErr('Submit failed: ' + (j.error || 'unknown error'));
       }

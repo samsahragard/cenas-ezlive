@@ -30,6 +30,7 @@
     --tws-gold: #d9a436; --tws-gold-bright: #e4b340; --tws-red: #c73b36;
     --tws-boh: #6ea8c7; --tws-foh: #cf9a4a;
     --tws-border: rgba(217,164,54,.18); --tws-border-soft: rgba(217,164,54,.10);
+    --tws-embed-height: clamp(820px, 92vh, 1180px);
     --tws-radius: 14px; --tws-radius-sm: 9px;
     background: linear-gradient(180deg, #1a0d08 0%, #0d0604 100%);
     border: .5px solid var(--tws-border); border-radius: 18px;
@@ -299,10 +300,10 @@
   /* embedded sub-tab iframes (Schedule / Market) */
   .tws-schedule-storebar,
   .tws-market-storebar { margin-top: 2px; }
-  .tws-store-shell { display: none; position: relative; min-height: 70vh; }
+  .tws-store-shell { display: none; position: relative; min-height: var(--tws-embed-height); }
   .tws-store-shell.active { display: block; }
-  .tws-embed-wrap { position: relative; min-height: 70vh; }
-  .tws-embed-frame { width: 100%; height: 78vh; border: 0; border-radius: var(--tws-radius); background: #241610; opacity: 0; transition: opacity .25s; }
+  .tws-embed-wrap { position: relative; min-height: var(--tws-embed-height); }
+  .tws-embed-frame { width: 100%; height: var(--tws-embed-height); min-height: var(--tws-embed-height); border: 0; border-radius: var(--tws-radius); background: #241610; opacity: 0; transition: opacity .25s; }
   .tws-embed-frame.ready { opacity: 1; }
   .tws-embed-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--tws-cream-meta); font-size: 13px; }
   .tws-embed-loading.gone { display: none; }
@@ -337,16 +338,31 @@
   .tws-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
   .tws-btn-ghost { font-family: inherit; font-size: 13px; color: var(--tws-cream-dim); background: transparent; border: 1px solid var(--tws-border-soft); border-radius: var(--tws-radius-sm); padding: 9px 16px; cursor: pointer; }
   @media (max-width: 780px) {
-    .tws { max-width: 100%; overflow-x: hidden; }
+    .tws { max-width: 100%; overflow-x: hidden; --tws-embed-height: clamp(860px, 100vh, 1200px); }
     .tws-tabs, .tws-store-tabs, .tws-subbar { max-width: 100%; flex-wrap: wrap; overflow-x: visible; gap: 6px; }
-    .tws-tab {
-      flex: 1 1 calc(33.333% - 6px);
-      min-width: 96px;
+    .tws-stickybar .tws-tabs {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 2px;
+      overflow: hidden;
+    }
+    .tws-stickybar .tws-tab {
+      flex: 1 1 0;
+      min-width: 0;
       justify-content: center;
-      padding: 8px 9px;
-      font-size: 12px;
+      gap: 2px;
+      padding: 8px 1px;
+      font-size: 0;
       text-align: center;
-      white-space: normal;
+      white-space: nowrap;
+    }
+    .tws-stickybar .tws-tab::after {
+      content: attr(data-mobile-label);
+      font-size: 9.5px;
+      line-height: 1;
+    }
+    .tws-stickybar .tws-tab .ti {
+      font-size: 11px;
     }
     .tws-store-tab {
       flex: 1 1 calc(50% - 6px);
@@ -373,12 +389,12 @@
   <div class="tws-stickybar" id="tws-stickybar">
     {# sub-tabs: real anchors (?sub=KEY) so it works without JS; JS swaps in place #}
     <div class="tws-tabs" role="tablist">
-      <a class="tws-tab active" href="?sub=schedule" data-sub="schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
-      <a class="tws-tab"        href="?sub=team"     data-sub="team"     role="tab"><i class="ti ti-users"></i>Team</a>
-      <a class="tws-tab"        href="?sub=market"   data-sub="market"   role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
-      <a class="tws-tab"        href="?sub=link"     data-sub="link"     role="tab"><i class="ti ti-link"></i>Link</a>
-      <a class="tws-tab"        href="?sub=schedule-reports" data-sub="schedule-reports" role="tab"><i class="ti ti-report-analytics"></i>Schedule Reports</a>
-      <a class="tws-tab"        href="?sub=settings" data-sub="settings" role="tab"><i class="ti ti-settings"></i>Settings</a>
+      <a class="tws-tab active" href="?sub=schedule" data-sub="schedule" data-mobile-label="Schedule" role="tab"><i class="ti ti-calendar"></i>Schedule</a>
+      <a class="tws-tab"        href="?sub=team"     data-sub="team"     data-mobile-label="Team" role="tab"><i class="ti ti-users"></i>Team</a>
+      <a class="tws-tab"        href="?sub=market"   data-sub="market"   data-mobile-label="Market" role="tab"><i class="ti ti-arrows-exchange"></i>Market</a>
+      <a class="tws-tab"        href="?sub=link"     data-sub="link"     data-mobile-label="Link" role="tab"><i class="ti ti-link"></i>Link</a>
+      <a class="tws-tab"        href="?sub=schedule-reports" data-sub="schedule-reports" data-mobile-label="Reports" role="tab"><i class="ti ti-report-analytics"></i>Schedule Reports</a>
+      <a class="tws-tab"        href="?sub=settings" data-sub="settings" data-mobile-label="Setting" role="tab"><i class="ti ti-settings"></i>Settings</a>
     </div>
 
     <div class="tws-team-controls" id="tws-team-controls">
@@ -566,6 +582,7 @@
   var _IFCB = Date.now();
   var root = document.getElementById("tws-root");
   if (!root) return;
+  var EMBED_HEIGHT = "var(--tws-embed-height)";
   var ROSTER_URL = root.getAttribute("data-roster-url");
   var ROSTER_LOCATION = root.getAttribute("data-roster-location") || "all";
   var SCHEDULE_STORES = {{ (schedule_stores or [])|tojson }};
@@ -607,16 +624,16 @@
         // Keep Schedule embeds fixed-height. Measuring the child page's
         // scrollHeight and writing it back to the iframe creates a feedback
         // loop on the Week Builder, making the page grow forever.
-        frame.style.setProperty("height", "78vh", "important");
-        frame.style.removeProperty("min-height");
+        frame.style.setProperty("height", EMBED_HEIGHT, "important");
+        frame.style.setProperty("min-height", EMBED_HEIGHT, "important");
         reveal(frame);
         return;
       }
       if (isMarketFrame) {
         var isPhoneMarket = frame.getBoundingClientRect && frame.getBoundingClientRect().width <= 560;
         if (!isPhoneMarket) {
-          frame.style.setProperty("height", "78vh", "important");
-          frame.style.removeProperty("min-height");
+          frame.style.setProperty("height", EMBED_HEIGHT, "important");
+          frame.style.setProperty("min-height", EMBED_HEIGHT, "important");
           reveal(frame);
           return;
         }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 
 from flask import Flask
@@ -229,7 +230,9 @@ def test_full_access_user_sees_unshared_submissions_and_share_controls(monkeypat
     assert "Codex Career Test" in body
     assert "Share with" in body
     assert "Not shared" in body
-    assert "Live website inbox" in body
+    assert 'aria-label="Submission location"' in body
+    assert "Live website inbox" not in body
+    assert "Cenas / Website / Submissions" not in body
 
 
 def test_email_list_tab_renders_for_full_access_user(monkeypatch, tmp_path):
@@ -263,7 +266,60 @@ def test_email_list_tab_renders_for_full_access_user(monkeypatch, tmp_path):
     assert '<span class="wf-tab-label">Email List</span>' in body
     assert "<small>1</small>" in body
     assert 'aria-label="Submission status"' in body
+    assert 'aria-label="Submission location"' in body
     assert "All statuses" not in body
+    assert "All locations" not in body
+
+
+def test_location_tabs_filter_all_form_tab_counts(monkeypatch, tmp_path):
+    app, SessionLocal = _test_app(monkeypatch, tmp_path)
+    sam_id = _make_user(
+        SessionLocal,
+        full_name="Sam Sahragard",
+        email="sam@cenaskitchen.com",
+        role="partner",
+        scope=None,
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="career",
+        location="Copperfield",
+        position="Server",
+        applicant_name="Copper Career",
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="career",
+        location="Tomball",
+        position="Server",
+        applicant_name="Tomball Career",
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="catering",
+        location="Copperfield",
+        subject="Catering request",
+        applicant_name="Copper Catering",
+    )
+    _make_submission(
+        SessionLocal,
+        form_type="catering",
+        location="Tomball",
+        subject="Catering request",
+        applicant_name="Tomball Catering",
+    )
+
+    client = app.test_client()
+    _login(client, sam_id)
+    response = client.get("/partner/website-forms?type=career&location=Copperfield")
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Copper Career" in body
+    assert "Tomball Career" not in body
+    assert 'href="/partner/website-forms?type=catering&amp;status=&amp;location=Copperfield"' in body
+    assert re.search(r'<span class="wf-tab-short">Career</span>\s*<small>1</small>', body)
+    assert re.search(r'<span class="wf-tab-short">Catering</span>\s*<small>1</small>', body)
 
 
 def test_manager_only_sees_submissions_shared_to_their_store(monkeypatch, tmp_path):
@@ -323,7 +379,7 @@ def test_manager_only_sees_submissions_shared_to_their_store(monkeypatch, tmp_pa
     body = response.get_data(as_text=True)
     assert response.status_code == 200
     assert "Cross Store Applicant" in body
-    assert "Shared submissions for your location access only" in body
+    assert "Shared submissions for your location access only" not in body
     assert "Share with" not in body
     assert "Mark reviewed" not in body
 
@@ -379,9 +435,13 @@ def test_sub_form_mobile_tabs_fit_one_row_without_horizontal_scroll():
 
     assert ".wf-status-tabs {\n      display: grid;" in source
     assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in source
+    assert ".wf-location-tabs {\n      display: grid;" in source
+    assert ".wf-location-tab" in source
     assert ".wf-tabs {\n      display: grid;" in source
     assert "grid-template-columns: repeat(6, minmax(0, 1fr));" in source
     assert "overflow: visible;" in source
     assert ".wf-tab {\n      display: inline-flex;" in source
     assert ".wf-tab-label { display: none; }" in source
     assert ".wf-tab-short { display: inline; }" in source
+    assert "wf-filters" not in source
+    assert "wf-access-note" not in source

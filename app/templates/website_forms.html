@@ -28,23 +28,14 @@
     box-shadow: 0 22px 70px rgba(0,0,0,.35);
   }
   .wf-head {
-    padding: 22px 24px 18px;
+    padding: 18px 24px;
     border-bottom: 1px solid var(--wf-line);
-  }
-  .wf-kicker {
-    font-family: "JetBrains Mono", monospace;
-    color: var(--wf-gold);
-    letter-spacing: .18em;
-    text-transform: uppercase;
-    font-size: 11px;
-    font-weight: 800;
-    margin-bottom: 8px;
   }
   .wf-title-row {
     display: flex;
-    align-items: end;
+    align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: 12px;
     flex-wrap: wrap;
   }
   .wf-status-tabs {
@@ -70,6 +61,37 @@
     background: var(--wf-gold);
     border-color: var(--wf-gold);
     color: #3a1409;
+  }
+  .wf-header-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+  .wf-location-tabs {
+    display: flex;
+    gap: 5px;
+  }
+  .wf-location-tab {
+    color: var(--wf-muted);
+    border: 1px solid rgba(255, 217, 112, .22);
+    border-radius: 8px;
+    background: rgba(0,0,0,.22);
+    padding: 8px 10px;
+    text-align: center;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .wf-location-tab:hover { color: #fff; }
+  .wf-location-tab.is-active {
+    background: rgba(255, 217, 112, .16);
+    border-color: var(--wf-gold);
+    color: var(--wf-gold);
   }
   .wf-count {
     font-family: "JetBrains Mono", monospace;
@@ -104,61 +126,20 @@
     font-family: "JetBrains Mono", monospace;
     margin-left: 4px;
   }
-  .wf-filters {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    padding: 16px 18px;
-    border-top: 1px solid rgba(255,255,255,.06);
-    border-bottom: 1px solid var(--wf-line);
-    background: rgba(0,0,0,.16);
-  }
-  .wf-filters select,
-  .wf-filters button,
-  .wf-filters a {
-    height: 40px;
-    border-radius: 9px;
-    border: 1px solid rgba(255, 217, 112, .24);
-    background: rgba(0,0,0,.28);
-    color: var(--wf-cream);
-    padding: 0 12px;
-    font: inherit;
-    font-size: 13px;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-  }
-  .wf-filters select,
   .wf-share select {
     color-scheme: dark;
   }
-  .wf-filters select option,
   .wf-share select option {
     background: var(--wf-card);
     color: var(--wf-cream);
   }
-  .wf-filters select option:checked,
   .wf-share select option:checked {
     background: var(--wf-gold);
     color: #3a1409;
   }
-  .wf-filters select option:hover,
   .wf-share select option:hover {
     background: var(--wf-card-2);
     color: var(--wf-cream);
-  }
-  .wf-filters button {
-    background: var(--wf-gold);
-    color: #3a1409;
-    border-color: var(--wf-gold);
-    font-weight: 900;
-  }
-  .wf-access-note {
-    padding: 11px 18px;
-    color: var(--wf-muted);
-    font-size: 12px;
-    border-bottom: 1px solid rgba(255,255,255,.06);
-    background: rgba(255, 217, 112, .06);
   }
   .wf-body { padding: 18px; }
   .wf-empty {
@@ -337,7 +318,10 @@
   }
   @media (max-width: 680px) {
     .wf-head, .wf-body { padding-left: 14px; padding-right: 14px; }
-    .wf-title-row { align-items: stretch; }
+    .wf-title-row {
+      align-items: stretch;
+      gap: 10px;
+    }
     .wf-status-tabs {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -349,9 +333,27 @@
       padding: 9px 4px;
       font-size: 12px;
     }
-    .wf-count {
+    .wf-header-meta {
       width: 100%;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+    .wf-location-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      flex: 1 1 auto;
+      min-width: 0;
+      gap: 4px;
+    }
+    .wf-location-tab {
+      min-width: 0;
+      padding: 8px 2px;
+      font-size: 9px;
+    }
+    .wf-count {
+      flex: 0 0 auto;
       text-align: right;
+      font-size: 10px;
     }
     .wf-tabs {
       display: grid;
@@ -385,7 +387,6 @@
 <div class="wforms">
   <section class="wf-shell">
     <header class="wf-head">
-      <div class="wf-kicker">Cenas / Website / Submissions</div>
       <div class="wf-title-row">
         <nav class="wf-status-tabs" aria-label="Submission status">
           {% for value, label in status_filters.items() %}
@@ -395,7 +396,17 @@
           </a>
           {% endfor %}
         </nav>
-        <div class="wf-count">{{ rows|length }} visible - {{ counts.get(active_type, 0) }} total</div>
+        <div class="wf-header-meta">
+          <nav class="wf-location-tabs" aria-label="Submission location">
+            {% for value, label in location_filters.items() %}
+            <a class="wf-location-tab{% if value == selected_location %} is-active{% endif %}"
+               href="{{ url_for('website_forms.partner_forms', type=active_type, status=selected_status, location=value) }}">
+              {{ label }}
+            </a>
+            {% endfor %}
+          </nav>
+          <div class="wf-count">{{ rows|length }} visible - {{ counts.get(active_type, 0) }} total</div>
+        </div>
       </div>
     </header>
 
@@ -409,27 +420,6 @@
       </a>
       {% endfor %}
     </nav>
-
-    <form class="wf-filters" method="get">
-      <input type="hidden" name="type" value="{{ active_type }}">
-      <input type="hidden" name="status" value="{{ selected_status }}">
-      <select name="location" aria-label="Location">
-        <option value="">All locations</option>
-        {% for loc in ["Copperfield", "Tomball", "Either location"] %}
-        <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Filter</button>
-      <a href="{{ url_for('website_forms.partner_forms', type=active_type, status=selected_status) }}">Clear</a>
-    </form>
-
-    <div class="wf-access-note">
-      {% if full_access %}
-        Live website inbox. Managers only see a submission after you share it to Tomball, Copperfield, or both.
-      {% else %}
-        Shared submissions for your location access only.
-      {% endif %}
-    </div>
 
     <div class="wf-body">
       {% if not rows %}

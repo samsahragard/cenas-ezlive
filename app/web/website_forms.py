@@ -54,6 +54,12 @@ STATUS_FILTERS = OrderedDict([
     ("archived", "Archived"),
 ])
 
+LOCATION_FILTERS = OrderedDict([
+    ("", "Both"),
+    ("Copperfield", "Copperfield"),
+    ("Tomball", "Tomball"),
+])
+
 FORM_ALIASES = {
     "careers": "career",
     "career": "career",
@@ -382,7 +388,8 @@ def partner_forms():
     _set_partner_context()
 
     form_type = _canonical_form_type(request.args.get("type")) or "career"
-    location_filter = _normalize_location(request.args.get("location"))
+    requested_location = _normalize_location(request.args.get("location"))
+    location_filter = requested_location if requested_location in LOCATION_FILTERS else None
     location_filter_slug = _share_slug(location_filter)
     requested_status = (request.args.get("status") or "").strip().lower()
     status_filter = requested_status if requested_status in STATUS_FILTERS else ""
@@ -446,6 +453,7 @@ def partner_forms():
         form_labels=FORM_LABELS,
         form_short_labels=FORM_SHORT_LABELS,
         status_filters=STATUS_FILTERS,
+        location_filters=LOCATION_FILTERS,
         active_type=form_type,
         active_label=FORM_LABELS[form_type],
         counts=counts,

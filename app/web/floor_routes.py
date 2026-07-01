@@ -122,7 +122,11 @@ def _loc_or_400():
 def _is_manager() -> bool:
     """Manager = dash.operations AND NOT role expo (the
     _operations_full_access_ok pattern)."""
-    return has_dashboard_access("dash.operations") and not current_role_is("expo")
+    return (
+        has_dashboard_access("dash.operations")
+        and not current_role_is("expo")
+        and not current_role_is("corporate_driver")
+    )
 
 
 @floor_bp.before_request

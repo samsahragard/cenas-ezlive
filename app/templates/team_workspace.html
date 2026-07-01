@@ -841,14 +841,14 @@
            '<div class="tws-edit" data-emp-edit="' + e.id + '"></div>';
   }
 
-  // Render ONE labeled subsection (Management or Tipped/Hourly) inside a store
-  // block: a sub-heading + a section-scoped "+ Add" button (store + section are
-  // FIXED on the button via data-add-store / data-add-section), the column head,
-  // and the rows. An empty section still shows its header + Add (so a manager can
-  // add the first person there). `section` is 'management' | 'hourly'.
-  function renderSection(storeKey, title, section, rows) {
-    var head = '<div class="tws-sec-head"><span class="tws-sec-title">' + esc(title) + '</span>' +
-      '<button class="tws-addbtn tws-sec-add" type="button" data-add-store="' + esc(storeKey) + '" data-add-section="' + section + '">+ Add</button></div>';
+  // Render ONE labeled subsection (Management, Tipped/Hourly, or Driver) inside
+  // a store block. Driver rows are shown for C-Driver, but the add button stays
+  // hidden there because that position is currently assigned by bootstrap only.
+  function renderSection(storeKey, title, section, rows, allowAdd) {
+    var add = allowAdd === false
+      ? ""
+      : '<button class="tws-addbtn tws-sec-add" type="button" data-add-store="' + esc(storeKey) + '" data-add-section="' + section + '">+ Add</button>';
+    var head = '<div class="tws-sec-head"><span class="tws-sec-title">' + esc(title) + '</span>' + add + '</div>';
     var body = '<div class="tws-colhead editable"><span>#</span><span>Name</span><span class="tws-ph-h">Phone</span></div>';
     if (rows.length) {
       rows.forEach(function (e, i) { body += renderRow(e, i + 1); });
@@ -876,10 +876,11 @@
     // expand an inline edit panel (contact / reset-pin / assign). One open at a time.
     openEmpId = null;  // a fresh render rebuilds every row -> no panel is open
     // S7/S8 store-split: for EACH store render a labeled block, split into a
-    // MANAGEMENT subsection (s.management[]) and a TIPPED/HOURLY subsection
-    // (s.hourly[]). The backend pre-partitions these; if an older payload omits
-    // them, derive from employees[].section (rows with section null stay out of
-    // both, as before). Each subsection carries its own section-scoped +Add.
+    // MANAGEMENT subsection (s.management[]), TIPPED/HOURLY subsection
+    // (s.hourly[]), and DRIVER subsection (s.driver[]). The backend
+    // pre-partitions these; if an older payload omits them, derive from
+    // employees[].section (rows with section null stay out of section groups).
+    // Management/hourly carry section-scoped +Add; Driver is display-only.
     // STORE TABS (Sam 2026-06-07: Copperfield / Tomball as SWITCHABLE TABS, not
     // stacked one over the other). Render a tab per store + a panel per store;
     // only the active store's panel is shown.
@@ -899,9 +900,11 @@
       var emps = s.employees || [];
       var mgmt = s.management || emps.filter(function (e) { return e.section === "management"; });
       var hrly = s.hourly || emps.filter(function (e) { return e.section === "hourly"; });
+      var drvr = s.driver || emps.filter(function (e) { return e.section === "driver"; });
       panelsHtml += '<div class="tws-store" data-store-panel="' + esc(s.store_key) + '">';
       panelsHtml += renderSection(s.store_key, "Management", "management", mgmt);
       panelsHtml += renderSection(s.store_key, "Tipped / Hourly", "hourly", hrly);
+      if (drvr.length) panelsHtml += renderSection(s.store_key, "Driver", "driver", drvr, false);
       panelsHtml += '</div>';
     });
     state.storeMeta = metaByStore;
@@ -1875,7 +1878,11 @@
   // The store/section the currently-open +Add modal is scoped to.
   var addCtx = { store_key: "", store_label: "", section: "" };
 
-  function sectionLabel(section) { return section === "management" ? "Management" : "Tipped / Hourly"; }
+  function sectionLabel(section) {
+    if (section === "management") return "Management";
+    if (section === "driver") return "Driver";
+    return "Tipped / Hourly";
+  }
 
   // Build the (single-store, section-filtered) position checkboxes for the modal.
   // tws-addable = the SAME rank-gated set as the 403 add-gate (zero drift); we

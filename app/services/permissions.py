@@ -340,13 +340,10 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
                  "shift.offer", "shift.swap_propose",
                  "timeoff.request", "availability.set",
                  "announcement.view", "message.view", "message.reply"},
-    # In-house corporate driver - a DISTINCT role from the ezCater 'driver'
-    # role (which stays hardcoded/untouched). Same driver scope; managed via
-    # the Permissions admin page.
+    # In-house C-Driver - a DISTINCT role from the ezCater 'driver' role
+    # (which stays hardcoded/untouched). Dashboard access comes from the
+    # position/catalog defaults; keep the legacy route-tag baseline self-only.
     "corporate_driver": {"labor.view_own_wage", "labor.view_own_hours",
-                         "orders.view", "orders.mark_picked_up",
-                         "orders.mark_delivered", "orders.view_payout",
-                         "drivers.bid", "drivers.view_own_history",
                          "ai.ask_claude_personal", "ai.view_transcripts",
                          "transcripts.search", "transcripts.read"},
 }

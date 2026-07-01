@@ -1,0 +1,294 @@
+{% extends "base_dashboard.html" %}
+{% set active = 'corporate_driver_shift' %}
+{% block title %}Shift -- Cenas Kitchen{% endblock %}
+{% block topbar %}{% endblock %}
+
+{% block content %}
+<style>
+  .cdshift {
+    min-height: min(720px, calc(100vh - 140px));
+    padding: 18px;
+    color: #faf6ec;
+    background: linear-gradient(180deg, #1b0c08 0%, #0d0604 100%);
+    border: 1px solid rgba(217, 164, 54, .18);
+    border-radius: 8px;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+  .cdshift * { box-sizing: border-box; }
+  .cdshift-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(217, 164, 54, .18);
+  }
+  .cdshift-kicker {
+    margin: 0 0 6px;
+    color: #e4b340;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .cdshift h1 {
+    margin: 0;
+    font-size: clamp(30px, 8vw, 46px);
+    line-height: 1;
+    letter-spacing: 0;
+  }
+  .cdshift-pill {
+    min-width: 88px;
+    text-align: center;
+    padding: 8px 12px;
+    border: 1px solid rgba(217, 164, 54, .32);
+    border-radius: 999px;
+    color: #e4b340;
+    background: rgba(217, 164, 54, .08);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .cdshift-pill.on {
+    color: #76d672;
+    border-color: rgba(118, 214, 114, .4);
+    background: rgba(118, 214, 114, .1);
+  }
+  .cdshift-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 18px 0;
+  }
+  .cdshift-btn {
+    appearance: none;
+    border: 0;
+    border-radius: 7px;
+    padding: 16px 12px;
+    color: #1a0d08;
+    background: #e4b340;
+    font: inherit;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .cdshift-btn.stop {
+    color: #fff;
+    background: #b80f17;
+  }
+  .cdshift-btn:disabled {
+    cursor: default;
+    opacity: .45;
+  }
+  .cdshift-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .cdshift-stat {
+    min-height: 86px;
+    padding: 14px;
+    border: 1px solid rgba(217, 164, 54, .14);
+    border-radius: 7px;
+    background: #120906;
+  }
+  .cdshift-stat span {
+    display: block;
+    margin-bottom: 8px;
+    color: rgba(250, 246, 236, .58);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+  }
+  .cdshift-stat strong {
+    display: block;
+    overflow-wrap: anywhere;
+    color: #faf6ec;
+    font-size: 18px;
+    line-height: 1.18;
+  }
+  .cdshift-msg {
+    min-height: 22px;
+    margin-top: 16px;
+    color: rgba(250, 246, 236, .7);
+    font-size: 13px;
+  }
+  .cdshift-msg.bad { color: #ff9a8f; }
+  .cdshift-msg.good { color: #76d672; }
+  @media (max-width: 640px) {
+    .cdshift {
+      min-height: calc(100vh - 160px);
+      border-radius: 0;
+      border-left: 0;
+      border-right: 0;
+      padding: 16px 14px 24px;
+    }
+    .cdshift-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<section class="cdshift" data-cdshift>
+  <div class="cdshift-head">
+    <div>
+      <p class="cdshift-kicker">C-Driver</p>
+      <h1>Shift</h1>
+    </div>
+    <div class="cdshift-pill" data-cd-status>Off</div>
+  </div>
+
+  <div class="cdshift-actions">
+    <button class="cdshift-btn" type="button" data-cd-start>Start Shift</button>
+    <button class="cdshift-btn stop" type="button" data-cd-end disabled>End Shift</button>
+  </div>
+
+  <div class="cdshift-grid">
+    <div class="cdshift-stat">
+      <span>Started</span>
+      <strong data-cd-started>--</strong>
+    </div>
+    <div class="cdshift-stat">
+      <span>Last GPS</span>
+      <strong data-cd-last>--</strong>
+    </div>
+    <div class="cdshift-stat">
+      <span>Accuracy</span>
+      <strong data-cd-accuracy>--</strong>
+    </div>
+  </div>
+
+  <div class="cdshift-msg" data-cd-msg></div>
+</section>
+
+<script>
+(function () {
+  var STATUS_URL = "{{ url_for('store.corporate_driver_shift_status') }}";
+  var START_URL = "{{ url_for('store.corporate_driver_shift_start') }}";
+  var END_URL = "{{ url_for('store.corporate_driver_shift_end') }}";
+  var LOCATION_URL = "{{ url_for('store.corporate_driver_shift_location') }}";
+
+  var watchId = null;
+  var activeShiftId = null;
+  var els = {
+    status: document.querySelector("[data-cd-status]"),
+    start: document.querySelector("[data-cd-start]"),
+    end: document.querySelector("[data-cd-end]"),
+    started: document.querySelector("[data-cd-started]"),
+    last: document.querySelector("[data-cd-last]"),
+    accuracy: document.querySelector("[data-cd-accuracy]"),
+    msg: document.querySelector("[data-cd-msg]")
+  };
+
+  function setMsg(text, mode) {
+    els.msg.textContent = text || "";
+    els.msg.className = "cdshift-msg" + (mode ? " " + mode : "");
+  }
+
+  function fmtTime(value) {
+    if (!value) return "--";
+    var d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "--";
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  function render(data) {
+    activeShiftId = data && data.active ? data.shift_id : null;
+    els.status.textContent = activeShiftId ? "On" : "Off";
+    els.status.classList.toggle("on", !!activeShiftId);
+    els.start.disabled = !!activeShiftId;
+    els.end.disabled = !activeShiftId;
+    els.started.textContent = fmtTime(data && data.started_at);
+    if (data && data.latest) {
+      els.last.textContent = fmtTime(data.latest.captured_at);
+      els.accuracy.textContent = data.latest.accuracy_m == null
+        ? "--"
+        : Math.round(data.latest.accuracy_m) + " m";
+    } else {
+      els.last.textContent = "--";
+      els.accuracy.textContent = "--";
+    }
+    if (activeShiftId) beginWatch();
+    else stopWatch();
+  }
+
+  function post(url, body) {
+    return fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || data.ok === false) throw new Error(data.error || ("HTTP " + res.status));
+        return data;
+      });
+    });
+  }
+
+  function stopWatch() {
+    if (watchId !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchId);
+    }
+    watchId = null;
+  }
+
+  function sendLocation(coords) {
+    if (!activeShiftId) return;
+    post(LOCATION_URL, {
+      lat: coords.latitude,
+      lng: coords.longitude,
+      accuracy_m: coords.accuracy,
+      speed_mps: coords.speed,
+      heading_deg: coords.heading
+    }).then(function (data) {
+      render(data);
+      setMsg("GPS active.", "good");
+    }).catch(function (err) {
+      setMsg(err.message || "GPS update failed.", "bad");
+    });
+  }
+
+  function beginWatch() {
+    if (watchId !== null) return;
+    if (!navigator.geolocation) {
+      setMsg("GPS is not available on this device.", "bad");
+      return;
+    }
+    watchId = navigator.geolocation.watchPosition(
+      function (pos) { sendLocation(pos.coords); },
+      function (err) { setMsg(err.message || "GPS permission needed.", "bad"); },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+    );
+  }
+
+  els.start.addEventListener("click", function () {
+    els.start.disabled = true;
+    setMsg("Starting...");
+    post(START_URL).then(function (data) {
+      render(data);
+      setMsg("Shift started.", "good");
+    }).catch(function (err) {
+      els.start.disabled = false;
+      setMsg(err.message || "Could not start shift.", "bad");
+    });
+  });
+
+  els.end.addEventListener("click", function () {
+    els.end.disabled = true;
+    setMsg("Ending...");
+    stopWatch();
+    post(END_URL).then(function (data) {
+      render(data);
+      setMsg("Shift ended.", "good");
+    }).catch(function (err) {
+      els.end.disabled = false;
+      setMsg(err.message || "Could not end shift.", "bad");
+    });
+  });
+
+  fetch(STATUS_URL, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+    .then(function (res) { return res.json(); })
+    .then(render)
+    .catch(function () { setMsg("Could not load shift status.", "bad"); });
+})();
+</script>
+{% endblock %}

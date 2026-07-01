@@ -9,6 +9,8 @@ import pytest
 os.environ.setdefault("ALLOW_DEV_SECRET", "1")
 
 from app.models import (
+    DriverLocation,
+    DriverShift,
     Employee,
     EmployeePosition,
     FreshFoodOrder,
@@ -171,6 +173,15 @@ def _operations_frame_src(html: str, key: str) -> str:
     return match.group(1)
 
 
+def _embed_frame_src(html: str, key: str) -> str:
+    match = re.search(
+        rf'<iframe[^>]*data-embed-frame="{re.escape(key)}"[^>]*data-src="([^"]+)"',
+        html,
+    )
+    assert match is not None
+    return match.group(1)
+
+
 def test_expo_today_and_operations_are_limited_to_allowed_tabs(dashboard_app):
     flask_app, db = dashboard_app
     expo = _seed_actor(db, uid=101, role="expo", position="Expo")
@@ -193,6 +204,78 @@ def test_expo_today_and_operations_are_limited_to_allowed_tabs(dashboard_app):
     assert client.get("/dos/corporate-order").status_code == 302
     assert client.get("/dos/corporate-order/reports").status_code == 302
     assert client.get("/dos/performance").status_code == 403
+
+
+def test_corporate_driver_is_limited_to_shift_corp_order_and_fresh_fulfill(dashboard_app):
+    flask_app, db = dashboard_app
+    cdriver = _seed_actor(db, uid=127, role="corporate_driver", position="C-Driver")
+    cdriver.store_scope = "tomball,copperfield"
+    db.add(EmployeePosition(employee_id=127, position_id=127, store_key="copperfield"))
+    db.commit()
+    client = _client_as(flask_app, cdriver)
+
+    home = client.get("/dos/", follow_redirects=False)
+    assert home.status_code == 302
+    assert home.headers["Location"].endswith("/dos/today?tab=shift")
+
+    today = client.get("/dos/today?tab=dashboard")
+    assert today.status_code == 200
+    today_html = today.get_data(as_text=True)
+    assert _tab_keys(today_html) == {"shift"}
+    assert _embed_frame_src(today_html, "shift") == "/dos/corporate-driver/shift"
+    assert client.get("/dos/notifications").status_code == 403
+
+    ops = client.get("/dos/operations?tab=team")
+    assert ops.status_code == 200
+    ops_html = ops.get_data(as_text=True)
+    assert _attr_values(ops_html, "data-tab-group") == ["corp-order"]
+    assert _operations_frame_src(ops_html, "corp-order") == "/corporate-order?store_context=dos"
+    assert client.get("/dos/team").status_code == 403
+    assert client.get("/dos/reports/sales").status_code == 403
+    assert client.get("/dos/reports/labor").status_code == 403
+    assert client.get("/dos/reports/server-performance").status_code == 403
+
+    kitchen = client.get("/dos/kitchen?tab=recipes")
+    assert kitchen.status_code == 200
+    kitchen_html = kitchen.get_data(as_text=True)
+    assert _tab_keys(kitchen_html) == {"fresh-food"}
+    assert _embed_frame_src(kitchen_html, "fresh-food") == "/dos/fresh-food/fulfill-order"
+    assert client.get("/dos/fresh-food/fulfill-order").status_code == 200
+    assert client.get("/dos/fresh-food/place-order").status_code == 403
+    assert client.get("/dos/fresh-food/complete-order").status_code == 403
+    assert client.get("/dos/fresh-food/recent-orders").status_code == 403
+    assert client.get("/dos/fresh-food/developer").status_code == 403
+    assert client.get("/dos/fresh-food/recent-orders/report.csv").status_code == 403
+    assert client.get("/dos/recipes").status_code == 403
+    assert client.get("/dos/kitchen/prep-list").status_code == 403
+    assert client.get("/dos/kitchen/prep-team").status_code == 403
+
+    status = client.get("/dos/corporate-driver/shift/status")
+    assert status.status_code == 200
+    assert status.get_json()["active"] is False
+
+    start = client.post("/dos/corporate-driver/shift/start", json={})
+    assert start.status_code == 200
+    start_json = start.get_json()
+    assert start_json["active"] is True
+    assert start_json["shift_id"]
+
+    loc = client.post(
+        "/dos/corporate-driver/shift/location",
+        json={"lat": 29.99, "lng": -95.55, "accuracy_m": 12.4},
+    )
+    assert loc.status_code == 200
+    latest = loc.get_json()["latest"]
+    assert latest["lat"] == 29.99
+    assert latest["lng"] == -95.55
+    assert latest["accuracy_m"] == 12.4
+    assert db.query(DriverShift).count() == 1
+    assert db.query(DriverLocation).count() == 1
+    assert db.query(DriverLocation).one().order_id is None
+
+    end = client.post("/dos/corporate-driver/shift/end", json={})
+    assert end.status_code == 200
+    assert end.get_json()["active"] is False
 
 
 def test_corporate_order_renders_backend_catalog_for_store(dashboard_app, monkeypatch):

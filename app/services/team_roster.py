@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from app.models import (CANONICAL_POSITIONS, Employee, EmployeePosition,
                         EmployeeStoreAssignment, Position, Shift, User)
-from app.services.role_buckets import (SECTION_HOURLY, SECTION_MANAGEMENT,
+from app.services.role_buckets import (SECTION_DRIVER, SECTION_HOURLY, SECTION_MANAGEMENT,
                                        section_for_position, section_for_role)
 from app.services.role_hierarchy import role_domain
 
@@ -25,6 +25,7 @@ _POSITION_ROLE_KEY = {
     "busser": "busser", "host": "host", "hostess": "host", "cashier": "cashier", "server": "server",
     "well": "bartender", "bartender": "bartender", "cook": "cook",
     "prep": "cook", "dishwasher": "cook", "training": "training", "trainee": "training",
+    "c-driver": "corporate_driver", "c driver": "corporate_driver",
 }
 _CANON_LC = {p.lower() for p in CANONICAL_POSITIONS}
 _STORE_LABELS = {"tomball": "Tomball", "copperfield": "Copperfield"}
@@ -33,14 +34,14 @@ _STORE_ORDER = ["tomball", "copperfield"]
 # Per-store SECTION precedence for an employee spanning multiple sections: a
 # person who is both a manager (e.g. KM) and an hourly (e.g. Server) is placed
 # in MANAGEMENT (the higher bucket). Higher number = higher precedence.
-_SECTION_RANK = {SECTION_MANAGEMENT: 2, SECTION_HOURLY: 1}
+_SECTION_RANK = {SECTION_MANAGEMENT: 3, SECTION_HOURLY: 2, SECTION_DRIVER: 1}
 
 
 def _highest_section(pos_names):
     """The HIGHEST per-store section (management > hourly) across an employee's
     position names, via role_buckets.section_for_position(). Positions with no
     section (partner/corporate tier-above, driver, unknown) are ignored. Returns
-    'management' | 'hourly' | None (None = no section-placed position)."""
+    'management' | 'hourly' | 'driver' | None (None = no section-placed position)."""
     best = None
     best_rank = 0
     for n in pos_names:
@@ -86,11 +87,11 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
     counts:{all,boh,foh}, stats:{showing,active_total,positions},
     stores:[{store_key,label,shown,active,employees:[{id,full_name,active,
     positions:[{id,name}],domain,section,access_role,phone,email}],
-    management:[...],hourly:[...]}]}.
-    Each employee row carries 'section' ('management'|'hourly'|None, the row's
+    management:[...],hourly:[...],driver:[...]}]}.
+    Each employee row carries 'section' ('management'|'hourly'|'driver'|None, the row's
     HIGHEST section via role_buckets) and each store dict ALSO carries pre-
-    partitioned 'management'/'hourly' lists (the same cleaned rows, split by
-    section -- driver-only/non-section rows are in neither). Both additions are
+    partitioned 'management'/'hourly'/'driver' lists (the same cleaned rows,
+    split by section; non-section rows are in neither). Both additions are
     ADDITIVE: the 'employees' full list and every existing field are unchanged."""
     location = (location or "all").strip().lower()
     flt = (flt or "all").strip().lower()
@@ -143,7 +144,7 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
             "positions": [{"id": pid, "name": nm} for pid, nm in plist],
             "domain": _domain_label(dom),
             # Per-store SECTION (S4, role_buckets): 'management' | 'hourly' |
-            # None, the HIGHEST section across the employee's positions. Additive
+            # 'driver' | None, the HIGHEST section across the employee's positions. Additive
             # -- existing consumers ignore it; the new grouping partitions on it.
             "section": _highest_section([nm for _pid, nm in plist]),
             "access_role": role_by_uid.get(e.user_id),
@@ -204,13 +205,14 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
         clean = [{k: v for k, v in r.items() if not k.startswith("_")}
                  for r in members]
         # Pre-partitioned section groups (S4): the SAME cleaned rows, split by
-        # their 'section'. management > hourly (placement is by the row's highest
-        # section, computed in _record). Driver-only / non-section-placed rows
-        # (section None) are intentionally in NEITHER group -- drivers show
-        # elsewhere (ez-driver). Purely additive: 'employees' (the full list) is
-        # untouched so current renderers keep working.
+        # their 'section'. management > hourly > driver (placement is by the
+        # row's highest section, computed in _record). Non-section-placed rows
+        # (section None) are intentionally in NEITHER group. Purely additive:
+        # 'employees' (the full list) is untouched so current renderers keep
+        # working.
         management = [r for r in clean if r.get("section") == SECTION_MANAGEMENT]
         hourly = [r for r in clean if r.get("section") == SECTION_HOURLY]
+        driver = [r for r in clean if r.get("section") == SECTION_DRIVER]
         stores_out.append({
             "store_key": sk,
             "label": _STORE_LABELS.get(sk, (sk or "").title()),
@@ -219,6 +221,7 @@ def team_roster(db, location="all", position="all", include_inactive=False, flt=
             "employees": clean,
             "management": management,
             "hourly": hourly,
+            "driver": driver,
         })
 
     return {

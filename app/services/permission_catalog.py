@@ -21,7 +21,7 @@ default_roles = which role templates inherit=ON by default (Sam tunes per-user v
 
 # ---- Roles (Sam #1681 + #2378/#2381: the 14 canonical scheduling positions +
 # DRIVER (corporate_driver) + EXPO; prep_manager dropped; 'host' shown as Host,
-# corporate_driver shown as Driver. The ezCater 'driver' is LOCKED/separate -
+# corporate_driver shown as C-Driver. The ezCater 'driver' is LOCKED/separate -
 # not a template here. ----
 ROLES = [
     {"key": "partner",         "label": "Partner",                  "wildcard": True},
@@ -40,7 +40,7 @@ ROLES = [
     {"key": "host",            "label": "Host",                     "wildcard": False},
     {"key": "training",        "label": "Training",                 "wildcard": False},
     {"key": "cook",            "label": "Cook",                     "wildcard": False},
-    {"key": "corporate_driver","label": "Driver",                   "wildcard": False},
+    {"key": "corporate_driver","label": "C-Driver",                 "wildcard": False},
 ]
 
 STORES = [
@@ -58,7 +58,7 @@ MGR_UP      = ["partner", "corporate", "corporate_chef", "gm", "km",
                "assistant_km", "foh_manager", "expo"]                          # manager-level+ (expo added 2026-06-07: it's a Management-section role -> must inherit the mgmt tier, not read as near-hourly)
 KITCHEN_MGR = ["partner", "corporate_chef", "km"]                              # KM + chefs
 KITCHEN     = ["partner", "corporate_chef", "km", "cook", "expo"]              # kitchen staff
-DRIVERS_MGR = ["partner", "corporate", "gm", "corporate_driver"]              # drivers + mgrs
+DRIVERS_MGR = ["partner", "corporate", "gm"]                                  # ezCater drivers + mgrs; C-Driver is separate
 
 # Sam's "core management 6" + partner, for the DASHBOARD keys ONLY (Sam 2026-06-08,
 # spec 1.1-1.9). Dedicated to dash.* so a future dashboard-audience change never
@@ -108,6 +108,7 @@ POSITION_TO_ROLE = {
     "busser": "busser", "host": "host", "hostess": "host", "cashier": "cashier", "server": "server",
     "well": "well", "bartender": "bartender", "cook": "cook",
     "prep": "cook", "dishwasher": "cook", "training": "training", "trainee": "training", "expo": "expo",
+    "c-driver": "corporate_driver", "c driver": "corporate_driver",
 }
 
 def position_role(position_name):
@@ -120,22 +121,22 @@ def _c(num, name): return {"num": num, "name": name}
 # ---- The catalog. 14 categories, renumbered clean (Sam's 14-18 gap closed). ----
 CATALOG = [
  {"id": 1, "key": "dashboard", "name": "Dashboard Access", "perms": [
-   {"id":"1.1","key":"dash.today","label":"Access Today Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO,
+   {"id":"1.1","key":"dash.today","label":"Access Today Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO+["corporate_driver"],
     "maps_to":{"route":"verify:/<store>/today","blueprint_or_fn":"store_routes (today tab)"},
     "notes":"Shows the Today tab. Expo is limited by route wiring to Notifications; Cenas AI lives in the assistant entry."},
    {"id":"1.2","key":"dash.manager","label":"Access Manager Dashboard","status":"live","default_roles":DASH_MGMT6,
     "maps_to":{"route":"/<store>/manager","blueprint_or_fn":"store_routes.py:3202"},
     "notes":"Shows the Manager tab (Daily Log, Incidents, Attendance, Training...). Expo is excluded."},
-   {"id":"1.3","key":"dash.catering","label":"Access Catering Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO+["corporate_driver"],
+   {"id":"1.3","key":"dash.catering","label":"Access Catering Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO,
     "maps_to":{"route":"verify:ez/catering","blueprint_or_fn":"ezcater_routes / ezcater_live_routes"},
     "notes":"Shows the Catering tab (EZ orders queue, driver assignment, tracking). Drivers + catering mgrs."},
-   {"id":"1.4","key":"dash.operations","label":"Access Operations Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO,
+   {"id":"1.4","key":"dash.operations","label":"Access Operations Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO+["corporate_driver"],
     "maps_to":{"route":"verify:/<store>/operations","blueprint_or_fn":"store_routes (operations tab)"},
     "notes":"Shows Operations tab. Expo is limited by route wiring to Corporate Order."},
    {"id":"1.5","key":"dash.vendors","label":"Access Vendors Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO,
     "maps_to":{"route":"verify:/<store>/vendors","blueprint_or_fn":"vendors/produce routes"},
     "notes":"Shows Vendors tab (directory, POs, invoices, portal)."},
-   {"id":"1.6","key":"dash.kitchen","label":"Access Kitchen Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO+["cook"],
+   {"id":"1.6","key":"dash.kitchen","label":"Access Kitchen Dashboard","status":"live","default_roles":DASH_MGMT6_EXPO+["cook","corporate_driver"],
     "maps_to":{"route":"verify:/<store>/kitchen","blueprint_or_fn":"store_routes (kitchen: fresh/prep/recipes)"},
     "notes":"Shows Kitchen tab (Fresh Food, Prep List, Recipes). Cook stays on Kitchen per live access decision."},
    {"id":"1.7","key":"dash.legal","label":"Access Legal Dashboard","status":"reserved","default_roles":PARTNER,
@@ -181,7 +182,7 @@ CATALOG = [
     "notes":"Set, adjust, change or delete an employee's availability (in the team roster). Manager-level -- whoever can configure schedules. Employees no longer self-set their own."},
  ]},
  {"id": 3, "key": "catering", "name": "Catering & EZ Orders", "perms": [
-   {"id":"3.1","key":"catering.view","label":"View Catering Orders","status":"live","default_roles":MGR_UP+["corporate_driver"],
+   {"id":"3.1","key":"catering.view","label":"View Catering Orders","status":"live","default_roles":MGR_UP,
     "maps_to":{"route":"verify:/ez (orders queue)","blueprint_or_fn":"ezcater_routes.py"},
     "notes":"See EZ orders queue (pending/in-progress/completed). Anyone working catering."},
    {"id":"3.2","key":"catering.edit","label":"Edit Catering Order Details","status":"live","default_roles":MGR_UP,
@@ -193,13 +194,13 @@ CATALOG = [
    {"id":"3.4","key":"catering.unassign","label":"Unassign Drivers","status":"live","default_roles":MGR_UP,
     "maps_to":{"route":"verify:/ez unassign","blueprint_or_fn":"ezcater_routes (requires_store_access)"},
     "notes":"Remove a driver from an order; reverses via Playwright. Manager-level."},
-   {"id":"3.5","key":"catering.view_drivers","label":"View Driver List","status":"live","default_roles":MGR_UP+["corporate_driver"],
+   {"id":"3.5","key":"catering.view_drivers","label":"View Driver List","status":"live","default_roles":MGR_UP,
     "maps_to":{"route":"verify:/ez drivers","blueprint_or_fn":"ezcater_routes / drivers.view_roster"},
     "notes":"See available drivers + assignments. Drivers (own queue) + managers (assign)."},
    {"id":"3.6","key":"catering.revenue","label":"View Catering Revenue Reports","status":"live","default_roles":CORP_UP,
     "maps_to":{"route":"verify:catering reports","blueprint_or_fn":"ezcater_revenue.py"},
     "notes":"Revenue, avg order size, top customers. Partner-and-above."},
-   {"id":"3.7","key":"catering.print_pdf","label":"Print/Download Catering PDFs","status":"live","default_roles":MGR_UP+["corporate_driver"],
+   {"id":"3.7","key":"catering.print_pdf","label":"Print/Download Catering PDFs","status":"live","default_roles":MGR_UP,
     "maps_to":{"route":"verify:/ez/<id>/pdf","blueprint_or_fn":"ezcater_routes (PDF)"},
     "notes":"Download EZ order PDFs for routing/records."},
    {"id":"3.8","key":"catering.reassign_store","label":"Reassign Order Between Stores","status":"live","default_roles":MGR_UP,
@@ -476,17 +477,17 @@ CATALOG = [
     "maps_to":{"route":"/partner/developer/permissions save","blueprint_or_fn":"THIS page (per-user override on top of role)"},"notes":"Add/remove specific perms on top of a user's role. Partner-only."},
  ]},
  {"id": 14, "key": "driver", "name": "Driver-Specific", "perms": [
-   {"id":"14.1","key":"driver.view_own_queue","label":"View Own Driver Queue","status":"live","default_roles":["corporate_driver","partner"],
+   {"id":"14.1","key":"driver.view_own_queue","label":"View Own Driver Queue","status":"live","default_roles":["partner"],
     "maps_to":{"route":"verify:driver queue","blueprint_or_fn":"ezcater_live / driver app"},"notes":"Own assigned deliveries. Default for drivers."},
    {"id":"14.2","key":"driver.view_all_queue","label":"View All Driver Queues","status":"live","default_roles":MGR_UP,
     "maps_to":{"route":"verify:all queues","blueprint_or_fn":"ezcater_routes"},"notes":"Everyone's deliveries. Manager-and-above."},
-   {"id":"14.3","key":"driver.update_own","label":"Update Own Delivery Status","status":"live","default_roles":["corporate_driver","partner"],
+   {"id":"14.3","key":"driver.update_own","label":"Update Own Delivery Status","status":"live","default_roles":["partner"],
     "maps_to":{"route":"verify:delivery status","blueprint_or_fn":"orders.mark_picked_up/mark_delivered"},"notes":"Mark picked up / in route / delivered. Drivers."},
    {"id":"14.4","key":"driver.update_others","label":"Update Other Drivers' Status","status":"live","default_roles":MGR_UP,
     "maps_to":{"route":"verify:delivery status override","blueprint_or_fn":"ezcater_routes"},"notes":"Override another driver's status. Manager-and-above."},
-   {"id":"14.5","key":"driver.view_earnings","label":"View Driver Earnings","status":"live","default_roles":["corporate_driver","partner","gm","corporate"],
+   {"id":"14.5","key":"driver.view_earnings","label":"View Driver Earnings","status":"live","default_roles":["partner","gm","corporate"],
     "maps_to":{"route":"verify:driver earnings","blueprint_or_fn":"ezcater_payroll.py (orders.view_payout)"},"notes":"Tips, base pay, mileage (own for drivers, all for mgrs)."},
-   {"id":"14.6","key":"driver.submit_mileage","label":"Submit Mileage / Expense Reports","status":"live","default_roles":["corporate_driver","partner"],
+   {"id":"14.6","key":"driver.submit_mileage","label":"Submit Mileage / Expense Reports","status":"live","default_roles":["partner"],
     "maps_to":{"route":"verify:mileage submit","blueprint_or_fn":"ezcater_miles.py"},"notes":"Log miles + expenses for reimbursement. Drivers."},
    {"id":"14.7","key":"driver.approve_mileage","label":"Approve Mileage / Expense Reports","status":"live","default_roles":GM_UP,
     "maps_to":{"route":"verify:mileage approve","blueprint_or_fn":"ezcater_payroll.py"},"notes":"Sign off driver expense submissions. GM-and-above."},

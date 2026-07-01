@@ -29,12 +29,12 @@ def test_the_seven_management_positions_are_exactly_sams_list():
 
 def test_dashboard_catalog_matches_sams_role_matrix():
     expected = {
-        "dash.today": MANAGER6 | {"partner", "expo"},
+        "dash.today": MANAGER6 | {"partner", "expo", "corporate_driver"},
         "dash.manager": MANAGER6 | {"partner"},
-        "dash.catering": MANAGER6 | {"partner", "expo", "corporate_driver"},
-        "dash.operations": MANAGER6 | {"partner", "expo"},
+        "dash.catering": MANAGER6 | {"partner", "expo"},
+        "dash.operations": MANAGER6 | {"partner", "expo", "corporate_driver"},
         "dash.vendors": MANAGER6 | {"partner", "expo"},
-        "dash.kitchen": MANAGER6 | {"partner", "expo", "cook"},
+        "dash.kitchen": MANAGER6 | {"partner", "expo", "cook", "corporate_driver"},
         "dash.legal": {"partner"},
         "dash.dev_chat": {"partner"},
     }
@@ -76,3 +76,11 @@ def test_hourly_positions_stay_self_only():
         tags = len(ROLE_PERMISSIONS.get(r, set()))
         assert tags <= 6, "%s (hourly) has %d route tags -- should be self-only" % (r, tags)
         assert "dash.manager" not in DRM.get(r, set()), "%s (hourly) should not get dash.manager" % r
+
+
+def test_corporate_driver_is_not_ezcater_catering_default():
+    cat = DRM.get("corporate_driver", set())
+    assert {"dash.today", "dash.operations", "dash.kitchen"}.issubset(cat)
+    assert "dash.catering" not in cat
+    assert not any(key.startswith("catering.") for key in cat)
+    assert not any(key.startswith("driver.") for key in cat)

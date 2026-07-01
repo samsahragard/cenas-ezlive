@@ -188,6 +188,8 @@ def home():
     """Per-store manager dashboard. Re-uses the existing /home view but
     filtered to the current store's location."""
     require_dashboard_access("dash.today")
+    if current_role_is("corporate_driver"):
+        return redirect(url_for("store.today_dashboard", tab="shift"))
     if current_role_is("expo"):
         abort(403)
     from app.web import ezcater_routes
@@ -495,6 +497,8 @@ def schedule_landing():
 
 @store_bp.route("/performance")
 def performance_landing():
+    if not _operations_full_access_ok():
+        abort(403)
     cards = _performance_subnav_cards(g.current_store)
     return _render_landing("perf_landing", "Performance",
                            f"{g.store_label} · service + prep metrics", cards)
@@ -506,6 +510,8 @@ def sales_landing():
     with multi-channel selection + Today/This Week/Last Week pills. Default
     = All channels + Today. Delegates to the third-party-sales view so URL
     state (channels=, period=) stays share-friendly."""
+    if not _operations_full_access_ok():
+        abort(403)
     from app.web.reports import third_party_sales as view
     if g.current_location and g.current_location != "both":
         g.location_override = g.current_location
@@ -516,6 +522,8 @@ def sales_landing():
 def labor_landing():
     """Per Sam: lands directly on the labor report with Today/Week/LastWeek
     + BOH/FOH/All pills. Default = All + Today. Delegates to reports.labor."""
+    if not _operations_full_access_ok():
+        abort(403)
     from app.web.reports import labor as view
     if g.current_location and g.current_location != "both":
         g.location_override = g.current_location
@@ -1482,8 +1490,16 @@ def _fresh_food_access_ok():
     )
 
 
+def _is_corporate_driver():
+    return current_role_is("corporate_driver")
+
+
 def _operations_full_access_ok():
-    return has_dashboard_access("dash.operations") and not current_role_is("expo")
+    return (
+        has_dashboard_access("dash.operations")
+        and not current_role_is("expo")
+        and not _is_corporate_driver()
+    )
 
 
 # ---- Daily Manager Log v3 (dck build-order #2, 2026-05-19) ----------
@@ -5519,7 +5535,7 @@ _RECIPE_CATEGORIES = ["cold", "hot", "sauces", "marinated", "chop"]
 
 @store_bp.route("/recipes", methods=["GET"])
 def recipes_index():
-    if not _kitchen_dashboard_ok():
+    if not _kitchen_dashboard_ok() or _is_corporate_driver():
         abort(403)
     from app.models import Recipe
     import json as _json
@@ -5565,7 +5581,7 @@ def recipes_index():
 
 @store_bp.route("/recipes/new", methods=["GET"])
 def recipes_new():
-    if not _kitchen_dashboard_ok():
+    if not _kitchen_dashboard_ok() or _is_corporate_driver():
         abort(403)
     return render_template(
         "recipes.html", recipes=[], recipe=None, form_mode="new",
@@ -5576,7 +5592,7 @@ def recipes_new():
 
 @store_bp.route("/recipes", methods=["POST"])
 def recipes_create():
-    if not _kitchen_dashboard_ok():
+    if not _kitchen_dashboard_ok() or _is_corporate_driver():
         abort(403)
     import json as _json
     from app.models import Recipe
@@ -5610,7 +5626,7 @@ def recipes_create():
 
 @store_bp.route("/recipes/<int:recipe_id>", methods=["GET"])
 def recipes_detail(recipe_id: int):
-    if not _kitchen_dashboard_ok():
+    if not _kitchen_dashboard_ok() or _is_corporate_driver():
         abort(403)
     import json as _json
     from app.models import Recipe
@@ -5646,7 +5662,7 @@ def recipes_detail(recipe_id: int):
 
 @store_bp.route("/recipes/<int:recipe_id>/edit", methods=["GET"])
 def recipes_edit(recipe_id: int):
-    if not _kitchen_dashboard_ok():
+    if not _kitchen_dashboard_ok() or _is_corporate_driver():
         abort(403)
     import json as _json
     from app.models import Recipe
@@ -5682,7 +5698,7 @@ def recipes_edit(recipe_id: int):
 
 @store_bp.route("/recipes/<int:recipe_id>", methods=["POST"])
 def recipes_update(recipe_id: int):
-    if not _kitchen_dashboard_ok():
+    if not _kitchen_dashboard_ok() or _is_corporate_driver():
         abort(403)
     import json as _json
     from app.models import Recipe
@@ -6042,7 +6058,7 @@ def _ff_lines_by_order(db, order_ids):
 
 @store_bp.route("/fresh-food/place-order", methods=["GET"])
 def fresh_food_place_order():
-    if not _fresh_food_access_ok():
+    if not _fresh_food_access_ok() or _is_corporate_driver():
         abort(403)
     db = next(get_db())
     today, delivery_date = _ff_target_order_date(request.args.get("order_date"))
@@ -6064,7 +6080,7 @@ def fresh_food_place_order():
 
 @store_bp.route("/fresh-food/place-order", methods=["POST"])
 def fresh_food_place_order_submit():
-    if not _fresh_food_access_ok():
+    if not _fresh_food_access_ok() or _is_corporate_driver():
         abort(403)
     from app.models import FreshFoodOrder, FreshFoodOrderLine
     body = request.get_json(silent=True) or {}
@@ -6109,7 +6125,7 @@ def fresh_food_place_order_submit():
 
 @store_bp.route("/fresh-food/developer", methods=["GET"])
 def fresh_food_developer():
-    if not _fresh_food_access_ok():
+    if not _fresh_food_access_ok() or _is_corporate_driver():
         abort(403)
     from app.models import FreshFoodOrder, FreshFoodOrderLine
 
@@ -6280,6 +6296,8 @@ def fresh_food_developer():
 def _render_fresh_food_orders_tab(ff_tab: str):
     if not _fresh_food_access_ok():
         abort(403)
+    if _is_corporate_driver() and ff_tab != "fulfill":
+        abort(403)
     from app.models import FreshFoodOrder
     db = next(get_db())
     try:
@@ -6311,6 +6329,7 @@ def _render_fresh_food_orders_tab(ff_tab: str):
             completed_local_by_order=completed_local_by_order,
             order_date_label_by_order=order_date_label_by_order,
             ff_tab=ff_tab,
+            fresh_fulfill_only=_is_corporate_driver(),
             active=(
                 "fresh_food_fulfill_order"
                 if ff_tab == "fulfill"
@@ -6390,7 +6409,7 @@ def fresh_food_recent_orders_fulfill(order_id: int):
 
 @store_bp.route("/fresh-food/recent-orders/report.csv", methods=["GET"])
 def fresh_food_recent_orders_report():
-    if not _fresh_food_access_ok():
+    if not _fresh_food_access_ok() or _is_corporate_driver():
         abort(403)
     import csv
     import io as _io
@@ -6475,6 +6494,8 @@ _KITCHEN_PAGE_LABELS = {
 def kitchen_prep_list():
     """Prep List v3 — kitchen's daily prep board. Registered before
     the /kitchen/<page> placeholder so Flask matches it first."""
+    if _is_corporate_driver():
+        abort(403)
     db = next(get_db())
     try:
         return _render_prep_list_v3(db, "Prep List", "kitchen_prep_list")
@@ -6485,6 +6506,8 @@ def kitchen_prep_list():
 @store_bp.route("/kitchen/prep-list", methods=["POST"])
 def kitchen_prep_list_post():
     """All POSTs from the Prep List page (hidden form_action)."""
+    if _is_corporate_driver():
+        abort(403)
     db = next(get_db())
     try:
         user = getattr(g, "current_user", None)
@@ -6511,6 +6534,8 @@ def kitchen_prep_list_post():
 def kitchen_prep_team():
     """Kitchen Prep Team roster. Saved names drive Prep List assignment menus."""
     require_dashboard_access("dash.kitchen")
+    if _is_corporate_driver():
+        abort(403)
     db = next(get_db())
     try:
         from app.models import PrepTeamMember
@@ -7038,6 +7063,8 @@ def roster(view: str = "all"):
 def server_performance(role: str = "all"):
     """Performance. Children: Server / Bartenders / Prep / All. Phase 1 renders
     the existing report; Phase 2 will filter by role."""
+    if not _operations_full_access_ok():
+        abort(403)
     from app.web.reports import server_performance as view
     g.location_override = g.current_location if g.current_location != "both" else None
     g.role_filter = role
@@ -7048,6 +7075,8 @@ def server_performance(role: str = "all"):
 @store_bp.route("/reports/labor/<which>")
 def labor(which: str = "all"):
     """Labor. Children: BOH / FOH / All."""
+    if not _operations_full_access_ok():
+        abort(403)
     from app.web.reports import labor as view
     g.location_override = g.current_location if g.current_location != "both" else None
     g.labor_filter = which
@@ -7059,6 +7088,8 @@ def labor(which: str = "all"):
 def sales(channel: str = "all"):
     """Sales. Children: Toast (in-store) / Online Toast / Ezcater / DoorDash / Uber / Total.
     Phase 1 shows the third-party report; Phase 2 wires per-channel."""
+    if not _operations_full_access_ok():
+        abort(403)
     from app.web.reports import third_party_sales as view
     g.location_override = g.current_location if g.current_location != "both" else None
     g.sales_channel = channel
@@ -7415,6 +7446,8 @@ def _kitchen_dash_full_url(tab_key):
       prep-team  → /<store>/kitchen/prep-team
     Falls back to '' on an unknown key."""
     if tab_key == "fresh-food":
+        if _is_corporate_driver():
+            return url_for("store.fresh_food_fulfill_order")
         return url_for("store.fresh_food_place_order")
     if tab_key == "prep-list":
         return url_for("store.kitchen_prep_list")
@@ -7433,10 +7466,13 @@ def kitchen_dashboard():
     single direct link to /<store>/kitchen that opens this tabbed page.
     Each tab embeds the real page inline via iframe."""
     require_dashboard_access("dash.kitchen")
-    valid = {key for key, _, _ in _KITCHEN_DASH_TABS}
+    dash_tab_specs = _KITCHEN_DASH_TABS
+    if _is_corporate_driver():
+        dash_tab_specs = [tab for tab in _KITCHEN_DASH_TABS if tab[0] == "fresh-food"]
+    valid = {key for key, _, _ in dash_tab_specs}
     active_tab = (request.args.get("tab") or "").strip().lower()
     if active_tab not in valid:
-        active_tab = _KITCHEN_DASH_TABS[0][0]   # 'fresh-food'
+        active_tab = dash_tab_specs[0][0]   # 'fresh-food'
     tabs = [
         {
             "key": key,
@@ -7444,7 +7480,7 @@ def kitchen_dashboard():
             "coming": coming,
             "url": "" if coming else _kitchen_dash_full_url(key),
         }
-        for key, caption, coming in _KITCHEN_DASH_TABS
+        for key, caption, coming in dash_tab_specs
     ]
     label = g.store_label or "Cenas Kitchen"
     today_label = _today_label()
@@ -7469,7 +7505,7 @@ def team_workspace():
     dashboards: the roster loads client-side from
     GET /<store>/schedules-v2/team-roster; this route only renders the page
     with the store context (store_slug drives the iframe srcs + the fetch)."""
-    if not has_dashboard_access("dash.operations"):
+    if not has_dashboard_access("dash.operations") or _is_corporate_driver():
         abort(403)
     label = g.store_label or "Cenas Kitchen"
     today_label = _today_label()
@@ -7562,7 +7598,12 @@ def operations_dashboard():
     when the browser loads them."""
     require_dashboard_access("dash.operations")
     dash_tab_specs = _OPERATIONS_DASH_TABS
-    if current_role_is("expo"):
+    if _is_corporate_driver():
+        dash_tab_specs = [
+            tab for tab in _OPERATIONS_DASH_TABS
+            if tab[0] == "corp-order"
+        ]
+    elif current_role_is("expo"):
         dash_tab_specs = [
             tab for tab in _OPERATIONS_DASH_TABS
             if tab[0] in ("team", "corp-order")
@@ -7646,6 +7687,7 @@ _TODAY_DASH_TABS = [
     ("notifications", "Notifications"),
     ("sub-form",      "SUB FORM"),
     ("task-reports",  "Task Reports"),
+    ("shift",         "Shift"),
     ("agents",        "Agents"),
     ("pass",          "Pass"),
     # Sam #240 (2026-05-23): consolidated docs surface — replaces the
@@ -7682,6 +7724,8 @@ def _today_dash_full_url(tab_key):
         return "/partner/website-forms?type=career"
     if tab_key == "task-reports":
         return "/partner/team-reports/"
+    if tab_key == "shift":
+        return url_for("store.corporate_driver_shift_page")
     if tab_key == "agents":
         return "/sam/agents"
     if tab_key == "pass":
@@ -7693,10 +7737,189 @@ def _today_dash_full_url(tab_key):
     return url_for("store.home")
 
 
+def _require_corporate_driver_shift_access() -> None:
+    require_dashboard_access("dash.today")
+    if not _is_corporate_driver():
+        abort(403)
+
+
+def _corporate_driver_row(db) -> Driver:
+    """Dedicated internal GPS driver row for the C-Driver shift tab.
+
+    The row uses location='corporate' so it stays separate from any Tomball or
+    Copperfield ezCater driver roster row with the same person/name.
+    """
+    user = getattr(g, "current_user", None)
+    name = (getattr(user, "full_name", None) or "C-Driver").strip() or "C-Driver"
+    row = (
+        db.query(Driver)
+        .filter(Driver.name == name, Driver.location == "corporate")
+        .first()
+    )
+    if row is None:
+        row = Driver(
+            name=name,
+            location="corporate",
+            phone=(getattr(user, "phone", None) or None),
+            active=True,
+            status="active",
+            home_store_id="corporate",
+        )
+        db.add(row)
+        db.flush()
+    else:
+        row.active = True
+        row.status = "active"
+        if not (row.phone or "").strip() and getattr(user, "phone", None):
+            row.phone = user.phone
+        if not (row.home_store_id or "").strip():
+            row.home_store_id = "corporate"
+    return row
+
+
+def _open_corporate_driver_shift(db, driver_id: int) -> DriverShift | None:
+    return (
+        db.query(DriverShift)
+        .filter(DriverShift.driver_id == driver_id, DriverShift.ended_at.is_(None))
+        .order_by(DriverShift.started_at.desc())
+        .first()
+    )
+
+
+def _corporate_driver_shift_payload(db, driver: Driver) -> dict:
+    open_shift = _open_corporate_driver_shift(db, driver.id)
+    latest = (
+        db.query(DriverLocation)
+        .filter(DriverLocation.driver_id == driver.id)
+        .order_by(DriverLocation.captured_at.desc())
+        .first()
+    )
+    return {
+        "ok": True,
+        "driver_id": driver.id,
+        "active": open_shift is not None,
+        "shift_id": open_shift.id if open_shift else None,
+        "started_at": open_shift.started_at.isoformat() + "Z" if open_shift else None,
+        "latest": {
+            "lat": latest.lat,
+            "lng": latest.lng,
+            "accuracy_m": latest.accuracy_m,
+            "captured_at": latest.captured_at.isoformat() + "Z",
+        } if latest else None,
+    }
+
+
+@store_bp.route("/corporate-driver/shift", methods=["GET"])
+def corporate_driver_shift_page():
+    _require_corporate_driver_shift_access()
+    return render_template(
+        "corporate_driver_shift.html",
+        active="corporate_driver_shift",
+        store_label=g.store_label or "Cenas Kitchen",
+    )
+
+
+@store_bp.route("/corporate-driver/shift/status", methods=["GET"])
+def corporate_driver_shift_status():
+    _require_corporate_driver_shift_access()
+    db = next(get_db())
+    try:
+        driver = _corporate_driver_row(db)
+        db.commit()
+        return jsonify(_corporate_driver_shift_payload(db, driver))
+    finally:
+        db.close()
+
+
+@store_bp.route("/corporate-driver/shift/start", methods=["POST"])
+def corporate_driver_shift_start():
+    _require_corporate_driver_shift_access()
+    db = next(get_db())
+    try:
+        driver = _corporate_driver_row(db)
+        now = datetime.utcnow()
+        open_shifts = (
+            db.query(DriverShift)
+            .filter(DriverShift.driver_id == driver.id, DriverShift.ended_at.is_(None))
+            .all()
+        )
+        for shift in open_shifts:
+            shift.ended_at = now
+        shift = DriverShift(driver_id=driver.id, started_at=now)
+        db.add(shift)
+        db.commit()
+        return jsonify(_corporate_driver_shift_payload(db, driver))
+    finally:
+        db.close()
+
+
+@store_bp.route("/corporate-driver/shift/end", methods=["POST"])
+def corporate_driver_shift_end():
+    _require_corporate_driver_shift_access()
+    db = next(get_db())
+    try:
+        driver = _corporate_driver_row(db)
+        shift = _open_corporate_driver_shift(db, driver.id)
+        if shift is not None:
+            shift.ended_at = datetime.utcnow()
+        db.commit()
+        return jsonify(_corporate_driver_shift_payload(db, driver))
+    finally:
+        db.close()
+
+
+@store_bp.route("/corporate-driver/shift/location", methods=["POST"])
+def corporate_driver_shift_location():
+    _require_corporate_driver_shift_access()
+    payload = request.get_json(silent=True) or {}
+    try:
+        lat = float(payload["lat"])
+        lng = float(payload["lng"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False, "error": "lat and lng required"}), 400
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
+        return jsonify({"ok": False, "error": "lat/lng out of range"}), 400
+
+    def _float_or_none(value):
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    db = next(get_db())
+    try:
+        driver = _corporate_driver_row(db)
+        shift = _open_corporate_driver_shift(db, driver.id)
+        if shift is None:
+            return jsonify({"ok": False, "error": "no open shift"}), 409
+        loc = DriverLocation(
+            shift_id=shift.id,
+            driver_id=driver.id,
+            order_id=None,
+            lat=lat,
+            lng=lng,
+            accuracy_m=_float_or_none(payload.get("accuracy_m")),
+            speed_mps=_float_or_none(payload.get("speed_mps")),
+            heading_deg=_float_or_none(payload.get("heading_deg")),
+        )
+        db.add(loc)
+        driver.last_known_lat = lat
+        driver.last_known_lng = lng
+        driver.last_location_at = datetime.utcnow()
+        db.commit()
+        return jsonify(_corporate_driver_shift_payload(db, driver))
+    finally:
+        db.close()
+
+
 @store_bp.route("/notifications", methods=["GET"])
 def notifications_page():
     """Store-scoped Notifications page for the Today dashboard iframe."""
     require_dashboard_access("dash.today")
+    if _is_corporate_driver():
+        abort(403)
     from app.services.ribbon import RIBBON_CATEGORIES
     from app.web.ribbon_routes import ribbon_render_context
 
@@ -7748,6 +7971,10 @@ def today_dashboard():
         "form-contact": "sub-form",
     }
     for key, caption in _TODAY_DASH_TABS:
+        if _is_corporate_driver():
+            if key == "shift":
+                dash_tabs.append((key, caption))
+            continue
         if current_role_is("expo") and key != "notifications":
             continue
         if key == "task-reports":

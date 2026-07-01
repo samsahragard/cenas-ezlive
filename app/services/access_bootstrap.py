@@ -26,6 +26,7 @@ _ROLE_TO_POSITION_NAME = {
     "assistant_km": "Assistant KM",
     "foh_manager": "FOH Manager",
     "expo": "Expo",
+    "corporate_driver": "C-Driver",
 }
 
 
@@ -49,6 +50,13 @@ class ManagerProfileMove:
     employee_aliases: tuple[str, ...]
     template_user_aliases: tuple[str, ...]
     store_scope: str
+
+
+@dataclass(frozen=True)
+class CorporateDriverProfile:
+    employee_aliases: tuple[str, ...]
+    store_scope: str = "tomball,copperfield"
+    position_store_scopes: tuple[str, ...] = ("tomball", "copperfield")
 
 
 FIXED_ASSIGNMENTS: tuple[AccessAssignment, ...] = (
@@ -87,6 +95,10 @@ MANAGER_PROFILE_MOVES: tuple[ManagerProfileMove, ...] = (
         ("Sebastian Ayala", "Sebastian"),
         "copperfield",
     ),
+)
+
+CORPORATE_DRIVER_PROFILES: tuple[CorporateDriverProfile, ...] = (
+    CorporateDriverProfile(("James Paddie", "James")),
 )
 
 
@@ -354,16 +366,25 @@ def _move_employee_to_manager_profile(
     db,
     *,
     employee: Employee | None,
-    template_user: User | None,
+    template_user: User | None = None,
     store_scope: str,
+    role_override: str | None = None,
+    position_store_scopes: tuple[str, ...] | None = None,
+    profile_label: str = "manager",
 ) -> bool:
-    if employee is None or template_user is None:
+    if employee is None:
         return False
-    role = (template_user.permission_level or "").strip()
+    role = (role_override or (template_user.permission_level if template_user else "") or "").strip()
     if not role:
         return False
 
-    store_position_changed = _ensure_employee_manager_store_access(db, employee, role, store_scope)
+    store_position_changed = False
+    for position_store in position_store_scopes or (store_scope,):
+        store_key = (position_store or "").strip()
+        if not store_key:
+            continue
+        if _ensure_employee_manager_store_access(db, employee, role, store_key):
+            store_position_changed = True
     user = _find_user_for_employee(db, employee)
     created = False
     before = _role_state(user) if user is not None else None
@@ -439,14 +460,24 @@ def _move_employee_to_manager_profile(
         user.session_version = (user.session_version or 0) + 1
 
     if created:
+        source = (
+            f"copied access from {template_user.full_name}"
+            if template_user is not None
+            else f"assigned role {role}"
+        )
         _audit_user_create(
             db,
             user,
-            f"Moved employee profile to manager profile; copied access from {template_user.full_name}; store_scope={store_scope}.",
+            f"Moved employee profile to {profile_label} profile; {source}; store_scope={store_scope}.",
         )
     elif user_changed:
+        source = (
+            f"copied access from {template_user.full_name}"
+            if template_user is not None
+            else f"assigned role {role}"
+        )
         details = (
-            f"Moved employee profile to manager profile; copied access from {template_user.full_name}; "
+            f"Moved employee profile to {profile_label} profile; {source}; "
             f"store_scope={store_scope}."
         )
         if before != after:
@@ -466,8 +497,9 @@ def _move_employee_to_manager_profile(
 
     if store_position_changed or user_changed or employee_link_changed:
         log.info(
-            "access bootstrap: moved %s to manager user %s with %s",
+            "access bootstrap: moved %s to %s user %s with %s",
             employee.full_name,
+            profile_label,
             user.id,
             after,
         )
@@ -520,6 +552,19 @@ def apply_requested_access_scopes(db) -> int:
             employee=employee,
             template_user=template,
             store_scope=move.store_scope,
+        ):
+            changed += 1
+
+    for profile in CORPORATE_DRIVER_PROFILES:
+        employee = _find_employee(db, aliases=profile.employee_aliases)
+        if _move_employee_to_manager_profile(
+            db,
+            employee=employee,
+            template_user=None,
+            store_scope=profile.store_scope,
+            role_override="corporate_driver",
+            position_store_scopes=profile.position_store_scopes,
+            profile_label="C-Driver",
         ):
             changed += 1
 

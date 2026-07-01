@@ -584,11 +584,15 @@
 
 <div class="ffro-page">
   <div class="ff-tabs">
+    {% if fresh_fulfill_only %}
+    <a class="ff-tab is-active" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fulfill</a>
+    {% else %}
     <a class="ff-tab" href="{{ url_for('store.fresh_food_place_order') }}">Place</a>
-    <a class="ff-tab{% if ff_tab == 'fulfill' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fullfill</a>
+    <a class="ff-tab{% if ff_tab == 'fulfill' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_fulfill_order') }}">Fulfill</a>
     <a class="ff-tab{% if ff_tab == 'complete' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_complete_order') }}">Complete</a>
     <a class="ff-tab{% if ff_tab == 'history' %} is-active{% endif %}" href="{{ url_for('store.fresh_food_recent_orders') }}">History</a>
     <a class="ff-tab" href="{{ url_for('store.fresh_food_developer') }}">Dev</a>
+    {% endif %}
   </div>
   {% set has_orders = orders|length > 0 %}
 
@@ -852,7 +856,11 @@
       </div>
     {% else %}
       <div class="ffro-empty">
+        {% if fresh_fulfill_only %}
+        No orders yet.
+        {% else %}
         No orders yet. Place one from <a href="{{ url_for('store.fresh_food_place_order') }}">Place</a>.
+        {% endif %}
       </div>
     {% endif %}
   </div>

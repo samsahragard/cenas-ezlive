@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from app.models import (Employee, EmployeePosition, EmployeeStoreAssignment,
                         Position)
-from app.services.role_buckets import SECTION_HOURLY, SECTION_MANAGEMENT
+from app.services.role_buckets import SECTION_DRIVER, SECTION_HOURLY, SECTION_MANAGEMENT
 from app.services.team_roster import addable_positions_for, team_roster
 
 
@@ -44,6 +44,7 @@ def _seed(db):
     _pos(db, "Hostess", 6)   # hourly (role 'host')
     _pos(db, "Prep", 7)      # hourly kitchen (role 'cook')
     _pos(db, "Dishwasher", 8)  # hourly kitchen (role 'cook')
+    _pos(db, "C-Driver", 9)  # driver section
 
     # Tomball roster:
     #  - Gina: GM only            -> management
@@ -58,6 +59,7 @@ def _seed(db):
     _emp(db, 13, "Wendy Well", ["tomball"], {"tomball": [5]})
     _emp(db, 14, "Paul Prep", ["tomball"], {"tomball": [7]})
     _emp(db, 15, "Dora Dish", ["tomball"], {"tomball": [8]})
+    _emp(db, 16, "James Driver", ["tomball"], {"tomball": [9]})
     db.commit()
 
 
@@ -74,8 +76,8 @@ def test_store_dict_has_section_groups_and_keeps_employees(db_session):
     assert set(tom) >= {"employees", "management", "hourly"}
     assert {r["full_name"] for r in tom["employees"]} == {
         "Gina GM", "Carl Cook", "Mia Span", "Wendy Well",
-        "Paul Prep", "Dora Dish"}
-    assert tom["shown"] == 6
+        "Paul Prep", "Dora Dish", "James Driver"}
+    assert tom["shown"] == 7
 
 
 def test_partition_by_highest_section(db_session):
@@ -91,6 +93,7 @@ def test_partition_by_highest_section(db_session):
     # Carl (Cook), Wendy (Well), Paul (Prep), Dora (Dishwasher) in hourly.
     assert hrly == {"Carl Cook", "Wendy Well", "Paul Prep", "Dora Dish"}
     assert mgmt.isdisjoint(hrly)
+    assert {r["full_name"] for r in tom["driver"]} == {"James Driver"}
 
 
 def test_employee_row_carries_section(db_session):
@@ -104,6 +107,7 @@ def test_employee_row_carries_section(db_session):
     assert by_name["Wendy Well"]["section"] == SECTION_HOURLY
     assert by_name["Paul Prep"]["section"] == SECTION_HOURLY
     assert by_name["Dora Dish"]["section"] == SECTION_HOURLY
+    assert by_name["James Driver"]["section"] == SECTION_DRIVER
 
 
 def test_non_section_employee_in_neither_group(db_session):
@@ -140,7 +144,7 @@ def test_groups_present_for_all_stores_view(db_session):
 
     res = team_roster(db_session, location="all")
     for s in res["stores"]:
-        assert "management" in s and "hourly" in s
+        assert "management" in s and "hourly" in s and "driver" in s
     cop = _store(res, "copperfield")
     assert {r["full_name"] for r in cop["hourly"]} == {"Cara Copper"}
     assert cop["management"] == []

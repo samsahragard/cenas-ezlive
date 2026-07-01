@@ -40,6 +40,7 @@ LEVELS = (
     "prep_manager",
     "foh_manager",
     "expo",
+    "corporate_driver",
     "driver",
     "corporate-driver",  # legacy alias for driver — remove in Phase 2 cleanup
 )
@@ -55,7 +56,7 @@ STORE_SCOPED_LEVELS = (
     "km", "assistant_km",
     "corporate_chef", "prep_manager", "foh_manager",
     "expo",
-    "driver", "corporate-driver",
+    "corporate_driver", "driver", "corporate-driver",
 )
 
 # Maps the User.store_scope CSV value to the store_slug each scope owns.
@@ -70,7 +71,7 @@ def accessible_store_slugs(user) -> list[str]:
     user can access. Partners can use the two single-store views, the combined
     both-store view, and the full Partner view. Corporate users use their
     Corporate slug. Store-scoped roles (gm, manager, km, assistant_km, corporate_chef,
-    prep_manager, foh_manager, expo, driver, corporate-driver) get one entry
+    prep_manager, foh_manager, expo, corporate_driver, driver, corporate-driver) get one entry
     per assigned store, derived from the User.store_scope CSV. A store-scoped
     user assigned to both concrete stores also gets the corporate slug as the
     combined both-locations view. Order is stable so the sidebar dropdown is

@@ -173,3 +173,61 @@ def test_access_bootstrap_moves_alex_to_sebastian_copperfield_manager_profile(db
     db_session.commit()
 
     assert changed_again == 0
+
+
+def test_access_bootstrap_moves_james_to_c_driver_profile(db_session):
+    employee = Employee(
+        id=51,
+        full_name="James Paddie",
+        phone="555-555-5151",
+        email="james@test.local",
+        passcode_hash="james-employee-pin-hash",
+        active=True,
+        session_version=7,
+    )
+    server = Position(id=52, name="Server", store_key=None)
+    db_session.add_all([employee, server])
+    db_session.flush()
+    db_session.add(EmployeePosition(employee_id=employee.id, position_id=server.id, store_key="tomball"))
+    db_session.commit()
+
+    changed = apply_requested_access_scopes(db_session)
+    db_session.commit()
+
+    assert changed == 1
+    user = db_session.query(User).filter(User.full_name == "James Paddie").one()
+    assert employee.user_id == user.id
+    assert employee.session_version == 8
+    assert user.permission_level == "corporate_driver"
+    assert user.store_scope == "tomball,copperfield"
+    assert user.passcode_hash == employee.passcode_hash
+    assert user.phone == employee.phone
+    assert user.email == employee.email
+    assert user.active is True
+    assert user.first_login_done is True
+
+    store_keys = {
+        key for (key,) in (
+            db_session.query(EmployeeStoreAssignment.store_key)
+            .filter(EmployeeStoreAssignment.employee_id == employee.id)
+            .all()
+        )
+    }
+    assert store_keys == {"tomball", "copperfield"}
+
+    position_rows = (
+        db_session.query(Position.name, EmployeePosition.store_key)
+        .join(EmployeePosition, EmployeePosition.position_id == Position.id)
+        .filter(EmployeePosition.employee_id == employee.id)
+        .all()
+    )
+    position_pairs = {(name, store_key) for name, store_key in position_rows}
+    assert ("Server", "tomball") in position_pairs
+    assert ("C-Driver", "tomball") in position_pairs
+    assert ("C-Driver", "copperfield") in position_pairs
+    assert db_session.query(UserAuditLog).filter_by(target_user_id=user.id, action="create").count() == 1
+
+    changed_again = apply_requested_access_scopes(db_session)
+    db_session.commit()
+
+    assert changed_again == 0

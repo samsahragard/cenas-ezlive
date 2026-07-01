@@ -4663,15 +4663,56 @@ def _render_prep_list_v3(db, label, active_key):
     try:
         from app.models import AttendanceShift, Employee, Schedule, Shift
         perf = {}
+        eligible_names = {}
+
+        def _remember_perf_name(name):
+            clean = (name or "").strip()
+            key = clean.lower()
+            if clean and key not in eligible_names:
+                eligible_names[key] = clean
+
+        for row in team:
+            _remember_perf_name(row.get("name"))
+        for v in sel_views:
+            _remember_perf_name(v.get("assignee"))
+            for helper in v.get("helper_names") or []:
+                _remember_perf_name(helper)
+
+        try:
+            hist_q = db.query(
+                PrepEntry.assignee_name,
+                PrepEntry.helper_names,
+            ).filter(
+                (PrepEntry.assignee_name.isnot(None)) |
+                (PrepEntry.helper_names.isnot(None))
+            )
+            for assignee, helpers_raw in _scoped(hist_q, PrepEntry).all():
+                _remember_perf_name(assignee)
+                for helper in _prep_load_helpers(helpers_raw):
+                    _remember_perf_name(helper)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "prep performance eligibility lookup failed (non-fatal)")
+
+        current_team_keys = {
+            (row.get("name") or "").strip().lower()
+            for row in team
+            if (row.get("name") or "").strip()
+        }
 
         def _slot(name):
-            key = (name or "").strip()
-            if not key:
+            raw = (name or "").strip()
+            key = raw.lower()
+            if not key or key not in eligible_names:
                 return None
+            display_name = eligible_names[key]
             return perf.setdefault(key, {
-                "name": key, "assigned": 0, "started": 0, "partly": 0,
+                "name": display_name, "assigned": 0, "started": 0, "partly": 0,
                 "completed": 0, "helped": 0, "hours": 0.0,
             })
+
+        for row in team:
+            _slot(row.get("name"))
 
         for v in sel_views:
             s = _slot(v.get("assignee"))
@@ -4722,10 +4763,14 @@ def _render_prep_list_v3(db, label, active_key):
             mins = max(mins - float(sh.break_minutes or 0), 0.0)
             s["hours"] += mins / 60.0
 
-        for name in all_staff:
-            _slot(name)
-
         for row in perf.values():
+            row_key = row["name"].strip().lower()
+            has_daily_signal = any((
+                row["assigned"], row["started"], row["partly"],
+                row["completed"], row["helped"], row["hours"],
+            ))
+            if row_key not in current_team_keys and not has_daily_signal:
+                continue
             hours = row["hours"]
             completion_rate = (
                 (row["completed"] / row["assigned"]) if row["assigned"] else 0.0
@@ -4824,6 +4869,7 @@ def _render_prep_list_v3(db, label, active_key):
         next_date=(sel + timedelta(days=1)).isoformat(),
         date_display=f"{sel:%A, %B} {sel.day}, {sel.year}",
         date_display_compact=f"{sel:%A} {sel:%B} {sel.day}",
+        date_display_mobile=f"{sel:%A}",
         is_today=(sel == today),
     )
 

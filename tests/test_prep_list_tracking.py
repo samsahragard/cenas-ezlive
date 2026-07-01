@@ -181,3 +181,9 @@ def test_prep_team_today_uses_scheduled_prep_position(db_session, monkeypatch):
     assert team[0]["assignment_count"] == 1
     assert team[0]["in_progress"] == 1
     assert team[0]["shift_label"] == "9:00 AM-3:00 PM"
+
+    performance = captured["performance_rows"]
+    assert [row["name"] for row in performance] == ["Paul Prep"]
+    assert performance[0]["assigned"] == 1
+    assert performance[0]["partly"] == 1
+    assert performance[0]["hours_label"] == "6"

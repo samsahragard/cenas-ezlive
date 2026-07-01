@@ -219,6 +219,66 @@
     background: rgba(228,179,64,0.14);
     border-color: var(--prep-gold);
   }
+  .prep-mobile-strip { display: none; }
+  .prep-mobile-date,
+  .prep-mobile-action {
+    min-width: 0;
+    min-height: 38px;
+    align-items: center;
+    justify-content: center;
+    color: var(--prep-cream-dim);
+    background: var(--prep-bg-input);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 9px;
+    font-size: 9px;
+    font-weight: 900;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+  }
+  .prep-mobile-action {
+    display: inline-flex;
+    padding: 0 4px;
+    cursor: pointer;
+  }
+  .prep-mobile-action.active {
+    color: var(--prep-gold-bright);
+    border-color: var(--prep-gold);
+    background: rgba(228,179,64,0.14);
+  }
+  .prep-mobile-date {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) 20px;
+    padding: 0 2px;
+  }
+  .prep-mobile-date a {
+    display: grid;
+    place-items: center;
+    height: 100%;
+    color: var(--prep-gold);
+    text-decoration: none;
+  }
+  .prep-mobile-date-label {
+    min-width: 0;
+    align-self: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .prep-sheet-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0,0,0,0.58);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+  }
+  .prep-sheet-scrim.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  body.prep-sheet-open { overflow: hidden; }
   .prep-panel { padding: 16px; margin-bottom: 16px; }
   .prep-panel-title {
     color: var(--prep-gold);
@@ -314,32 +374,57 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .prep-item-block { border-bottom: 0.5px solid rgba(228,179,64,0.08); }
+  .prep-section-body {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+  }
+  .prep-item-block { min-width: 0; }
   .prep-item-toggle {
     width: 100%;
-    min-height: 54px;
+    min-height: 74px;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0 16px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 10px 9px 13px;
     color: inherit;
-    background: transparent;
-    border: 0;
+    background: var(--prep-bg-card);
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 10px;
     cursor: pointer;
     text-align: left;
+    position: relative;
+    overflow: hidden;
   }
-  .prep-item-toggle:hover { background: rgba(228,179,64,0.05); }
+  .prep-item-toggle::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--prep-gold);
+  }
+  .prep-item-toggle.hot::before { background: var(--prep-hot); }
+  .prep-item-toggle.cold::before { background: var(--prep-cold); }
+  .prep-item-toggle.chop::before { background: var(--prep-chop); }
+  .prep-item-toggle:hover { background: var(--prep-bg-card-hover); border-color: var(--prep-border-active); }
   .prep-item-toggle.open {
     background: rgba(228,179,64,0.13);
-    box-shadow: inset 3px 0 0 var(--prep-gold);
+    border-color: var(--prep-gold);
   }
   .prep-item-name {
-    flex: 1;
     min-width: 0;
     color: var(--prep-cream);
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 800;
-    line-height: 1.2;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
   }
   .prep-item-toggle.open .prep-item-name,
   .prep-item-toggle.has-work .prep-item-name { color: var(--prep-gold-bright); }
@@ -363,14 +448,67 @@
   .prep-badge.partly { color: var(--prep-gold-bright); border-color: var(--prep-gold); background: rgba(228,179,64,0.12); }
   .prep-badge.not-needed { color: var(--prep-cream-faint); }
   .prep-item-chevron { color: var(--prep-gold); transition: transform 0.15s; }
-  .prep-item-toggle.open .prep-item-chevron { transform: rotate(90deg); }
+  .prep-item-toggle .prep-item-chevron { display: none; }
   .prep-inline-panel {
-    display: none;
-    padding: 14px 16px 18px;
-    background: rgba(0,0,0,0.18);
-    border-top: 0.5px solid var(--prep-border-subtle);
+    display: block;
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    z-index: 1001;
+    width: min(720px, calc(100vw - 24px));
+    max-height: min(82vh, 720px);
+    overflow-y: auto;
+    padding: 0 16px 18px;
+    background: #160d09;
+    border: 0.5px solid var(--prep-border-active);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -24px 70px rgba(0,0,0,0.72);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 100%);
+    transition: transform 0.22s ease, opacity 0.18s ease;
+    visibility: hidden;
   }
-  .prep-inline-panel.open { display: block; }
+  .prep-inline-panel.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, 0);
+    visibility: visible;
+  }
+  .prep-sheet-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 0 12px;
+    background: #160d09;
+    border-bottom: 0.5px solid var(--prep-border-subtle);
+    margin-bottom: 14px;
+  }
+  .prep-sheet-title {
+    flex: 1;
+    min-width: 0;
+    color: var(--prep-gold-bright);
+    font-size: 15px;
+    font-weight: 900;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .prep-sheet-close {
+    width: 34px;
+    height: 34px;
+    border: 0.5px solid var(--prep-border-subtle);
+    border-radius: 50%;
+    color: var(--prep-cream);
+    background: var(--prep-bg-input);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+  }
   .prep-form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -532,7 +670,7 @@
     .prep-report-action { justify-self: start; }
   }
   @media (max-width: 560px) {
-    .prep-page { min-height: auto; padding: 14px; }
+    .prep-page { min-height: auto; padding: 14px 14px 8px; margin-bottom: 8px; }
     .prep-kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
     .prep-kpi-box { min-height: 42px; padding: 6px 8px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; }
     .prep-kpi-label { font-size: 7px; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -544,6 +682,21 @@
       align-items: stretch;
       margin-bottom: 8px;
     }
+    .prep-control-bar, .prep-page-tabs { display: none; }
+    .prep-mobile-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .prep-mobile-date, .prep-mobile-action {
+      min-height: 34px;
+      border-radius: 8px;
+      font-size: 7.5px;
+      letter-spacing: 0;
+    }
+    .prep-mobile-date { grid-template-columns: 16px minmax(0, 1fr) 16px; }
+    .prep-mobile-date svg { width: 10px; height: 10px; }
     .prep-control-bar .prep-spacer { display: none; }
     .prep-date-nav { width: 100%; min-width: 0; border-radius: 9px; }
     .prep-date-nav-btn { width: 22px; height: 38px; flex: 0 0 22px; }
@@ -576,7 +729,10 @@
     .prep-ctrl-btn svg { width: 11px; height: 11px; flex: 0 0 11px; }
     .prep-ctrl-text-full { display: none; }
     .prep-ctrl-text-short { display: inline; }
-    .prep-inline-panel { padding: 12px 10px 16px; }
+    .prep-inline-panel { width: calc(100vw - 16px); max-height: 84vh; padding: 0 10px 14px; }
+    .prep-sheet-head { padding: 11px 0 10px; margin-bottom: 10px; }
+    .prep-sheet-title { font-size: 13px; }
+    .prep-sheet-close { width: 30px; height: 30px; font-size: 18px; }
     .prep-panel { padding: 12px; margin-bottom: 10px; }
     .prep-panel-title { font-size: 21px; margin-bottom: 8px; }
     .prep-team-list { gap: 6px; }
@@ -591,6 +747,10 @@
     .prep-status-chip { min-height: 36px; padding: 5px 3px; font-size: 8.5px; letter-spacing: 0.02em; }
     .prep-save-btn { min-height: 36px; padding: 0 15px; }
     .prep-ingredients summary { padding: 9px 10px; font-size: 11px; }
+    .prep-section-body { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; padding: 8px; }
+    .prep-item-toggle { min-height: 58px; padding: 7px 5px 7px 8px; border-radius: 8px; }
+    .prep-item-name { font-size: 9.5px; line-height: 1.08; }
+    .prep-badge, .prep-item-pill { max-width: 100%; padding: 2px 4px; font-size: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .prep-page-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; }
     .prep-tab-link { min-height: 34px; padding: 0 3px; font-size: 8.5px; letter-spacing: 0.01em; }
   }
@@ -628,7 +788,7 @@
   {% set is_open = (open_item_id == it.id) %}
   {% set has_work = it.selected or it.on_hand is not none or it.prep_qty is not none or it.assignee or it.notes %}
   <div class="prep-item-block" id="prep-item-{{ it.id }}">
-    <button class="prep-item-toggle{{ ' open' if is_open else '' }}{{ ' has-work' if has_work else '' }}"
+    <button class="prep-item-toggle {{ it.category }}{{ ' open' if is_open else '' }}{{ ' has-work' if has_work else '' }}"
             type="button"
             data-prep-toggle="{{ it.id }}"
             aria-expanded="{{ 'true' if is_open else 'false' }}"
@@ -638,7 +798,11 @@
       {% if it.assignee %}<span class="prep-item-pill">{{ it.assignee }}</span>{% endif %}
       <span class="prep-item-chevron">{{ prep_icon('chev') }}</span>
     </button>
-    <div class="prep-inline-panel{{ ' open' if is_open else '' }}" id="prep-panel-{{ it.id }}" data-prep-panel="{{ it.id }}">
+    <div class="prep-inline-panel{{ ' open' if is_open else '' }}" id="prep-panel-{{ it.id }}" data-prep-panel="{{ it.id }}" role="dialog" aria-modal="true" aria-labelledby="prep-sheet-title-{{ it.id }}">
+      <div class="prep-sheet-head">
+        <div class="prep-sheet-title" id="prep-sheet-title-{{ it.id }}">{{ it.name }}</div>
+        <button class="prep-sheet-close" type="button" data-prep-close="{{ it.id }}" aria-label="Close {{ it.name }}">&times;</button>
+      </div>
       <form method="POST" action="{{ post_url }}" class="prep-tracker-form">
         {{ hidden_common(it.id, 'board') }}
         <input type="hidden" name="form_action" value="save_tracker">
@@ -740,7 +904,9 @@
       <div class="prep-section-meta">{{ sec.total }} items</div>
     </div>
     {% if sec['items'] %}
+    <div class="prep-section-body">
       {% for it in sec['items'] %}{{ item_row(it) }}{% endfor %}
+    </div>
     {% else %}
       <div class="prep-empty">No items in this section yet.</div>
     {% endif %}
@@ -774,7 +940,7 @@
       <a class="prep-date-nav-btn" href="?date={{ next_date }}&tab={{ active_prep_tab }}" aria-label="Next day">{{ prep_icon('chev') }}</a>
     </div>
     <span class="prep-spacer"></span>
-    <button class="prep-ctrl-btn" type="button" id="prepExport">{{ prep_icon('download') }} <span class="prep-ctrl-text-full">Export today</span><span class="prep-ctrl-text-short">Export</span></button>
+    <button class="prep-ctrl-btn prep-export-btn" type="button">{{ prep_icon('download') }} <span class="prep-ctrl-text-full">Export today</span><span class="prep-ctrl-text-short">Export</span></button>
   </div>
 
   <nav class="prep-page-tabs" aria-label="Prep list views">
@@ -783,6 +949,19 @@
        href="?date={{ selected_date }}&tab={{ tab.key }}">{{ tab.label }}</a>
     {% endfor %}
   </nav>
+
+  <div class="prep-mobile-strip" aria-label="Prep mobile controls">
+    <div class="prep-mobile-date">
+      <a href="?date={{ prev_date }}&tab={{ active_prep_tab }}" aria-label="Previous day">{{ prep_icon('chev-l') }}</a>
+      <span class="prep-mobile-date-label">{{ date_display_mobile }}{% if is_today %} <span class="prep-today-tag">TODAY</span>{% endif %}</span>
+      <a href="?date={{ next_date }}&tab={{ active_prep_tab }}" aria-label="Next day">{{ prep_icon('chev') }}</a>
+    </div>
+    <button class="prep-mobile-action prep-export-btn" type="button">{{ prep_icon('download') }} Export</button>
+    {% for tab in prep_tabs %}
+    <a class="prep-mobile-action{{ ' active' if active_prep_tab == tab.key else '' }}"
+       href="?date={{ selected_date }}&tab={{ tab.key }}">{{ tab.label }}</a>
+    {% endfor %}
+  </div>
 
   {% if active_prep_tab == 'board' %}
     <section class="prep-panel">
@@ -890,6 +1069,7 @@
     </section>
   {% endif %}
 </div>
+<div class="prep-sheet-scrim" data-prep-scrim></div>
 {% endblock %}
 
 {% block scripts %}
@@ -905,20 +1085,48 @@
     box.classList.toggle('show', !!(partly && partly.checked) || hasCheckedHelper);
   }
 
+  var scrim = document.querySelector('[data-prep-scrim]');
+
+  function setSheetOpenState(open) {
+    if (scrim) scrim.classList.toggle('open', open);
+    document.body.classList.toggle('prep-sheet-open', open);
+  }
+
+  function closePrepPanels() {
+    document.querySelectorAll('[data-prep-panel].open').forEach(function (panel) {
+      panel.classList.remove('open');
+    });
+    document.querySelectorAll('[data-prep-toggle].open').forEach(function (toggle) {
+      toggle.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    });
+    setSheetOpenState(false);
+  }
+
   document.querySelectorAll('[data-prep-toggle]').forEach(function (toggle) {
     toggle.addEventListener('click', function () {
       var id = toggle.getAttribute('data-prep-toggle');
       var panel = document.querySelector('[data-prep-panel="' + id + '"]');
       if (!panel) return;
-      var open = !panel.classList.contains('open');
-      panel.classList.toggle('open', open);
-      toggle.classList.toggle('open', open);
-      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-      if (open) {
-        panel.querySelectorAll('.prep-tracker-form').forEach(syncHelperBox);
-      }
+      var shouldOpen = !panel.classList.contains('open');
+      closePrepPanels();
+      if (!shouldOpen) return;
+      panel.classList.add('open');
+      toggle.classList.add('open');
+      toggle.setAttribute('aria-expanded', 'true');
+      setSheetOpenState(true);
+      panel.querySelectorAll('.prep-tracker-form').forEach(syncHelperBox);
     });
   });
+
+  document.querySelectorAll('[data-prep-close]').forEach(function (button) {
+    button.addEventListener('click', closePrepPanels);
+  });
+  if (scrim) scrim.addEventListener('click', closePrepPanels);
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closePrepPanels();
+  });
+  setSheetOpenState(!!document.querySelector('[data-prep-panel].open'));
 
   document.querySelectorAll('.prep-tracker-form').forEach(function (form) {
     form.querySelectorAll('input[name="status"]').forEach(function (radio) {
@@ -936,8 +1144,7 @@
     });
   });
 
-  var exportBtn = document.getElementById('prepExport');
-  if (exportBtn) {
+  document.querySelectorAll('.prep-export-btn').forEach(function (exportBtn) {
     exportBtn.addEventListener('click', function () {
       var rows = [['Item', 'On hand', 'Prep', 'Status', 'Assignee', 'Notes']];
       document.querySelectorAll('.prep-item-block').forEach(function (block) {
@@ -966,7 +1173,7 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
     });
-  }
+  });
 })();
 </script>
 {% endblock %}

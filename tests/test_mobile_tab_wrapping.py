@@ -46,6 +46,21 @@ def test_prep_team_today_uses_compact_three_column_rows():
     assert "Assigned to {{ member.assignment_count }}" not in source
 
 
+def test_prep_list_mobile_controls_and_item_cards_are_compact():
+    source = _template("prep_list.html")
+
+    assert ".prep-mobile-strip" in source
+    assert "grid-template-columns: repeat(5, minmax(0, 1fr));" in source
+    assert "date_display_mobile" in source
+    assert "prep-export-btn" in source
+    assert ".prep-section-body" in source
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in source
+    assert "prep-sheet-scrim" in source
+    assert "prep-sheet-head" in source
+    assert "data-prep-close" in source
+    assert "body.prep-sheet-open" in source
+
+
 def test_fresh_food_place_order_uses_compact_order_day_row():
     source = _template("fresh_food_place_order.html")
 

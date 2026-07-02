@@ -78,7 +78,9 @@ def test_fresh_food_place_order_uses_compact_order_day_row():
     assert ".ff-mobile-card.open.has-inv,\n    .ff-mobile-card.open.has-order" in source
     assert "data-ff-mobile-order-display" in source
     assert "data-ff-mobile-clear" in source
+    assert "data-ff-mobile-done" in source
     assert ".ff-mobile-card.has-order .ff-mobile-clear" in source
+    assert ".ff-mobile-card.has-inv .ff-mobile-clear" in source
     assert "role=\"button\" tabindex=\"0\"" in source
     assert "data-ff-mobile-toggle" in source
     assert "ff-mobile-panel" in source
@@ -93,11 +95,14 @@ def test_fresh_food_place_order_uses_compact_order_day_row():
     assert "appearance: textfield;" in source
     assert ".ff-mobile-num::-webkit-inner-spin-button" in source
     assert "text-align: center;" in source
-    assert "background: #42190f;" in source
+    assert "background: linear-gradient(180deg, #9A463D 0%, #7B2F24 100%);" in source
+    assert ".ff-mobile-done" in source
     assert "panel.addEventListener('pointerdown'" in source
     assert "card.addEventListener('keydown'" in source
     assert "orderDisplay.textContent = hasOrder" in source
+    assert "['inv', 'or'].forEach" in source
     assert "source.value = '';" in source
+    assert "button.addEventListener('click', closeMobilePanels);" in source
     assert "mobileScrim.addEventListener('click', closeMobilePanels)" not in source
     assert "cenas:fresh-food-place-order:v1:" in source
     assert "window.localStorage.setItem(draftKey" in source

@@ -347,7 +347,7 @@
     }
     .ff-mobile-scrim.open {
       opacity: 1;
-      pointer-events: auto;
+      pointer-events: none;
     }
     .ff-mobile-panel {
       display: block;
@@ -483,6 +483,9 @@
     }
     body.ff-mobile-sheet-open .ck-bnav {
       opacity: 0;
+      pointer-events: none;
+    }
+    body.ff-mobile-sheet-open .ff-mobile-card {
       pointer-events: none;
     }
     .ff-mobile-panel {
@@ -923,7 +926,6 @@
       event.stopPropagation();
     });
   });
-  if(mobileScrim) mobileScrim.addEventListener('click', closeMobilePanels);
   document.addEventListener('keydown', function(event){
     if(event.key === 'Escape') closeMobilePanels();
   });

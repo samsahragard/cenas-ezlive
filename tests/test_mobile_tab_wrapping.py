@@ -84,11 +84,14 @@ def test_fresh_food_place_order_uses_compact_order_day_row():
     assert "body.ff-mobile-sheet-open .ffpo-submit-row" in source
     assert "bottom: 0;" in source
     assert "body.ff-mobile-sheet-open .ck-bnav" in source
+    assert "body.ff-mobile-sheet-open .ff-mobile-card" in source
+    assert ".ff-mobile-scrim.open {\n      opacity: 1;\n      pointer-events: none;" in source
     assert "appearance: textfield;" in source
     assert ".ff-mobile-num::-webkit-inner-spin-button" in source
     assert "text-align: center;" in source
     assert "background: #42190f;" in source
     assert "panel.addEventListener('pointerdown'" in source
+    assert "mobileScrim.addEventListener('click', closeMobilePanels)" not in source
     assert "cenas:fresh-food-place-order:v1:" in source
     assert "window.localStorage.setItem(draftKey" in source
     assert "window.localStorage.removeItem(draftKey)" in source

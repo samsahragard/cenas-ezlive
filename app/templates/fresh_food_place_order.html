@@ -285,6 +285,7 @@
       min-width: 0;
       min-height: 58px;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       padding: 7px 5px 7px 8px;
@@ -310,9 +311,9 @@
     .ff-mobile-card.has-order::before { background: #E56B6B; }
     .ff-mobile-card.has-inv,
     .ff-mobile-card.has-order {
-      background: #42190f;
-      border-color: rgba(255,217,112,0.42);
-      box-shadow: inset 0 0 0 1px rgba(255,217,112,0.10);
+      background: #8F4038;
+      border-color: rgba(255,190,174,0.72);
+      box-shadow: inset 0 0 0 1px rgba(255,235,220,0.14);
     }
     .ff-mobile-card.open {
       border-color: #E4B340;
@@ -321,8 +322,41 @@
     .ff-mobile-card.open.has-inv,
     .ff-mobile-card.open.has-order {
       border-color: #E4B340;
-      background: #42190f;
+      background: #8F4038;
     }
+    .ff-mobile-card-order {
+      display: none;
+      color: #fffaf0;
+      font-size: 18px;
+      font-weight: 950;
+      line-height: 1;
+      margin-bottom: 3px;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 1px 0 rgba(0,0,0,0.30);
+    }
+    .ff-mobile-card.has-order .ff-mobile-card-order { display: block; }
+    .ff-mobile-card.has-order .ff-mobile-card-name { font-size: 10.5px; }
+    .ff-mobile-clear {
+      display: none;
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      z-index: 2;
+      width: 18px;
+      height: 18px;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 0.5px solid rgba(255,250,240,0.40);
+      border-radius: 50%;
+      color: #fffaf0;
+      background: rgba(18,7,4,0.74);
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .ff-mobile-card.has-order .ff-mobile-clear { display: flex; }
     .ff-mobile-card-name {
       display: flex;
       flex-direction: column;
@@ -599,14 +633,20 @@
           {% for item in cat['items'] %}
             {% set avg = rolling_avg_by_slug.get(item.slug, 0) %}
             <div class="ff-item-row">
-              <button class="ff-mobile-card" type="button"
-                      data-ff-mobile-toggle="{{ item.slug }}"
-                      aria-expanded="false"
-                      aria-controls="ff-mobile-panel-{{ item.slug }}">
+              <div class="ff-mobile-card" role="button" tabindex="0"
+                   data-ff-mobile-toggle="{{ item.slug }}"
+                   aria-expanded="false"
+                   aria-controls="ff-mobile-panel-{{ item.slug }}">
+                <button class="ff-mobile-clear" type="button"
+                        data-ff-mobile-clear="{{ item.slug }}"
+                        aria-label="Clear {{ item.label }} order">&times;</button>
+                <span class="ff-mobile-card-order"
+                      data-ff-mobile-order-display="{{ item.slug }}"
+                      aria-hidden="true"></span>
                 <span class="ff-mobile-card-name">
                   {% for word in item.label.split() %}<span>{{ word }}</span>{% endfor %}
                 </span>
-              </button>
+              </div>
               <div class="ff-item-name">{{ item.label }}</div>
               <input type="number" step="0.1" min="0" inputmode="decimal"
                      class="ff-num ff-num-inv"
@@ -872,8 +912,11 @@
     if(!card) return;
     var inv = realInput(slug, 'inv');
     var ord = realInput(slug, 'or');
+    var hasOrder = !!(ord && ord.classList.contains('has-positive'));
+    var orderDisplay = card.querySelector('[data-ff-mobile-order-display]');
     card.classList.toggle('has-inv', !!(inv && inv.classList.contains('has-value')));
-    card.classList.toggle('has-order', !!(ord && ord.classList.contains('has-positive')));
+    card.classList.toggle('has-order', hasOrder);
+    if(orderDisplay) orderDisplay.textContent = hasOrder ? (ord.value || '').trim() : '';
   }
 
   function updateAllMobileCards(){
@@ -913,6 +956,29 @@
       card.classList.add('open');
       card.setAttribute('aria-expanded', 'true');
       setMobileSheetOpen(true);
+    });
+    card.addEventListener('keydown', function(event){
+      if(event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      card.click();
+    });
+  });
+  document.querySelectorAll('[data-ff-mobile-clear]').forEach(function(button){
+    button.addEventListener('click', function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      var slug = button.getAttribute('data-ff-mobile-clear');
+      var source = realInput(slug, 'or');
+      var target = mobileInput(slug, 'or');
+      if(source){
+        source.value = '';
+        source.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if(target) target.value = '';
+      syncMobileFromReal(slug);
+      updateMobileCard(slug);
+      saveDraft();
+      resetConfirm();
     });
   });
   document.querySelectorAll('[data-ff-mobile-close]').forEach(function(button){

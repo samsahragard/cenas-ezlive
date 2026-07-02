@@ -81,6 +81,8 @@ def test_fresh_food_place_order_uses_compact_order_day_row():
     assert "data-ff-mobile-kind=\"inv\"" in source
     assert "data-ff-mobile-kind=\"or\"" in source
     assert "body.ff-mobile-sheet-open" in source
+    assert "body.ff-mobile-sheet-open .ffpo-submit-row" in source
+    assert "background: linear-gradient(180deg, #7b2f24 0%, #5a1c16 100%);" in source
     assert "cenas:fresh-food-place-order:v1:" in source
     assert "window.localStorage.setItem(draftKey" in source
     assert "window.localStorage.removeItem(draftKey)" in source

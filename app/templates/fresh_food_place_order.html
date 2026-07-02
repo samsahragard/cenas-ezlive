@@ -353,18 +353,17 @@
       display: block;
       position: fixed;
       left: 50%;
-      bottom: 0;
+      bottom: calc(76px + env(safe-area-inset-bottom, 0px));
       z-index: 5001;
       width: calc(100vw - 16px);
-      max-height: 84vh;
-      min-height: 260px;
+      max-height: calc(100vh - 142px);
+      min-height: min(430px, calc(100vh - 186px));
       overflow-y: auto;
-      padding: 0 10px max(18px, env(safe-area-inset-bottom));
+      padding: 0 10px 16px;
       color: #FAF6EC;
       background: linear-gradient(180deg, #7b2f24 0%, #5a1c16 100%);
       border: 0.5px solid rgba(255,217,112,0.58);
-      border-bottom: 0;
-      border-radius: 18px 18px 0 0;
+      border-radius: 18px;
       box-shadow: 0 -24px 70px rgba(0,0,0,0.72), inset 0 1px 0 rgba(255,217,112,0.10);
       opacity: 0;
       pointer-events: none;
@@ -432,13 +431,13 @@
     }
     .ff-mobile-num,
     .ff-mobile-readout {
-      min-height: 36px;
+      min-height: 42px;
       width: 100%;
       color: #fffaf0;
       background: #2a0d09;
       border: 0.5px solid rgba(255,217,112,0.48);
       border-radius: 8px;
-      font-size: 12px;
+      font-size: 13px;
     }
     .ff-mobile-num {
       padding: 0 8px;
@@ -471,6 +470,10 @@
     }
     body.ff-mobile-sheet-open .ffpo-submit-row {
       visibility: hidden;
+      pointer-events: none;
+    }
+    body.ff-mobile-sheet-open .ck-bnav {
+      opacity: 0;
       pointer-events: none;
     }
   }

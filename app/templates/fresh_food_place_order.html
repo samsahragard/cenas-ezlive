@@ -617,50 +617,58 @@
                 {% if avg and avg > 0 %}{{ '%.1f'|format(avg) }}<span class="unit">/d</span>{% else %}—{% endif %}
               </div>
               <div class="ff-item-size">{{ item.size }}</div>
-              <div class="ff-mobile-panel" id="ff-mobile-panel-{{ item.slug }}"
-                   data-ff-mobile-panel="{{ item.slug }}"
-                   role="dialog"
-                   aria-modal="true"
-                   aria-labelledby="ff-mobile-title-{{ item.slug }}">
-                <div class="ff-mobile-sheet-head">
-                  <div class="ff-mobile-sheet-title" id="ff-mobile-title-{{ item.slug }}">{{ item.label }}</div>
-                  <button class="ff-mobile-sheet-close" type="button"
-                          data-ff-mobile-close="{{ item.slug }}"
-                          aria-label="Close {{ item.label }}">&times;</button>
-                </div>
-                <div class="ff-mobile-sheet-grid">
-                  <label class="ff-mobile-field">
-                    <span class="ff-mobile-label">On hand</span>
-                    <input type="number" step="0.1" min="0" inputmode="decimal"
-                           class="ff-mobile-num ff-mobile-num-inv"
-                           data-ff-mobile-kind="inv"
-                           data-ff-mobile-slug="{{ item.slug }}"
-                           placeholder="Qty on hand">
-                  </label>
-                  <label class="ff-mobile-field">
-                    <span class="ff-mobile-label">Order</span>
-                    <input type="number" step="0.1" min="0" inputmode="decimal"
-                           class="ff-mobile-num ff-mobile-num-order"
-                           data-ff-mobile-kind="or"
-                           data-ff-mobile-slug="{{ item.slug }}"
-                           placeholder="Qty to order">
-                  </label>
-                  <div class="ff-mobile-field">
-                    <span class="ff-mobile-label">{{ delivery_day }} avg</span>
-                    <div class="ff-mobile-readout">
-                      {% if avg and avg > 0 %}{{ '%.1f'|format(avg) }}/d{% else %}&mdash;{% endif %}
-                    </div>
-                  </div>
-                  <div class="ff-mobile-field">
-                    <span class="ff-mobile-label">Size</span>
-                    <div class="ff-mobile-readout">{% if item.size %}{{ item.size }}{% else %}&mdash;{% endif %}</div>
-                  </div>
-                </div>
-              </div>
             </div>
           {% endfor %}
         </div>
       </div>
+    {% endfor %}
+  </div>
+
+  <div class="ff-mobile-panels" aria-live="polite">
+    {% for cat in categories %}
+      {% for item in cat['items'] %}
+        {% set avg = rolling_avg_by_slug.get(item.slug, 0) %}
+        <div class="ff-mobile-panel" id="ff-mobile-panel-{{ item.slug }}"
+             data-ff-mobile-panel="{{ item.slug }}"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="ff-mobile-title-{{ item.slug }}">
+          <div class="ff-mobile-sheet-head">
+            <div class="ff-mobile-sheet-title" id="ff-mobile-title-{{ item.slug }}">{{ item.label }}</div>
+            <button class="ff-mobile-sheet-close" type="button"
+                    data-ff-mobile-close="{{ item.slug }}"
+                    aria-label="Close {{ item.label }}">&times;</button>
+          </div>
+          <div class="ff-mobile-sheet-grid">
+            <label class="ff-mobile-field">
+              <span class="ff-mobile-label">On hand</span>
+              <input type="number" step="0.1" min="0" inputmode="decimal"
+                     class="ff-mobile-num ff-mobile-num-inv"
+                     data-ff-mobile-kind="inv"
+                     data-ff-mobile-slug="{{ item.slug }}"
+                     placeholder="Qty on hand">
+            </label>
+            <label class="ff-mobile-field">
+              <span class="ff-mobile-label">Order</span>
+              <input type="number" step="0.1" min="0" inputmode="decimal"
+                     class="ff-mobile-num ff-mobile-num-order"
+                     data-ff-mobile-kind="or"
+                     data-ff-mobile-slug="{{ item.slug }}"
+                     placeholder="Qty to order">
+            </label>
+            <div class="ff-mobile-field">
+              <span class="ff-mobile-label">{{ delivery_day }} avg</span>
+              <div class="ff-mobile-readout">
+                {% if avg and avg > 0 %}{{ '%.1f'|format(avg) }}/d{% else %}&mdash;{% endif %}
+              </div>
+            </div>
+            <div class="ff-mobile-field">
+              <span class="ff-mobile-label">Size</span>
+              <div class="ff-mobile-readout">{% if item.size %}{{ item.size }}{% else %}&mdash;{% endif %}</div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
     {% endfor %}
   </div>
 
